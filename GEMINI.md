@@ -40,6 +40,12 @@ The project uses `ruff` for linting. The current configuration focuses on `F` (P
 ### Code Structure
 Maintain the modular structure within `src/`. When adding new functionalities, consider where they best fit within the existing `experiment.py`, `initiation.py`, `mpnn.py`, `mutate.py`, `sampling/`, and `utils/` modules, or if a new module is warranted.
 
+### Virtual Environment
+Always activate the virtual environment before running any Python commands or scripts. The activation script is located at `.venv/bin/activate`.
+
+### Shell Commands
+When using shell commands, especially when dealing with paths that might contain spaces or special characters, always enclose the paths in quotes.
+
 ### Dependencies
 Keep `requirements.txt` up-to-date with any new Python package dependencies.
 
