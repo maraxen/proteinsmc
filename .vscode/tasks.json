@@ -1,0 +1,19 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Run main experiment",
+            "type": "shell",
+            "command": "python -m src.main",
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "Ruff lint",
+            "type": "shell",
+            "command": "ruff check src/ --fix",
+            "group": "test",
+            "problemMatcher": []
+        }
+    ]
+}

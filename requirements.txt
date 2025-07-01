@@ -1,0 +1,6 @@
+jax
+jaxlib
+numpy
+scipy
+pyarrow
+git+https://github.com/maraxen/ColabDesign.git
