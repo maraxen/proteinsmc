@@ -9,11 +9,10 @@ logger = getLogger(__name__)
 
 @jit
 def calculate_position_entropy(pos_seqs: BatchSequences) -> ScalarFloat:
-  _, counts = jnp.unique(pos_seqs, return_counts=True)
+  _, counts = jnp.unique(pos_seqs, return_counts=True, size=pos_seqs.shape[0])
   probs = counts / counts.sum()
   return -jnp.sum(probs * jnp.log(probs))
 
-@jit
 def shannon_entropy(seqs: BatchSequences) -> ScalarFloat:
     """Calculates average per-position Shannon entropy of sequences.
     Args:

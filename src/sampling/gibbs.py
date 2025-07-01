@@ -6,6 +6,7 @@ import jax
 import jax.numpy as jnp
 from jax import random
 
+
 def gibbs_sampler(
     key: jax.Array,
     initial_state: jax.Array,
@@ -68,7 +69,9 @@ if __name__ == "__main__":
     num_samples = 1000
     update_functions = [update_component_0, update_component_1]
 
-    samples = gibbs_sampler(key, initial_state, num_samples, gaussian_log_prob, update_functions)
+    samples = gibbs_sampler(
+        key, initial_state, num_samples, gaussian_log_prob, update_functions
+    )
     print("Gibbs samples shape:", samples.shape)
     print("Mean of samples:", jnp.mean(samples, axis=0))
     print("Std of samples:", jnp.std(samples, axis=0))

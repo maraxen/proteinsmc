@@ -6,6 +6,7 @@ import jax
 import jax.numpy as jnp
 from jax import random
 
+
 def hmc_sampler(
     key: jax.Array,
     initial_position: jax.Array,
@@ -54,7 +55,9 @@ def hmc_sampler(
         p0 = random.normal(key_momentum, shape=current_q.shape)
 
         # Perform leapfrog steps
-        q_new, p_new = leapfrog(current_q, p0, log_prob_fn, step_size, num_leapfrog_steps)
+        q_new, p_new = leapfrog(
+            current_q, p0, log_prob_fn, step_size, num_leapfrog_steps
+        )
 
         # Calculate Hamiltonian
         current_hamiltonian = -current_log_prob + 0.5 * jnp.sum(p0**2)
@@ -94,7 +97,10 @@ if __name__ == "__main__":
     step_size = 0.1
     num_leapfrog_steps = 10
 
-    samples = hmc_sampler(key, initial_position, num_samples, gaussian_log_prob, step_size, num_leapfrog_steps)
+    samples = hmc_sampler(
+        key, initial_position, num_samples, gaussian_log_prob, 
+        step_size, num_leapfrog_steps
+    )
     print("HMC samples shape:", samples.shape)
     print("Mean of samples:", jnp.mean(samples, axis=0))
     print("Std of samples:", jnp.std(samples, axis=0))

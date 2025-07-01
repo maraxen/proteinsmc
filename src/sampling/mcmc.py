@@ -6,6 +6,7 @@ import jax
 import jax.numpy as jnp
 from jax import random
 
+
 def mcmc_sampler(
     key: jax.Array,
     initial_state: jax.Array,
@@ -67,7 +68,9 @@ if __name__ == "__main__":
     initial_state = jnp.array([0.0])
     num_samples = 10000
 
-    samples = mcmc_sampler(key, initial_state, num_samples, gaussian_log_prob, proposal_fn)
+    samples = mcmc_sampler(
+        key, initial_state, num_samples, gaussian_log_prob, proposal_fn
+    )
     print("MCMC samples shape:", samples.shape)
     print("Mean of samples:", jnp.mean(samples, axis=0))
     print("Std of samples:", jnp.std(samples, axis=0))

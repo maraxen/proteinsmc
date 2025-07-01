@@ -22,7 +22,7 @@ def exponential_schedule(
     p: ScalarInt,
     n_steps: ScalarInt,
     beta_max: ScalarFloat,
-    rate: ScalarFloat = jnp.array(5.0, dtype=jnp.float32)
+    rate: ScalarFloat = 5.0
 ) -> ScalarFloat:
     """Exponential annealing schedule for beta."""
     if p <= 1:

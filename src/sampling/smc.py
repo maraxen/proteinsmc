@@ -10,12 +10,12 @@ from jax import jit, lax, random
 from ..utils.constants import NUCLEOTIDES_CHAR, NUCLEOTIDES_INT_MAP, RES_TO_CODON_CHAR
 from ..utils.helper_functions import (
     calculate_amino_acid_entropy_py,
-    calculate_fitness_batch_jax,
     calculate_nucleotide_entropy_py,
     initial_mutation_kernel_no_x_jax,
     mutation_kernel_jax,
     resampling_kernel_jax,
 )
+from ..utils.protein_nucleotide_utils import calculate_fitness_batch_jax
 
 logger = getLogger(__name__)
 logger.setLevel("INFO") # TODO: have this set from main script or config
@@ -28,7 +28,8 @@ def run_smc_protein_jax(
 
     # --- Protein and Sequence Configuration ---
     protein_length: int,         # Integer, length of the protein in amino acids
-    initial_aa_seq_char: str,    # String, initial amino acid sequence
+    initial_sequence_char: str,    # String, initial sequence (AA or Nucleotide)
+    sequence_type: str,          # String, 'protein' or 'nucleotide'
     mu_nuc: float,                 # Float, nucleotide mutation rate
 
     # --- Annealing Configuration ---
@@ -87,26 +88,33 @@ def run_smc_protein_jax(
 
     # 1. Initial Nucleotide Sequence TEMPLATE Preparation (Python part)
     # This template is X-free and matches the PDB sequence's preferred codons.
-    initial_nucleotide_seq_int_list = [NUCLEOTIDES_INT_MAP['A']] * N_nuc_total
-    try:
-        for i in range(protein_length):
-            aa_char = initial_aa_seq_char[i]
-            codon_char_list = list(RES_TO_CODON_CHAR[aa_char])
-            for j in range(3):
-                initial_nucleotide_seq_int_list[3*i + j] = \
-                    NUCLEOTIDES_INT_MAP[codon_char_list[j]]
-    except KeyError as e:
-        raise ValueError(
-            f"Failed to generate initial JAX nucleotide template from AA '{e}'. "
-            f"Check RES_TO_CODON_CHAR and initial_aa_seq_char."
+    if sequence_type == "protein":
+        initial_nucleotide_seq_int_list = [NUCLEOTIDES_INT_MAP['A']] * N_nuc_total
+        try:
+            for i in range(protein_length):
+                aa_char = initial_sequence_char[i]
+                codon_char_list = list(RES_TO_CODON_CHAR[aa_char])
+                for j in range(3):
+                    initial_nucleotide_seq_int_list[3*i + j] = \
+                        NUCLEOTIDES_INT_MAP[codon_char_list[j]]
+        except KeyError as e:
+            raise ValueError(
+                f"Failed to generate initial JAX nucleotide template from AA '{e}'. "
+                f"Check RES_TO_CODON_CHAR and initial_sequence_char."
+            ) from e
+        initial_template_one_seq_jax = jnp.array(
+            initial_nucleotide_seq_int_list, dtype=jnp.int32
         )
-    initial_nucleotide_template_one_seq_jax = jnp.array(
-        initial_nucleotide_seq_int_list, dtype=jnp.int32
-    )
+    elif sequence_type == "nucleotide":
+        initial_template_one_seq_jax = jnp.array(
+            [NUCLEOTIDES_INT_MAP[nuc] for nuc in initial_sequence_char], dtype=jnp.int32
+        )
+    else:
+        raise ValueError(f"Unsupported sequence_type: {sequence_type}")
 
     # Tile this X-free template for all particles
     _particles_jax_template_batch = jnp.tile(
-        initial_nucleotide_template_one_seq_jax, (n_particles, 1)
+        initial_template_one_seq_jax, (n_particles, 1)
     )
 
     # 2. Generate Initial Population using the NEW X-avoiding nucleotide mutation kernel
@@ -147,6 +155,7 @@ def run_smc_protein_jax(
                                     key_for_initial_metric_calc,
                                     particles_jax_initial,
                                     protein_length,
+                                    sequence_type,
                                     mpnn_model_instance,
                                     mpnn_model_is_active_static
                                 )
@@ -202,7 +211,7 @@ def run_smc_protein_jax(
     @partial(jit, static_argnames=(
         'protein_length_static', 'n_particles_static', 'mu_nuc_static',
         'mpnn_model_instance_static', 'mpnn_model_is_active_static_flag',
-        'N_nuc_alphabet_size_static'
+        'N_nuc_alphabet_size_static', 'sequence_type_static'
     ))
     def _smc_scan_step(
         carry_state, scan_ijnputs_current_step, # Dynamic arguments from lax.scan
@@ -212,7 +221,8 @@ def run_smc_protein_jax(
         mu_nuc_static,
         mpnn_model_instance_static,
         mpnn_model_is_active_static_flag,
-        N_nuc_alphabet_size_static
+        N_nuc_alphabet_size_static,
+        sequence_type_static
     ):
         """
         Performs one step of the SMC algorithm. Designed for jax.lax.scan.
@@ -239,6 +249,7 @@ def run_smc_protein_jax(
                 key_fitness_loop,
                 particles_mutated,
                 protein_length_static,
+                sequence_type_static,
                 mpnn_model_instance_static,
                 mpnn_model_is_active_static_flag
             )
@@ -352,7 +363,8 @@ def run_smc_protein_jax(
             mu_nuc,
             mpnn_model_instance,
             mpnn_model_is_active_static,
-            len(NUCLEOTIDES_CHAR)
+            len(NUCLEOTIDES_CHAR),
+            sequence_type
         ),
         initial_carry,
         scan_over_ijnputs,
@@ -424,7 +436,8 @@ def run_smc_protein_jax(
     # 5. Package Results
     final_results = {
         "protein_length": protein_length, "nucleotide_length": N_nuc_total,
-        "initial_aa_seq": initial_aa_seq_char,
+        "initial_sequence": initial_sequence_char,
+        "sequence_type": sequence_type,
         "mu_nuc": mu_nuc, "n_particles": n_particles, "n_smc_steps": n_smc_steps,
         "annealing_schedule": schedule_name_str, "annealing_len": annealing_len_val,
         "beta_max": beta_max_val,

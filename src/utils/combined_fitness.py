@@ -6,7 +6,8 @@ import jax.numpy as jnp
 from jax import jit, vmap
 from jaxtyping import PRNGKeyArray, PyTree
 
-from .mpnn import mpnn_score
+from src.mpnn import mpnn_score
+
 from .nucleotide import cai_score, translate
 from .types import (
     BatchSequenceBools,
@@ -46,14 +47,14 @@ def combine_fitness_scores(
 @partial(
     jit, 
     static_argnames=(
-        'protein_length', 'fitness_funcs', 'fitness_combine_func', 
+        'protein_length', 'fitness_combine_func', 
         'fitness_flags', 'mpnn_model_instance'
     )
 )
 def calculate_fitness_batch(
   key: PRNGKeyArray,
   sequences: BatchSequences,
-  fitness_funcs: list[Callable],
+  fitness_funcs: tuple[Callable, ...],
   fitness_combine_func: Callable,
   protein_length: int,
   fitness_flags: list[bool],

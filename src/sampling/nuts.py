@@ -11,6 +11,7 @@ import jax
 import jax.numpy as jnp
 from jax import random
 
+
 def nuts_sampler(
     key: jax.Array,
     initial_position: jax.Array,
