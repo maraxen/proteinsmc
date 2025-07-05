@@ -9,15 +9,15 @@ from src.utils.translate import translate
   [
     (
       jnp.array([3, 3, 1, 0, 0, 0]),  # TTC, AAA -> F, K
-      jnp.array([6, 9]),  # Corresponds to F, K in colabdesign order
+      jnp.array([13, 11]),  # Corrected integer representation
       True,
     ),
     (
       jnp.array([3, 0, 0, 0, 1, 2]),  # TAA (Stop), ACG -> X, T
-      jnp.array([21, 15]),  # X is 21, T is 15
+      jnp.array([21, 16]),  # X is 21, T is 16
       False,
     ),
-    (jnp.array([0, 1, 2]), jnp.array([15]), True),  # ACG -> T
+    (jnp.array([0, 1, 2]), jnp.array([16]), True),  # ACG -> T
     (jnp.array([]), jnp.array([]), True),  # Empty sequence
   ],
 )
@@ -28,6 +28,5 @@ def test_translate(nuc_seq, expected_aa_seq, expected_validity):
 
 
 def test_translate_invalid_length():
-  # Sequence length is not a multiple of 3
   with pytest.raises(TypeError):
     translate(jnp.array([0, 1, 2, 3]))

@@ -14,7 +14,11 @@ from src.utils.metrics import (
     (jnp.array([0.0, 0.0, 0.0]), 3, 0.0),
     (jnp.log(jnp.array([1.0, 2.0, 3.0])), 3, jnp.log(2.0)),
     (jnp.array([-jnp.inf, -jnp.inf]), 2, -jnp.inf),
-    (jnp.array([1.0, 2.0, -jnp.inf]), 3, jnp.log(1.0 + jnp.exp(1.0)) - jnp.log(3.0)),
+    (
+      jnp.array([1.0, 2.0, -jnp.inf]),
+      3,
+      jnp.log(jnp.exp(1.0) + jnp.exp(2.0)) - jnp.log(3.0),
+    ),
     (jnp.array([]), 0, -jnp.inf),
     (jnp.array([]), 1, -jnp.inf),
   ],

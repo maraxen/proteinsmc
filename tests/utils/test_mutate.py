@@ -55,9 +55,8 @@ def test_diversify_initial_sequences(sample_sequences):
     template_sequences=sample_sequences,
     mutation_rate=1.0,
     n_states=4,
-    sequence_length=2,
   )
   assert diversified.shape == sample_sequences.shape
 
-  aa_seqs, has_x_flags = jax.vmap(translate)(diversified)
-  assert not jnp.any(has_x_flags)
+  aa_seqs, is_valid = jax.vmap(translate)(diversified)
+  assert jnp.all(is_valid)

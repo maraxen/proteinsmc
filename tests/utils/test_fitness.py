@@ -15,9 +15,9 @@ def mock_protein_fitness_func(key, sequences, arg1):
   return jnp.full(sequences.shape[0], arg1)
 
 
-def mock_nucleotide_fitness_func(key, sequences, arg2):
+def mock_nucleotide_fitness_func(key, sequences, arg1):
   """Mock fitness function that operates on nucleotide sequences."""
-  return jnp.full(sequences.shape[0], arg2)
+  return jnp.full((sequences.shape[0],), arg1).mean(axis=-1)
 
 
 @pytest.fixture
@@ -37,7 +37,7 @@ def nucleotide_ff():
   return FitnessFunction(
     func=mock_nucleotide_fitness_func,
     input_type="nucleotide",
-    args={"arg2": 3.0},
+    args={"arg1": 3.0},
     name="mock_nucleotide",
   )
 
@@ -105,7 +105,7 @@ def test_fitness_evaluator_get_functions_by_type(protein_ff, nucleotide_ff):
 def test_calculate_population_fitness_nucleotide(protein_ff, nucleotide_ff):
   """Test fitness calculation for a population of nucleotide sequences."""
   key = jax.random.PRNGKey(0)
-  population = jnp.array([[0, 1, 2, 3, 0, 1]])  # ACGTAC
+  population = jnp.array([[0, 1, 2, 3, 0, 1]])
 
   evaluator = FitnessEvaluator(fitness_functions=[protein_ff, nucleotide_ff])
 

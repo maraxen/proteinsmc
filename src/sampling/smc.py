@@ -7,8 +7,8 @@ import jax
 import jax.nn
 import jax.numpy as jnp
 from jax import jit, lax, random
-
 from jaxtyping import PRNGKeyArray
+
 from ..utils import (
   NUCLEOTIDES_CHAR,
   NUCLEOTIDES_INT_MAP,
@@ -228,15 +228,15 @@ def smc(
         f"Check RES_TO_CODON_CHAR and initial_sequence."
       )
       raise ValueError(error_message) from e
-    initial_template_one_seq_jax = jnp.array(initial_nucleotide_seq_int_list, dtype=jnp.int32)
+    initial_single_sequence = jnp.array(initial_nucleotide_seq_int_list, dtype=jnp.int8)
   elif sequence_type == "nucleotide":
-    initial_template_one_seq_jax = jnp.array(
-      [NUCLEOTIDES_INT_MAP[nuc] for nuc in initial_sequence], dtype=jnp.int32
+    initial_single_sequence = jnp.array(
+      [NUCLEOTIDES_INT_MAP[nuc] for nuc in initial_sequence], dtype=jnp.int8
     )
   else:
     raise ValueError(f"Unsupported sequence_type: {sequence_type}")
 
-  _template_population = jnp.tile(initial_template_one_seq_jax, (population_size, 1))
+  _template_population = jnp.tile(initial_single_sequence, (population_size, 1))
 
   # Create initial population
   initial_population = diversify_initial_sequences(

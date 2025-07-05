@@ -2,7 +2,7 @@ from functools import partial
 from typing import Literal
 
 import jax.numpy as jnp
-from jax import jit, lax, random, vmap
+from jax import jit, random, vmap
 from jaxtyping import (
   PRNGKeyArray,
 )
@@ -37,11 +37,10 @@ def mutate(
   return mutated_sequences
 
 
-@partial(jit, static_argnames=("sequence_length",))
+@jit
 def _revert_x_codons_if_mutated(
   template_nucleotide_sequences: NucleotideSequence,
   candidate_nucleotide_sequences: NucleotideSequence,
-  sequence_length: int,
 ) -> NucleotideSequence:
   """Reverts codons in the proposed nucleotide sequence that were mutated
   and resulted in 'X'
@@ -55,32 +54,32 @@ def _revert_x_codons_if_mutated(
       final_nucleotide_sequences: JAX array of nucleotide sequence after reverting
                             'X' codons (shape: (nuc_len,)).
   """
-  final_nucleotide_sequences = candidate_nucleotide_sequences.astype(jnp.int32)
+  final_nucleotide_sequences = candidate_nucleotide_sequences.astype(jnp.int8)
+  codons_template = template_nucleotide_sequences.reshape(-1, 3)
+  codons_candidate = candidate_nucleotide_sequences.reshape(-1, 3)
 
-  for i in range(sequence_length):
-    codon_start_idx = i * 3
-    original_codon = lax.dynamic_slice_in_dim(template_nucleotide_sequences, codon_start_idx, 3)
-    proposed_codon = lax.dynamic_slice_in_dim(candidate_nucleotide_sequences, codon_start_idx, 3)
-    n1, n2, n3 = proposed_codon[0], proposed_codon[1], proposed_codon[2]
-    translated_aa_proposed_codon = CODON_INT_TO_RES_INT_JAX[n1, n2, n3]
-    codon_was_mutated = jnp.any(original_codon != proposed_codon)
-    proposed_codon_is_x = translated_aa_proposed_codon == COLABDESIGN_X_INT
-    revert_this_codon = codon_was_mutated & proposed_codon_is_x
-    current_codon_to_keep = jnp.where(revert_this_codon, original_codon, proposed_codon)
-    final_nucleotide_sequences = lax.dynamic_update_slice(
-      final_nucleotide_sequences, current_codon_to_keep, [codon_start_idx]
-    )
+  n1 = codons_candidate[:, 0]
+  n2 = codons_candidate[:, 1]
+  n3 = codons_candidate[:, 2]
+  translated_aa = CODON_INT_TO_RES_INT_JAX[n1, n2, n3]
+
+  codon_was_mutated = jnp.any(codons_template != codons_candidate, axis=1)
+  codon_is_x = translated_aa == COLABDESIGN_X_INT
+  revert_mask = codon_was_mutated & codon_is_x
+
+  codons_final = jnp.where(revert_mask[:, None], codons_template, codons_candidate)
+
+  final_nucleotide_sequences = codons_final.reshape(-1)
 
   return final_nucleotide_sequences
 
 
-@partial(jit, static_argnames=("n_states", "sequence_length", "nucleotide"))
+@partial(jit, static_argnames=("n_states", "nucleotide"))
 def diversify_initial_sequences(
   key: PRNGKeyArray,
   template_sequences: PopulationSequences,
   mutation_rate: float,
   n_states: int,
-  sequence_length: int,
   nucleotide: bool = True,
 ) -> PopulationSequences:
   """
@@ -101,8 +100,6 @@ def diversify_initial_sequences(
       final_particles_population: JAX array of nucleotide sequences after mutation
                             and 'X' check.
   """
-  sequence_length = template_sequences.shape[1]
-
   key_mask, key_offsets = random.split(key)
   mutation_mask_attempt = random.uniform(key_mask, shape=template_sequences.shape) < mutation_rate
 
@@ -114,10 +111,10 @@ def diversify_initial_sequences(
   )
 
   if nucleotide:
-    final_particles_population = vmap(
-      partial(_revert_x_codons_if_mutated, sequence_length=sequence_length)
-    )(template_sequences, particles_with_all_proposed_mutations)
-    final_particles_population = final_particles_population.astype(jnp.int32)
+    final_particles_population = vmap(_revert_x_codons_if_mutated)(
+      template_sequences, particles_with_all_proposed_mutations
+    )
+    final_particles_population = final_particles_population.astype(jnp.int8)
   else:
     final_particles_population = particles_with_all_proposed_mutations
 

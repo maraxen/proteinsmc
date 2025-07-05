@@ -46,7 +46,7 @@ def test_make_gibbs_update_fns():
   # Test a single update function
   update_pos_0 = update_fns[0]
   key = jax.random.PRNGKey(0)
-  seq = jnp.zeros((5,), dtype=jnp.int32)
+  seq = jnp.zeros((5,), dtype=jnp.int8)
 
   # Mock log_prob_fn that strongly prefers state 3 at position 0
   def deterministic_log_prob(s):

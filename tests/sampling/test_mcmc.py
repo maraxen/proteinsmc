@@ -7,7 +7,7 @@ from src.sampling.mcmc import make_random_mutation_proposal_fn, mcmc_sampler
 
 @pytest.fixture
 def simple_sequence():
-  return jnp.array([0, 0, 0, 0], dtype=jnp.int32)
+  return jnp.array([0, 0, 0, 0], dtype=jnp.int8)
 
 
 def test_make_random_mutation_proposal_fn(simple_sequence):
@@ -45,7 +45,7 @@ def test_mcmc_sampler_converges():
 
   proposal_fn = make_random_mutation_proposal_fn(n_states=n_states)
 
-  initial_state = jnp.zeros(sequence_length, dtype=jnp.int32)
+  initial_state = jnp.zeros(sequence_length, dtype=jnp.int8)
   num_samples = 1000
 
   samples = mcmc_sampler(key, initial_state, num_samples, log_prob_fn, proposal_fn)

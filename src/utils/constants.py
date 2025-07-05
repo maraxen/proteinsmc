@@ -81,14 +81,14 @@ CODON_TO_RES_CHAR = {
 }
 
 AA_CHAR_TO_INT_MAP = colabdesign_aa_order
-INT_TO_AA_CHAR_MAP = {i: char for i, char in enumerate(colabdesign_order_aa)}
+INT_TO_AA_CHAR_MAP = {i: char for i, char in enumerate(colabdesign_order_aa.values())}
 COLABDESIGN_X_INT = 21
 STOP_INT = COLABDESIGN_X_INT
 UNKNOWN_AA_INT = COLABDESIGN_X_INT
 MAX_NUC_INT = len(NUCLEOTIDES_CHAR) - 1
 
 CODON_INT_TO_RES_INT_JAX = jnp.full(
-  (MAX_NUC_INT + 1, MAX_NUC_INT + 1, MAX_NUC_INT + 1), UNKNOWN_AA_INT, dtype=jnp.int32
+  (MAX_NUC_INT + 1, MAX_NUC_INT + 1, MAX_NUC_INT + 1), UNKNOWN_AA_INT, dtype=jnp.int8
 )
 for codon_str, res_char in CODON_TO_RES_CHAR.items():
   n1, n2, n3 = (NUCLEOTIDES_INT_MAP[c] for c in codon_str)
@@ -157,6 +157,10 @@ ECOLI_CODON_FREQ_CHAR = {
   "TAA": 1.8,
   "TAG": 0.0,
   "TGA": 1.0,
+  "GGA": 9.5,
+  "GGC": 27.1,
+  "GGG": 20.5,
+  "GGT": 11.3,
 }
 ECOLI_CODON_FREQ_JAX = jnp.zeros(
   (MAX_NUC_INT + 1, MAX_NUC_INT + 1, MAX_NUC_INT + 1), dtype=jnp.float32

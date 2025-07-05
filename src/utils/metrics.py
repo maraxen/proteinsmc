@@ -22,6 +22,9 @@ def calculate_logZ_increment(
   Returns:
     Log evidence increment for this step
   """
+  if log_weights.shape[0] == 0:
+    return jnp.ndarray(-jnp.inf)
+
   valid_log_weights = jnp.where(jnp.isneginf(log_weights), -jnp.inf, log_weights)
   max_l_w = jnp.max(valid_log_weights)
   safe_max_l_w = jnp.where(jnp.isneginf(max_l_w), 0.0, max_l_w)
@@ -41,7 +44,7 @@ def calculate_logZ_increment(
 def calculate_position_entropy(pos_seqs: PopulationSequences) -> ScalarFloat:
   _, counts = jnp.unique(pos_seqs, return_counts=True, size=pos_seqs.shape[0])
   probs = counts / counts.sum()
-  return -jnp.sum(probs * jnp.log(probs))
+  return -jnp.sum(probs * jnp.log(probs + 1e-9))
 
 
 @jit

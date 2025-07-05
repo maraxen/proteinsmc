@@ -31,7 +31,7 @@ def exponential_schedule(
     return jnp.array(beta_max, dtype=jnp.float32)
   x = (p - 1) / (n_steps - 1)
   exp_val = jnp.exp(jnp.minimum(rate * x, 700.0))
-  denominator = exp_val - 1.0
+  denominator = jnp.exp(rate) - 1.0  # Corrected denominator
   if abs(denominator) < 1e-9:
     scale_factor = beta_max / (denominator + 1e-9)
   else:
