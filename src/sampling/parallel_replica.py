@@ -7,12 +7,11 @@ from jax import jit, lax, vmap
 from jax import random as jax_random
 
 from ..utils.annealing_schedules import (
-  cosine_schedule_py,
-  exponential_schedule_py,
-  linear_schedule_py,
-  static_schedule_py,
+  cosine_schedule,
+  exponential_schedule,
+  linear_schedule,
+  static_schedule,
 )
-from ..utils.helper_functions import mutation_kernel_jax, resampling_kernel_jax
 
 
 # --- Parallel Replica SMC JAX ---

@@ -1,7 +1,6 @@
 from functools import partial
 from typing import Literal
 
-import jax
 import jax.numpy as jnp
 from jax import jit, lax, random, vmap
 from jaxtyping import (
@@ -12,7 +11,8 @@ from .constants import (
   CODON_INT_TO_RES_INT_JAX,
   COLABDESIGN_X_INT,
 )
-from .types import NucleotideSequence, PopulationSequenceFloats, PopulationSequences, ScalarFloat
+from .types import NucleotideSequence, PopulationSequences
+from .translate import translate
 
 
 @partial(jit, static_argnames=("n_states", "mutation_rate"))
@@ -35,37 +35,6 @@ def mutate(
   proposed_mutations = (sequences + offsets) % n_states
   mutated_sequences = jnp.where(mutation_mask, proposed_mutations, sequences)
   return mutated_sequences
-
-
-def dispatch(
-  key: PRNGKeyArray,
-  sequences: PopulationSequences,
-  mutation_rate: float,
-  sequence_type: Literal["nucleotide", "protein"],
-  evolve_as: Literal["nucleotide", "protein"],
-) -> PopulationSequences:
-  """
-  Dispatches the appropriate sequence processing function based on the sequence type.
-  Args:
-      key: JAX PRNG key.
-      sequences: JAX array of nucleotide sequences
-                  (shape: (n_particles, nuc_len)).
-      mutation_rate: Mutation rate for nucleotides.
-      n_states: Number of states. e.g., nucleotide types (4 for A, C, G, T).
-      sequence_length: Length of the protein sequence (number of amino acids).
-  """
-  if sequence_type == "nucleotide" and evolve_as == "nucleotide":
-    n_states = 4
-    return mutate(key, sequences, mutation_rate, n_states)
-  elif sequence_type == "protein" and evolve_as == "protein":
-    n_states = 20
-    return mutate(key, sequences, mutation_rate, n_states)
-  elif sequence_type == "nucleotide" and evolve_as == "protein":
-    n_states = 20
-    sequences = translate(sequences, n_states)
-    return mutate(key, sequences, mutation_rate, n_states)
-  else:
-    raise ValueError(f"Unsupported sequence type: {sequence_type}")
 
 
 @partial(jit, static_argnames=("sequence_length",))
@@ -153,3 +122,34 @@ def diversify_initial_sequences(
     final_particles_population = particles_with_all_proposed_mutations
 
   return final_particles_population
+
+
+def dispatch_mutation(
+  key: PRNGKeyArray,
+  sequences: PopulationSequences,
+  mutation_rate: float,
+  sequence_type: Literal["nucleotide", "protein"],
+  evolve_as: Literal["nucleotide", "protein"],
+) -> PopulationSequences:
+  """
+  Dispatches the appropriate sequence processing function based on the sequence type.
+  Args:
+      key: JAX PRNG key.
+      sequences: JAX array of nucleotide sequences
+                  (shape: (n_particles, nuc_len)).
+      mutation_rate: Mutation rate for nucleotides.
+      n_states: Number of states. e.g., nucleotide types (4 for A, C, G, T).
+      sequence_length: Length of the protein sequence (number of amino acids).
+  """
+  if sequence_type == "nucleotide" and evolve_as == "nucleotide":
+    n_states = 4
+    return mutate(key, sequences, mutation_rate, n_states)
+  elif sequence_type == "protein" and evolve_as == "protein":
+    n_states = 20
+    return mutate(key, sequences, mutation_rate, n_states)
+  elif sequence_type == "nucleotide" and evolve_as == "protein":
+    n_states = 20
+    sequences = translate(sequences, n_states)
+    return mutate(key, sequences, mutation_rate, n_states)
+  else:
+    raise ValueError(f"Unsupported sequence type: {sequence_type}")

@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import pytest
 
 from src.utils.constants import CODON_INT_TO_RES_INT_JAX, COLABDESIGN_X_INT
-from src.utils.smc_utils import _revert_x_codons_if_mutated, initial_mutation_kernel_no_x_jax
+from src.utils.dispatch import _revert_x_codons_if_mutated, initial_mutation_kernel_no_x_jax
 
 
 @pytest.fixture

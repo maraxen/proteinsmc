@@ -15,6 +15,7 @@ def calculate_position_entropy(pos_seqs: PopulationSequences) -> ScalarFloat:
   return -jnp.sum(probs * jnp.log(probs))
 
 
+@jit
 def shannon_entropy(seqs: PopulationSequences) -> ScalarFloat:
   """Calculates average per-position Shannon entropy of sequences.
   Args:

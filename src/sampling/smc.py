@@ -6,16 +6,19 @@ import jax
 import jax.nn
 import jax.numpy as jnp
 import jax.scipy.special as jsp
-from colabdesign.mpnn.model import mk_mpnn_model
 from jax import jit, lax, random
 
-from ..utils.constants import NUCLEOTIDES_CHAR, NUCLEOTIDES_INT_MAP, RES_TO_CODON_CHAR
-from ..utils.metrics import shannon_entropy
-from ..utils.protein_nucleotide_utils import calculate_population_fitness
-from ..utils.smc_utils import (
+from ..utils import (
+  NUCLEOTIDES_CHAR,
+  NUCLEOTIDES_INT_MAP,
+  RES_TO_CODON_CHAR,
+  FitnessEvaluator,
+  calculate_population_fitness,
   diversify_initial_sequences,
   resample,
+  shannon_entropy,
 )
+from ..utils.mutate import dispatch_mutation
 
 logger = getLogger(__name__)
 logger.setLevel("INFO")  # TODO: have this set from main script or config
@@ -33,8 +36,7 @@ def run_smc_protein_jax(
   annealing_schedule_args: tuple,
   population_size: int,
   generations: int,
-  mpnn_model_instance: mk_mpnn_model,
-  mpnn_model_is_active_static: bool,
+  fitness_evaluator: FitnessEvaluator,
   save_traj: bool = False,
 ) -> dict[str, jax.Array]:
   """
@@ -44,29 +46,31 @@ def run_smc_protein_jax(
   The core SMC loop is implemented using jax.lax.scan for JAX compatibility
   and performance. Initial sequence conversion and final metrics processing
   remain in Python. The function handles the generation of initial nucleotide
-  sequences, mutation, fitness calculation, and resampling of particles, all
+  sequences, mutation, fitness calculation, and resampling of population, all
   while maintaining the constraints of the nucleotide alphabet. The function
   also includes a reporting mechanism for initial conditions and final results.
 
   Parameters:
   - prng_key_smc_steps: JAX PRNG key for the main SMC loop steps.
   - initial_population_key: JAX PRNG key for the initial population mutation.
-  - protein_length: Length of the protein in amino acids.
-  - initial_aa_seq_char: Initial amino acid sequence as a string.
-  - mu_nuc: Nucleotide mutation rate.
-  - annealing_schedule_func_py: Python function for the annealing schedule.
-  - beta_max_val: Maximum beta value for the annealing schedule.
-  - annealing_len_val: Number of steps for the annealing schedule to reach beta_max.
-  - n_particles: Number of particles for the SMC simulation.
-  - n_smc_steps: Number of SMC steps to perform.
-  - mpnn_model_instance: Prepped ColabDesign MPNN model object.
-  - mpnn_model_is_active_static: Boolean indicating if the MPNN model is active.
-  - save_traj: Boolean indicating if the trajectory of particles should be saved.
+  - diversification_ratio: Mutation rate for initial population diversification.
+  - initial_sequence: Initial sequence as a string.
+  - sequence_type: Type of initial sequence ("protein" or "nucleotide").
+  - evolve_as: Type of evolution ("nucleotide" or "protein").
+  - mutation_rate: Mutation rate during evolution.
+  - annealing_schedule_function: Function for the annealing schedule.
+  - annealing_schedule_args: Arguments for the annealing schedule.
+  - population_size: Number of sequences for the SMC simulation.
+  - generations: Number of SMC steps to perform.
+  - fitness_evaluator: FitnessEvaluator containing fitness functions.
+  - save_traj: Boolean indicating if the trajectory of population should be saved.
+
   Returns:
   - final_results: Dictionary containing the results of the SMC simulation,
     including fitness metrics, entropy values, and other relevant statistics.
   """
   schedule_name_str = annealing_schedule_function.__name__
+  beta_max_val, annealing_len_val = annealing_schedule_args[:2]
 
   logger.info(
     f"Running Protein SMC (JAX) L={len(initial_sequence)}, "
@@ -74,25 +78,30 @@ def run_smc_protein_jax(
     f"PopulationSize={population_size}, Steps={generations}"
   )
 
-  if sequence_type:
+  # Initialize sequences based on sequence type
+  if sequence_type == "protein":
     initial_nucleotide_seq_int_list = [NUCLEOTIDES_INT_MAP["A"]] * (3 * len(initial_sequence))
+    i = 0  # Initialize i before the loop
     try:
       for i in range(len(initial_sequence)):
         aa_char = initial_sequence[i]
         if aa_char not in RES_TO_CODON_CHAR or not RES_TO_CODON_CHAR[aa_char]:
           raise ValueError(
             f"No codons found for amino acid '{aa_char}'. "
-            f"Check RES_TO_CODON_CHAR and initial_sequence_char."
+            f"Check RES_TO_CODON_CHAR and initial_sequence."
           )
         codon_char_list = list(RES_TO_CODON_CHAR[aa_char][0])
         for j in range(3):
           initial_nucleotide_seq_int_list[3 * i + j] = NUCLEOTIDES_INT_MAP[codon_char_list[j]]
     except KeyError as e:
-      if "aa_char" not in locals() and "aa_char" not in globals():
-        aa_char = ""
+      # Use the last valid i from the loop, or handle empty sequence case
+      if i < len(initial_sequence):
+        aa_char = initial_sequence[i]
+      else:
+        aa_char = "unknown"
       error_message = (
-        f"Failed to generate initial JAX nucleotide template from AA '{aa_char}'. "  # type: ignore[reportPossiblyUnboundVariable]
-        f"Check RES_TO_CODON_CHAR and initial_sequence_char."
+        f"Failed to generate initial JAX nucleotide template from AA '{aa_char}'. "
+        f"Check RES_TO_CODON_CHAR and initial_sequence."
       )
       raise ValueError(error_message) from e
     initial_template_one_seq_jax = jnp.array(initial_nucleotide_seq_int_list, dtype=jnp.int32)
@@ -103,15 +112,16 @@ def run_smc_protein_jax(
   else:
     raise ValueError(f"Unsupported sequence_type: {sequence_type}")
 
-  _template_population = jnp.tile(initial_template_one_seq_jax, (n_particles, 1))
+  _template_population = jnp.tile(initial_template_one_seq_jax, (population_size, 1))
 
+  # Create initial population
   initial_population = diversify_initial_sequences(
     key=initial_population_key,
     template_sequences=_template_population,
     mutation_rate=diversification_ratio,
     n_states=len(NUCLEOTIDES_CHAR),
-    sequence_length=protein_length,
-    nucleotide=True,
+    sequence_length=len(initial_sequence),
+    nucleotide=(sequence_type == "nucleotide" or evolve_as == "nucleotide"),
   )
 
   logger.info(
@@ -125,38 +135,36 @@ def run_smc_protein_jax(
     key_for_initial_metric_calc,
   )
 
-  (
-    init_cond_fitness_values,
-    init_cond_cai_values,
-    init_cond_mpnn_values,
-    init_cond_aa_seqs_jnp,
-    init_cond_has_x_flags,
-  ) = calculate_population_fitness(
+  # Calculate initial fitness using new system
+  init_cond_fitness_values, init_cond_fitness_components = calculate_population_fitness(
     key_for_initial_metric_calc,
     initial_population,
-    mpnn_model_instance,
-    mpnn_model_is_active_static,
+    evolve_as,
+    fitness_evaluator,
   )
 
-  init_cond_fitness_jnp = jnp.array(init_cond_fitness_values)
-  init_cond_cai_jnp = jnp.array(init_cond_cai_values)
-  init_cond_mpnn_jnp = jnp.array(init_cond_mpnn_values)
-  init_cond_particles_jnp = jnp.array(initial_population)
+  # Extract individual fitness components for reporting
+  init_cond_cai_values = init_cond_fitness_components.get(
+    "cai", jnp.zeros_like(init_cond_fitness_values)
+  )
+  init_cond_mpnn_values = init_cond_fitness_components.get(
+    "mpnn", jnp.zeros_like(init_cond_fitness_values)
+  )
 
-  ic_mean_fitness = jnp.mean(init_cond_fitness_jnp)
-  ic_max_fitness = jnp.max(init_cond_fitness_jnp)
-  ic_mean_cai = jnp.mean(init_cond_cai_jnp)
-  ic_mean_mpnn = jnp.mean(init_cond_mpnn_jnp)
-  ic_nuc_entropy = shannon_entropy(init_cond_particles_jnp)
-  ic_aa_entropy = shannon_entropy(init_cond_aa_seqs_jnp)
-  ic_num_with_x = jnp.sum(jnp.array(init_cond_has_x_flags))
+  # Calculate initial metrics
+  ic_mean_fitness = jnp.mean(init_cond_fitness_values)
+  ic_max_fitness = jnp.max(init_cond_fitness_values)
+  ic_mean_cai = jnp.mean(init_cond_cai_values)
+  ic_mean_mpnn = jnp.mean(init_cond_mpnn_values)
+  ic_nuc_entropy = shannon_entropy(initial_population)
+
   print(f"  Mean Combined Fitness: {ic_mean_fitness:.4f}")
   print(f"  Max Combined Fitness: {ic_max_fitness:.4f}")
   print(f"  Mean CAI: {ic_mean_cai:.4f}")
   print(f"  Mean MPNN Score: {ic_mean_mpnn:.4f}")
   print(f"  Nucleotide Entropy: {ic_nuc_entropy:.4f}")
-  print(f"  Amino Acid Entropy: {ic_aa_entropy:.4f}")
-  print(f"  Number of sequences with X: {ic_num_with_x}")
+
+  # Create annealing schedule
   beta_schedule_jax = jnp.array(
     [
       annealing_schedule_function(p_step + 1, annealing_len_val, beta_max_val)
@@ -165,52 +173,59 @@ def run_smc_protein_jax(
     dtype=jnp.float32,
   )
 
-  # 3. Define the JAX-jitted SMC step function for jax.lax.scan
-  # CORRECTED: The static arguments are now part of the function signature.
+  # Define the JAX-jitted SMC step function for jax.lax.scan
   @partial(
     jit,
     static_argnames=(
-      "protein_length_static",
-      "n_particles_static",
-      "mu_nuc_static",
-      "mpnn_model_instance_static",
-      "N_nuc_alphabet_size_static",
+      "sequence_length_static",
+      "population_size_static",
+      "mutation_rate_static",
+      "fitness_evaluator_static",
+      "sequence_type_static",
+      "evolve_as_static",
     ),
   )
   def _smc_scan_step(
     carry_state: tuple[jax.Array, jax.Array, jax.Array],
     scan_inputs_current_step: tuple[jax.Array, jax.Array],
-    protein_length_static: int,
-    n_particles_static: int,
-    mu_nuc_static: float,
-    mpnn_model_instance_static: mk_mpnn_model,
-    N_nuc_alphabet_size_static: int,
+    sequence_length_static: int,
+    population_size_static: int,
+    mutation_rate_static: float,
+    fitness_evaluator_static: FitnessEvaluator,
+    sequence_type_static: Literal["protein", "nucleotide"],
+    evolve_as_static: Literal["nucleotide", "protein"],
   ) -> tuple[tuple[jax.Array, jax.Array, jax.Array], dict[str, jax.Array]]:
     """
     Performs one step of the SMC algorithm. Designed for jax.lax.scan.
-    Static arguments are passed from the outer scope via the lambda in the
-    scan call.
     """
-    particles_prev_step, prev_log_Z_estimate, key_carry_prev = carry_state
+    population_prev_step, prev_log_Z_estimate, key_carry_prev = carry_state
     beta_current, _ = scan_inputs_current_step
 
     key_current_step_ops, key_for_next_carry = random.split(key_carry_prev)
     key_mutate_loop, key_fitness_loop, key_resample_loop = random.split(key_current_step_ops, 3)
 
-    particles_mutated = mutation_kernel_jax(
-      key_mutate_loop, particles_prev_step, mu_nuc_static, N_nuc=N_nuc_alphabet_size_static
+    # Apply mutations
+    population_mutated = dispatch_mutation(
+      key_mutate_loop,
+      population_prev_step,
+      mutation_rate_static,
+      sequence_type_static,
+      evolve_as_static,
     )
 
-    fitness_values, cai_values, mpnn_values, aa_seqs_int, has_x_flags = (
-      calculate_population_fitness(
-        key_fitness_loop,
-        particles_mutated,
-        protein_length_static,
-        mpnn_model_instance_static,
-        mpnn_model_is_active_static,
-      )
+    # Calculate fitness using new system
+    fitness_values, fitness_components = calculate_population_fitness(
+      key_fitness_loop,
+      population_mutated,
+      evolve_as_static,
+      fitness_evaluator_static,
     )
 
+    # Extract individual components for reporting
+    cai_values = fitness_components.get("cai", jnp.zeros_like(fitness_values))
+    mpnn_values = fitness_components.get("mpnn", jnp.zeros_like(fitness_values))
+
+    # Calculate weights and log evidence
     log_weights = jnp.where(jnp.isneginf(fitness_values), -jnp.inf, beta_current * fitness_values)
 
     if not isinstance(log_weights, jax.Array):
@@ -232,20 +247,21 @@ def run_smc_protein_jax(
     )
     current_log_Z_estimate = prev_log_Z_estimate + mean_log_weights_for_Z_current_step
 
-    resampling_output: tuple[jax.Array, jax.Array, jax.Array] = resample(
-      key_resample_loop, particles_mutated, log_weights, n_particles_static
+    # Resample population
+    population_resampled, ess_current_step, normalized_weights = resample(
+      key_resample_loop, population_mutated, log_weights
     )
-    particles_resampled, ess_current_step, normalized_weights = resampling_output
 
+    # Calculate weighted metrics with isinstance checks
     valid_fitness_mask_for_metrics = jnp.isfinite(fitness_values)
-    if not isinstance(normalized_weights, jax.Array):
-      error_message = (
-        f"Expected normalized_weights to be a JAX array, got {type(normalized_weights)}. "
-        "Ensure log_weights is a JAX array."
+    if isinstance(normalized_weights, jax.Array) and isinstance(
+      valid_fitness_mask_for_metrics, jax.Array
+    ):
+      sum_valid_weights = jnp.sum(
+        jnp.where(valid_fitness_mask_for_metrics, normalized_weights, 0.0)
       )
-      logger.error(error_message)
-      raise TypeError(error_message)
-    sum_valid_weights = jnp.sum(jnp.where(valid_fitness_mask_for_metrics, normalized_weights, 0.0))
+    else:
+      sum_valid_weights = jnp.array(0.0)
 
     def safe_weighted_mean(
       metric_array: jax.Array,
@@ -266,15 +282,27 @@ def run_smc_protein_jax(
     max_combined_fitness = jnp.where(jnp.all(~valid_fitness_mask_for_metrics), jnp.nan, max_val)
 
     valid_cai_mask_for_metrics = (cai_values > 0) & jnp.isfinite(cai_values)
-    sum_valid_cai_weights = jnp.sum(jnp.where(valid_cai_mask_for_metrics, normalized_weights, 0.0))
+    if isinstance(normalized_weights, jax.Array) and isinstance(
+      valid_cai_mask_for_metrics, jax.Array
+    ):
+      sum_valid_cai_weights = jnp.sum(
+        jnp.where(valid_cai_mask_for_metrics, normalized_weights, 0.0)
+      )
+    else:
+      sum_valid_cai_weights = jnp.array(0.0)
     mean_cai = safe_weighted_mean(
       cai_values, normalized_weights, valid_cai_mask_for_metrics, sum_valid_cai_weights
     )
 
     valid_mpnn_mask_for_metrics = jnp.isfinite(mpnn_values)
-    sum_valid_mpnn_weights = jnp.sum(
-      jnp.where(valid_mpnn_mask_for_metrics, normalized_weights, 0.0)
-    )
+    if isinstance(normalized_weights, jax.Array) and isinstance(
+      valid_mpnn_mask_for_metrics, jax.Array
+    ):
+      sum_valid_mpnn_weights = jnp.sum(
+        jnp.where(valid_mpnn_mask_for_metrics, normalized_weights, 0.0)
+      )
+    else:
+      sum_valid_mpnn_weights = jnp.array(0.0)
     mean_mpnn_score = safe_weighted_mean(
       mpnn_values, normalized_weights, valid_mpnn_mask_for_metrics, sum_valid_mpnn_weights
     )
@@ -286,43 +314,38 @@ def run_smc_protein_jax(
       "mean_mpnn_score": mean_mpnn_score,
       "ess": ess_current_step,
       "beta": beta_current,
-      "particles_for_entropy": particles_mutated,
-      "aa_seqs_for_entropy": aa_seqs_int,
-      "has_x_flags_for_entropy": has_x_flags,
+      "population_for_entropy": population_mutated,
       "final_log_Z_increment": mean_log_weights_for_Z_current_step,
     }
 
-    next_carry_state = (particles_resampled, current_log_Z_estimate, key_for_next_carry)
+    next_carry_state = (population_resampled, current_log_Z_estimate, key_for_next_carry)
 
     return next_carry_state, collected_metrics
 
-  # 4. Run the SMC loop using jax.lax.scan
+  # Run the SMC loop using jax.lax.scan
   initial_carry = (initial_population, jnp.array(0.0, dtype=jnp.float32), prng_key_smc_steps)
+  scan_over_inputs = (beta_schedule_jax, jnp.arange(generations))
 
-  scan_over_ijnputs = (beta_schedule_jax, jnp.arange(generations))
-
-  # The lambda function correctly passes static arguments to _smc_scan_step.
-  # The _smc_scan_step function's JIT decorator now correctly refers to its
-  # own arguments.
   final_carry_state, collected_outputs_scan = lax.scan(
     lambda carry, scan_in: _smc_scan_step(
       carry,
-      scan_in,  # Dynamic args
-      protein_length,  # Static args from here
-      n_particles,
+      scan_in,
+      len(initial_sequence),
+      population_size,
       mutation_rate,
-      mpnn_model_instance,
-      len(NUCLEOTIDES_CHAR),
+      fitness_evaluator,
+      sequence_type,
+      evolve_as,
     ),
     initial_carry,
-    scan_over_ijnputs,
+    scan_over_inputs,
     length=generations,
   )
 
-  # Ujnpack results from scan
-  final_particles_state, final_log_Z_estimate_jax, _ = final_carry_state
+  # Unpack results from scan
+  final_population_state, final_log_Z_estimate_jax, _ = final_carry_state
 
-  # Convert collected JAX arrays to NumPy for Python-based processing and reporting
+  # Convert collected JAX arrays for reporting
   if generations > 0:
     mean_combined_fitness_per_gen_jnp = jnp.array(collected_outputs_scan["mean_combined_fitness"])
     max_combined_fitness_per_gen_jnp = jnp.array(collected_outputs_scan["max_combined_fitness"])
@@ -331,10 +354,14 @@ def run_smc_protein_jax(
     ess_per_gen_jnp = jnp.array(collected_outputs_scan["ess"])
     beta_per_gen_jnp = jnp.array(collected_outputs_scan["beta"])
 
-    # Calculate entropy per generation using Python functions on the collected
-    # particle states
-    entropy_nuc_per_gen_jnp = jnp.full((generations,), jnp.nan)
-    entropy_aa_per_gen_jnp = jnp.full((generations,), jnp.nan)
+    # Calculate entropy per generation
+    entropy_nuc_per_gen_jnp = jnp.array(
+      [
+        shannon_entropy(collected_outputs_scan["population_for_entropy"][p_step])
+        for p_step in range(generations)
+      ]
+    )
+    entropy_aa_per_gen_jnp = jnp.full((generations,), jnp.nan)  # Placeholder
   else:
     mean_combined_fitness_per_gen_jnp = jnp.array([])
     max_combined_fitness_per_gen_jnp = jnp.array([])
@@ -345,19 +372,8 @@ def run_smc_protein_jax(
     entropy_nuc_per_gen_jnp = jnp.array([])
     entropy_aa_per_gen_jnp = jnp.array([])
 
+  # Print progress
   for p_step in range(generations):
-    # Particles and AA sequences for entropy for this generation
-    current_particles_for_entropy_jnp = jnp.array(
-      collected_outputs_scan["particles_for_entropy"][p_step]
-    )
-    current_aa_seqs_for_entropy_jnp = jnp.array(
-      collected_outputs_scan["aa_seqs_for_entropy"][p_step]
-    )
-
-    entropy_nuc_per_gen_jnp = shannon_entropy(current_particles_for_entropy_jnp)
-    entropy_aa_per_gen_jnp = shannon_entropy(current_aa_seqs_for_entropy_jnp)
-
-    # Print progress (optional, similar to original)
     if ((p_step + 1) % max(1, generations // 10) == 0) or (p_step == 0):
       print(
         f"  Step {p_step+1}/{generations} (JAX scan output): "
@@ -366,26 +382,21 @@ def run_smc_protein_jax(
         f"ESS={ess_per_gen_jnp[p_step]:.2f}"
       )
 
-  # Final logZ estimate (sum of increments)
+  # Final logZ estimate
   log_Z_estimate_final_py = float(final_log_Z_estimate_jax)
 
-  # Final amino acid entropy (based on the AA sequences of the very last
-  # generation collected)
-  if generations > 0:
-    final_aa_seqs_for_entropy_jnp = jnp.array(collected_outputs_scan["aa_seqs_for_entropy"][-1])
-    final_aa_entropy = shannon_entropy(final_aa_seqs_for_entropy_jnp)
-  else:
-    final_aa_entropy = jnp.nan
+  # Final entropy calculations
+  final_aa_entropy = shannon_entropy(final_population_state) if generations > 0 else jnp.nan
 
-  # 5. Package Results
+  # Package Results
   final_results = {
-    "protein_length": protein_length,
-    "nucleotide_length": N_nuc_total,
+    "protein_length": len(initial_sequence),
+    "nucleotide_length": len(initial_sequence) * 3,
     "initial_sequence": initial_sequence,
     "sequence_type": sequence_type,
-    "mu_nuc": mutation_rate,
-    "n_particles": n_particles,
-    "n_smc_steps": generations,
+    "mutation_rate": mutation_rate,
+    "population_size": population_size,
+    "generations": generations,
     "annealing_schedule": schedule_name_str,
     "annealing_len": annealing_len_val,
     "beta_max": beta_max_val,
@@ -394,8 +405,8 @@ def run_smc_protein_jax(
     "max_combined_fitness_per_gen": max_combined_fitness_per_gen_jnp,
     "mean_cai_per_gen": mean_cai_per_gen_jnp,
     "mean_mpnn_score_per_gen": mean_mpnn_score_per_gen_jnp,
-    "entropy_per_gen": entropy_nuc_per_gen_jnp,  # Nucleotide entropy
-    "aa_entropy_per_gen": entropy_aa_per_gen_jnp,  # Amino acid entropy
+    "entropy_per_gen": entropy_nuc_per_gen_jnp,
+    "aa_entropy_per_gen": entropy_aa_per_gen_jnp,
     "beta_per_gen": beta_per_gen_jnp,
     "ess_per_gen": ess_per_gen_jnp,
     "final_amino_acid_entropy": final_aa_entropy,
