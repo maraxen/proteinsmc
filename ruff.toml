@@ -1,2 +1,7 @@
+
+line-length = 100
+fix = true
+indent-width = 2
+
 [lint]
-select = ["F", "B"]
+select = ["F", "B", "E"]

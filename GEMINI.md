@@ -10,12 +10,13 @@ The primary goals for this repository are:
 ## Current Status and Future Work
 
 ### Island Models
-Based on the current codebase, explicit "island models" for population dynamics (e.g., with migration between islands) are **not** implemented. The existing `sampling/smc.py` contains logic related to "initial population" and "population mutation," but this refers to the population within a single SMC chain.
+A sophisticated island model is implemented in the form of a **Parallel Replica SMC algorithm** located in `src/sampling/parallel_replica.py`. This implementation addresses the core concepts of island models for evolutionary studies and benchmarking.
 
-To incorporate island models for evolutionary studies, you would need to:
--   Implement mechanisms for running multiple independent SMC simulations (islands).
--   Develop a strategy for migration between these islands (e.g., periodically exchanging sequences based on fitness or other criteria).
--   Design a way to manage and track the state of multiple populations.
+The key features of this implementation are:
+-   **Multiple Islands:** The `run_parallel_replica_smc_jax` function runs multiple independent SMC simulations in parallel, referred to as "islands." Each island maintains its own population of particles.
+-   **Replica Exchange:** The model includes a replica exchange strategy where configurations (particles) are swapped between islands based on a Metropolis-Hastings-like criterion. This allows for information to be shared between different temperature replicas, improving sampling efficiency.
+-   **State Management:** The `IslandState` NamedTuple is used to manage the state of each island, including the particles, random keys, and other parameters.
+-   **Flexible Configuration:** The implementation allows for configuring the number of islands, the number of particles per island, the exchange frequency, and other parameters.
 
 ### Benchmarking
 To benchmark this SMC implementation, consider:
@@ -41,7 +42,18 @@ The project uses `ruff` for linting. The current configuration focuses on `F` (P
 Maintain the modular structure within `src/`. When adding new functionalities, consider where they best fit within the existing `experiment.py`, `initiation.py`, `mpnn.py`, `mutate.py`, `sampling/`, and `utils/` modules, or if a new module is warranted.
 
 ### Virtual Environment
-Always activate the virtual environment before running any Python commands or scripts. The activation script is located at `.venv/bin/activate`.
+Always activate the virtual environment before running any Python commands or scripts. The activation script is located at `.venv/bin/activate`. You should do this before running any Python-related functions.
+
+### Running Tests
+To run all tests, use the following command from the project root:
+```bash
+"/Users/mar/MIT Dropbox/Marielle Russo/2025_workspace/proteinsmc/.venv/bin/python" -m pytest
+```
+To run a specific test file, provide its path:
+```bash
+"/Users/mar/MIT Dropbox/Marielle Russo/2025_workspace/proteinsmc/.venv/bin/python" -m pytest "/Users/mar/MIT Dropbox/Marielle Russo/2025_workspace/proteinsmc/tests/utils/test_combined_fitness.py"
+```
+
 
 ### Shell Commands
 When using shell commands, especially when dealing with paths that might contain spaces or special characters, always enclose the paths in quotes.
@@ -50,3 +62,22 @@ When using shell commands, especially when dealing with paths that might contain
 Keep `requirements.txt` up-to-date with any new Python package dependencies.
 
 By following these guidelines, we can ensure consistent, high-quality development for the Protein SMC Experiment project.
+
+## LAST SESSION
+
+**Instructions for Models:**
+Review this section at the beginning of each session to understand the current state of work. Update this section upon completing a significant milestone or when handing off the session.
+
+**Work Accomplished:**
+- Corrected the `translate` function in `src/utils/nucleotide.py` to accurately determine `valid_translation` based on the presence of 'X' residues.
+- Fixed the argument order for `mpnn_model.score` in `src/scoring/mpnn.py`.
+- Addressed syntax errors and incorrect Glycine codon frequencies in `src/utils/constants.py` to ensure correct CAI score calculation.
+
+**Remaining Work:**
+- Resolve the failing `test_calculate_fitness_population_nucleotide_sequences` test in `tests/utils/test_combined_fitness.py`. The current issue is that the calculated CAI scores are still incorrect, even after fixing the constants. This suggests a deeper issue with the CAI calculation logic or the test's expected values.
+- Address any remaining test failures in `tests/utils/test_metrics.py` and `tests/utils/test_resampling.py`.
+
+**Challenges Encountered:**
+- Persistent issues with `replace` tool due to subtle whitespace differences and multiple occurrences of `old_string`. This required careful manual inspection and precise string matching.
+- Debugging JAX-related errors, especially `NameError` and incorrect numerical outputs, required adding `jax.debug.print` statements for intermediate value inspection.
+- The `ModuleNotFoundError: No module named 'src'` when running pytest from the virtual environment was resolved by explicitly using the full path to the `python` executable within the virtual environment.

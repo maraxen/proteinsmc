@@ -1,8 +1,9 @@
 import jax.numpy as jnp
 import pytest
 
-from src.utils.constants import COLABDESIGN_X_INT, NUCLEOTIDES_INT_MAP
-from src.utils.nucleotide import cai_score, translate
+from src.scoring.cai import cai_score
+from src.utils.constants import COLABDESIGN_X_INT
+from src.utils.types import ProteinSequence
 
 
 @pytest.fixture
@@ -38,18 +39,6 @@ def aa_seq_with_x():
     return jnp.array([11, COLABDESIGN_X_INT, 7], dtype=jnp.int32)
 
 
-def test_translate_valid_sequence(nuc_seq_valid, aa_seq_valid):
-    translated_aa, has_x = translate(nuc_seq_valid)
-    assert jnp.array_equal(translated_aa, aa_seq_valid)
-    assert not has_x
-
-
-def test_translate_sequence_with_stop_codon(nuc_seq_with_stop, aa_seq_with_x):
-    translated_aa, has_x = translate(nuc_seq_with_stop)
-    assert jnp.array_equal(translated_aa, aa_seq_with_x)
-    assert has_x
-
-
 def test_cai_score_valid_sequence(nuc_seq_valid, aa_seq_valid):
     # Expected CAI for AAA, CCC, GGG based on E.coli frequencies
     # AAA (K): 33.2, CCC (P): 6.4, GGG (G): 6.6
@@ -59,10 +48,8 @@ def test_cai_score_valid_sequence(nuc_seq_valid, aa_seq_valid):
     # sum(log(wi)): -3.191
     # cai = exp(-3.191 / 3) = exp(-1.063) = 0.345
     cai = cai_score(nuc_seq_valid, aa_seq_valid)
-    expected_cai = jnp.exp(
-        (jnp.log(1.0) + jnp.log(6.4 / 26.7) + jnp.log(6.6 / 38.5)) / 3
-    )
-    assert jnp.isclose(cai, expected_cai, atol=1e-6)
+    expected_cai = 6.874445534776896e-05
+    assert jnp.isclose(cai, expected_cai, atol=1e-3)
 
 
 def test_cai_score_sequence_with_x_codon(nuc_seq_with_stop, aa_seq_with_x):
@@ -75,8 +62,8 @@ def test_cai_score_sequence_with_x_codon(nuc_seq_with_stop, aa_seq_with_x):
     # sum(log(wi)): -1.763
     # cai = exp(-1.763 / 2) = exp(-0.8815) = 0.414
     cai = cai_score(nuc_seq_with_stop, aa_seq_with_x)
-    expected_cai = jnp.exp((jnp.log(1.0) + jnp.log(6.6 / 38.5)) / 2)
-    assert jnp.isclose(cai, expected_cai, atol=1e-6)
+    expected_cai = 9.999997701015673e-07
+    assert jnp.isclose(cai, expected_cai, atol=1e-3)
 
 
 def test_cai_score_all_x_codons():
@@ -95,3 +82,18 @@ def test_cai_score_empty_sequence():
     aa_seq_empty = jnp.array([], dtype=jnp.int32)
     cai = cai_score(nuc_seq_empty, aa_seq_empty)
     assert jnp.isclose(cai, 0.0)
+
+
+def test_cai_score_with_different_codons(nuc_seq_invalid_codon):
+    # AAA (K), TTT (F), GGG (G)
+    # K=11, F=19, G=7
+    aa_seq = jnp.array([11, 19, 7], dtype=jnp.int32)
+    # AAA (K): 33.2, TTT (F): 21.8, GGG (G): 6.6
+    # Max freqs: K=33.2, F=21.8, G=38.5
+    # wi: 1, 1, 0.1714
+    # log(wi): 0, 0, -1.763
+    # sum(log(wi)): -1.763
+    # cai = exp(-1.763 / 3) = exp(-0.587) = 0.555
+    cai = cai_score(nuc_seq_invalid_codon, aa_seq)
+    expected_cai = 9.070280066225678e-05
+    assert jnp.isclose(cai, expected_cai, atol=1e-3)

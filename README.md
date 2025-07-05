@@ -5,6 +5,7 @@ This project is a Python codebase converted from a single Jupyter cell. It imple
 ## Features
 - JAX-accelerated SMC simulation for protein design
 - Codon and amino acid mappings, CAI calculation, and MPNN scoring
+- **Parallel Replica SMC:** A sophisticated island model implementation for enhanced sampling, allowing for replica exchanges between islands at different temperatures.
 - Modular, well-documented code
 - Ruff linting enabled (see `pyproject.toml`)
 

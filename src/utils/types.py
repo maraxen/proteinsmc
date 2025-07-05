@@ -3,16 +3,16 @@ from jaxtyping import Array, Bool, Float, Int
 
 # Type aliases for common shape descriptors
 # These tell the linter that these are intentional names for shape annotations
-NucleotideSequence = Int[Array, "nuc_len"]
-ProteinSequence = Int[Array, "protein_len"]
-MCSequence = NucleotideSequence | ProteinSequence
-BatchNucleotideSequences = Int[Array, "n_particles nuc_len"]
-BatchProteinSequences = Int[Array, "n_particles protein_len"]
-BatchSequenceFloats = Float[Array, "n_particles"]
-BatchSequenceBools = Bool[Array, "n_particles"]
+NucleotideSequence = Int[Array, "nucleotide_sequence_length"]
+ProteinSequence = Int[Array, "protein_sequence_length"]
+EvoSequence = NucleotideSequence | ProteinSequence
+PopulationNucleotideSequences = Int[Array, "n_particles nucleotide_sequence_length"]
+PopulationProteinSequences = Int[Array, "n_particles protein_sequence_length"]
+PopulationSequences = PopulationNucleotideSequences | PopulationProteinSequences
+PopulationSequenceFloats = Float[Array, "n_particles"]
+PopulationSequenceBools = Bool[Array, "n_particles"]
 ScalarFloat = Float[Array, ""]
 ScalarBool = Bool[Array, ""]
 ScalarInt = Int[Array, ""]
 MPNNModel = mk_mpnn_model
 FitnessWeights = Float[Array, "n_fitness_funcs"]
-BatchSequences = BatchNucleotideSequences | BatchProteinSequences

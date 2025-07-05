@@ -4,8 +4,8 @@ import jax.numpy as jnp
 from jax import random
 from unittest.mock import MagicMock
 
-from src.sampling.smc import run_smc_jax
-from src.mpnn import mpnn_score
+from src.sampling.smc import run_smc_protein_jax as run_smc_jax
+from src.scoring.mpnn import mpnn_score
 from src.utils.constants import NUCLEOTIDES_CHAR, NUCLEOTIDES_INT_MAP, RES_TO_CODON_CHAR
 
 # Mock MPNN model for testing
@@ -18,9 +18,9 @@ class MockMPNNModel:
             "chain_idx": jnp.array([1])
         }
 
-    def _score(self, X, mask, residue_idx, chain_idx, key, S):
+    def score(self, protein_sequence, key):
         # Mock scoring function, returns a dummy score
-        return {"logits": jnp.zeros((S.shape[0], S.shape[1], 21))}
+        return jnp.sum(protein_sequence.astype(jnp.float32))
 
 @pytest.fixture
 def mock_mpnn_model():
@@ -54,13 +54,15 @@ def test_run_smc_jax_protein_basic(default_smc_params):
     assert "mean_combined_fitness_per_gen" in results
     assert results["mean_combined_fitness_per_gen"].shape == (default_smc_params["n_smc_steps"],)
 
-def test_run_smc_jax_nucleotide_not_implemented(default_smc_params):
+def test_run_smc_jax_nucleotide_sequence_type(default_smc_params):
     params = default_smc_params.copy()
     params["sequence_type"] = "nucleotide"
     params["initial_sequence_char"] = "ATGCATGCAT" * 3 # Example nucleotide sequence
+    params["protein_length"] = 10 # Ensure protein_length matches nucleotide sequence length / 3
 
-    with pytest.raises(ValueError, match="Unsupported sequence_type: nucleotide"):
-        run_smc_jax(**params)
+    results = run_smc_jax(**params)
+    assert isinstance(results, dict)
+    assert "final_logZhat" in results
 
 def test_run_smc_jax_zero_steps(default_smc_params):
     params = default_smc_params.copy()
@@ -92,5 +94,5 @@ def test_run_smc_jax_invalid_initial_protein_sequence(default_smc_params):
     params = default_smc_params.copy()
     params["initial_sequence_char"] = "AAZ" # Invalid amino acid
     params["protein_length"] = 3
-    with pytest.raises(ValueError, match="Failed to generate initial JAX nucleotide template from AA 'Z'"):
+    with pytest.raises(ValueError, match="No codons found for amino acid '.*'\. Check RES_TO_CODON_CHAR and initial_sequence_char\."):
         run_smc_jax(**params)

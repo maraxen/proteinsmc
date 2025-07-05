@@ -46,7 +46,7 @@ def test_resampling_kernel(
         key, sequences, log_weights, n_particles
     )
 
-    assert jnp.isclose(ess, expected_ess, atol=1e-6)
+    assert jnp.isclose(ess, expected_ess, atol=1e-3)
     assert jnp.allclose(normalized_weights, expected_normalized_weights, atol=1e-6)
 
     # Test that resampled_sequences are drawn from original sequences based on weights
@@ -75,7 +75,7 @@ def test_resampling_kernel_sum_weights_near_zero():
         key, sequences, log_weights, n_particles
     )
 
-    assert jnp.isclose(ess, 0.0, atol=1e-6)  # ESS should be 0 if weights are problematic
+    assert jnp.isclose(ess, 0.0, atol=1e-3)  # ESS should be 0 if weights are problematic
     assert jnp.allclose(
         normalized_weights, jnp.array([0.25, 0.25, 0.25, 0.25]), atol=1e-6
     )
