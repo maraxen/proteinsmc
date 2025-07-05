@@ -4,14 +4,18 @@
     "colabdesign",
     "ECOLI",
     "FREQS",
+    "funcs",
+    "isneginf",
+    "jaxtyped",
     "jaxtyping",
+    "jitted",
     "maxval",
     "minval",
     "mpnn",
     "PRNG",
+    "traj",
     "vmap",
-    "jaxtyped",
-    "funcs",
+    "Zhat"
   ]
   
 }

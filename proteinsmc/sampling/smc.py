@@ -1,3 +1,4 @@
+from dataclasses import dataclass, field
 from functools import partial
 from logging import getLogger
 from typing import Callable, Literal
@@ -5,14 +6,15 @@ from typing import Callable, Literal
 import jax
 import jax.nn
 import jax.numpy as jnp
-import jax.scipy.special as jsp
 from jax import jit, lax, random
 
+from jaxtyping import PRNGKeyArray
 from ..utils import (
   NUCLEOTIDES_CHAR,
   NUCLEOTIDES_INT_MAP,
   RES_TO_CODON_CHAR,
   FitnessEvaluator,
+  calculate_logZ_increment,
   calculate_population_fitness,
   diversify_initial_sequences,
   resample,
@@ -23,8 +25,130 @@ from ..utils.mutate import dispatch_mutation
 logger = getLogger(__name__)
 logger.setLevel("INFO")  # TODO: have this set from main script or config
 
+# --- JAX-registered dataclasses for configuration and output ---
 
-def run_smc_protein_jax(
+
+@dataclass(frozen=True)
+class SMCConfig:
+  sequence_length: int
+  population_size: int
+  mutation_rate: float
+  sequence_type: Literal["protein", "nucleotide"]
+  evolve_as: Literal["nucleotide", "protein"]
+  fitness_evaluator: FitnessEvaluator
+
+  def tree_flatten(self):
+    children = ()
+    aux_data = self.__dict__
+    return (children, aux_data)
+
+  @classmethod
+  def tree_unflatten(cls, aux_data, children):
+    return cls(**aux_data)
+
+
+@dataclass(frozen=True)
+class AnnealingScheduleConfig:
+  schedule_fn: Callable
+  beta_max: float
+  annealing_len: int
+  schedule_args: tuple = field(default_factory=tuple)
+
+  def tree_flatten(self):
+    children = ()
+    aux_data = self.__dict__
+    return (children, aux_data)
+
+  @classmethod
+  def tree_unflatten(cls, aux_data, children):
+    return cls(**aux_data)
+
+
+@dataclass
+class SMCOutput:
+  mean_combined_fitness_per_gen: jnp.ndarray
+  max_combined_fitness_per_gen: jnp.ndarray
+  mean_cai_per_gen: jnp.ndarray
+  mean_mpnn_score_per_gen: jnp.ndarray
+  entropy_per_gen: jnp.ndarray
+  aa_entropy_per_gen: jnp.ndarray
+  beta_per_gen: jnp.ndarray
+  ess_per_gen: jnp.ndarray
+  final_logZhat: float
+  final_amino_acid_entropy: float
+  # Add more fields as needed
+
+  def tree_flatten(self):
+    children = (
+      self.mean_combined_fitness_per_gen,
+      self.max_combined_fitness_per_gen,
+      self.mean_cai_per_gen,
+      self.mean_mpnn_score_per_gen,
+      self.entropy_per_gen,
+      self.aa_entropy_per_gen,
+      self.beta_per_gen,
+      self.ess_per_gen,
+    )
+    aux_data = {
+      "final_logZhat": self.final_logZhat,
+      "final_amino_acid_entropy": self.final_amino_acid_entropy,
+    }
+    return (children, aux_data)
+
+  @classmethod
+  def tree_unflatten(cls, aux_data, children):
+    return cls(
+      mean_combined_fitness_per_gen=children[0],
+      max_combined_fitness_per_gen=children[1],
+      mean_cai_per_gen=children[2],
+      mean_mpnn_score_per_gen=children[3],
+      entropy_per_gen=children[4],
+      aa_entropy_per_gen=children[5],
+      beta_per_gen=children[6],
+      ess_per_gen=children[7],
+      **aux_data,
+    )
+
+
+@dataclass
+class SMCCarryState:
+  population: jax.Array
+  logZ_estimate: jax.Array
+  prng_key: PRNGKeyArray
+
+  def tree_flatten(self):
+    children = (self.population, self.logZ_estimate, self.prng_key)
+    aux_data = {}
+    return children, aux_data
+
+  @classmethod
+  def tree_unflatten(cls, aux_data, children):
+    return cls(*children)
+
+
+@dataclass
+class SMCScanInput:
+  beta: jax.Array
+  step_idx: jax.Array
+
+  def tree_flatten(self):
+    children = (self.beta, self.step_idx)
+    aux_data = {}
+    return children, aux_data
+
+  @classmethod
+  def tree_unflatten(cls, aux_data, children):
+    return cls(*children)
+
+
+jax.tree_util.register_pytree_node_class(SMCConfig)
+jax.tree_util.register_pytree_node_class(AnnealingScheduleConfig)
+jax.tree_util.register_pytree_node_class(SMCOutput)
+jax.tree_util.register_pytree_node_class(SMCCarryState)
+jax.tree_util.register_pytree_node_class(SMCScanInput)
+
+
+def smc(
   prng_key_smc_steps: jax.Array,
   initial_population_key: jax.Array,
   diversification_ratio: float,
@@ -38,7 +162,7 @@ def run_smc_protein_jax(
   generations: int,
   fitness_evaluator: FitnessEvaluator,
   save_traj: bool = False,
-) -> dict[str, jax.Array]:
+) -> SMCOutput:
   """
   Runs a Sequential Monte Carlo simulation for protein sequence design,
   optimized for JAX.
@@ -173,59 +297,65 @@ def run_smc_protein_jax(
     dtype=jnp.float32,
   )
 
-  # Define the JAX-jitted SMC step function for jax.lax.scan
+  # Create config object for SMC
+  smc_config = SMCConfig(
+    sequence_length=len(initial_sequence),
+    population_size=population_size,
+    mutation_rate=mutation_rate,
+    sequence_type=sequence_type,
+    evolve_as=evolve_as,
+    fitness_evaluator=fitness_evaluator,
+  )
+
+  # Prepare initial carry state and scan inputs using dataclasses
+  initial_carry = SMCCarryState(
+    population=initial_population,
+    logZ_estimate=jnp.array(0.0, dtype=jnp.float32),
+    prng_key=prng_key_smc_steps,
+  )
+  scan_over_inputs = [
+    SMCScanInput(beta=beta_schedule_jax[p], step_idx=jnp.array(p, dtype=jnp.int32))
+    for p in range(generations)
+  ]
+
   @partial(
     jit,
-    static_argnames=(
-      "sequence_length_static",
-      "population_size_static",
-      "mutation_rate_static",
-      "fitness_evaluator_static",
-      "sequence_type_static",
-      "evolve_as_static",
-    ),
+    static_argnames=("smc_config",),
   )
   def _smc_scan_step(
-    carry_state: tuple[jax.Array, jax.Array, jax.Array],
-    scan_inputs_current_step: tuple[jax.Array, jax.Array],
-    sequence_length_static: int,
-    population_size_static: int,
-    mutation_rate_static: float,
-    fitness_evaluator_static: FitnessEvaluator,
-    sequence_type_static: Literal["protein", "nucleotide"],
-    evolve_as_static: Literal["nucleotide", "protein"],
-  ) -> tuple[tuple[jax.Array, jax.Array, jax.Array], dict[str, jax.Array]]:
+    carry_state: SMCCarryState,
+    scan_input: SMCScanInput,
+    smc_config: SMCConfig,
+  ) -> tuple[SMCCarryState, dict[str, jax.Array]]:
     """
     Performs one step of the SMC algorithm. Designed for jax.lax.scan.
     """
-    population_prev_step, prev_log_Z_estimate, key_carry_prev = carry_state
-    beta_current, _ = scan_inputs_current_step
+    population_prev_step = carry_state.population
+    prev_log_Z_estimate = carry_state.logZ_estimate
+    key_carry_prev = carry_state.prng_key
+    beta_current = scan_input.beta
 
     key_current_step_ops, key_for_next_carry = random.split(key_carry_prev)
     key_mutate_loop, key_fitness_loop, key_resample_loop = random.split(key_current_step_ops, 3)
 
-    # Apply mutations
     population_mutated = dispatch_mutation(
       key_mutate_loop,
       population_prev_step,
-      mutation_rate_static,
-      sequence_type_static,
-      evolve_as_static,
+      smc_config.mutation_rate,
+      smc_config.sequence_type,
+      smc_config.evolve_as,
     )
 
-    # Calculate fitness using new system
     fitness_values, fitness_components = calculate_population_fitness(
       key_fitness_loop,
       population_mutated,
-      evolve_as_static,
-      fitness_evaluator_static,
+      smc_config.evolve_as,
+      smc_config.fitness_evaluator,
     )
 
-    # Extract individual components for reporting
     cai_values = fitness_components.get("cai", jnp.zeros_like(fitness_values))
     mpnn_values = fitness_components.get("mpnn", jnp.zeros_like(fitness_values))
 
-    # Calculate weights and log evidence
     log_weights = jnp.where(jnp.isneginf(fitness_values), -jnp.inf, beta_current * fitness_values)
 
     if not isinstance(log_weights, jax.Array):
@@ -236,18 +366,11 @@ def run_smc_protein_jax(
       logger.error(error_message)
       raise TypeError(error_message)
 
-    finite_log_weights_mask = jnp.isfinite(log_weights)
-    num_finite_weights = jnp.sum(finite_log_weights_mask)
-
-    filtered_log_weights = jnp.where(finite_log_weights_mask, log_weights, -jnp.inf)
-    mean_log_weights_for_Z_current_step = jnp.where(
-      num_finite_weights > 0,
-      jsp.logsumexp(filtered_log_weights) - jnp.log(num_finite_weights),
-      jnp.where(beta_current == 0.0, 0.0, -jnp.inf),
+    mean_log_weights_for_Z_current_step = calculate_logZ_increment(
+      log_weights, smc_config.population_size
     )
     current_log_Z_estimate = prev_log_Z_estimate + mean_log_weights_for_Z_current_step
 
-    # Resample population
     population_resampled, ess_current_step, normalized_weights = resample(
       key_resample_loop, population_mutated, log_weights
     )
@@ -318,34 +441,28 @@ def run_smc_protein_jax(
       "final_log_Z_increment": mean_log_weights_for_Z_current_step,
     }
 
-    next_carry_state = (population_resampled, current_log_Z_estimate, key_for_next_carry)
+    next_carry_state = SMCCarryState(
+      population=population_resampled,
+      logZ_estimate=current_log_Z_estimate,
+      prng_key=key_for_next_carry,
+    )
 
     return next_carry_state, collected_metrics
-
-  # Run the SMC loop using jax.lax.scan
-  initial_carry = (initial_population, jnp.array(0.0, dtype=jnp.float32), prng_key_smc_steps)
-  scan_over_inputs = (beta_schedule_jax, jnp.arange(generations))
 
   final_carry_state, collected_outputs_scan = lax.scan(
     lambda carry, scan_in: _smc_scan_step(
       carry,
       scan_in,
-      len(initial_sequence),
-      population_size,
-      mutation_rate,
-      fitness_evaluator,
-      sequence_type,
-      evolve_as,
+      smc_config,
     ),
     initial_carry,
     scan_over_inputs,
     length=generations,
   )
 
-  # Unpack results from scan
-  final_population_state, final_log_Z_estimate_jax, _ = final_carry_state
+  final_population_state = final_carry_state.population
+  final_log_Z_estimate_jax = final_carry_state.logZ_estimate
 
-  # Convert collected JAX arrays for reporting
   if generations > 0:
     mean_combined_fitness_per_gen_jnp = jnp.array(collected_outputs_scan["mean_combined_fitness"])
     max_combined_fitness_per_gen_jnp = jnp.array(collected_outputs_scan["max_combined_fitness"])
@@ -354,7 +471,6 @@ def run_smc_protein_jax(
     ess_per_gen_jnp = jnp.array(collected_outputs_scan["ess"])
     beta_per_gen_jnp = jnp.array(collected_outputs_scan["beta"])
 
-    # Calculate entropy per generation
     entropy_nuc_per_gen_jnp = jnp.array(
       [
         shannon_entropy(collected_outputs_scan["population_for_entropy"][p_step])
@@ -388,42 +504,26 @@ def run_smc_protein_jax(
   # Final entropy calculations
   final_aa_entropy = shannon_entropy(final_population_state) if generations > 0 else jnp.nan
 
-  # Package Results
-  final_results = {
-    "protein_length": len(initial_sequence),
-    "nucleotide_length": len(initial_sequence) * 3,
-    "initial_sequence": initial_sequence,
-    "sequence_type": sequence_type,
-    "mutation_rate": mutation_rate,
-    "population_size": population_size,
-    "generations": generations,
-    "annealing_schedule": schedule_name_str,
-    "annealing_len": annealing_len_val,
-    "beta_max": beta_max_val,
-    "final_logZhat": log_Z_estimate_final_py,
-    "mean_combined_fitness_per_gen": mean_combined_fitness_per_gen_jnp,
-    "max_combined_fitness_per_gen": max_combined_fitness_per_gen_jnp,
-    "mean_cai_per_gen": mean_cai_per_gen_jnp,
-    "mean_mpnn_score_per_gen": mean_mpnn_score_per_gen_jnp,
-    "entropy_per_gen": entropy_nuc_per_gen_jnp,
-    "aa_entropy_per_gen": entropy_aa_per_gen_jnp,
-    "beta_per_gen": beta_per_gen_jnp,
-    "ess_per_gen": ess_per_gen_jnp,
-    "final_amino_acid_entropy": final_aa_entropy,
-    # Placeholders for metrics not fully implemented in this JAX version
-    "adaptive_rate_per_gen": jnp.full((generations,), jnp.nan),
-    "final_var_V_hat_centred": jnp.nan,
-    "final_var_v_hat_centred": jnp.nan,
-    "jeffreys_divergence_nucleotide": jnp.nan,
-    "jeffreys_divergence_amino_acid": jnp.nan,
-  }
+  # Package Results using SMCOutput dataclass
+  output = SMCOutput(
+    mean_combined_fitness_per_gen=mean_combined_fitness_per_gen_jnp,
+    max_combined_fitness_per_gen=max_combined_fitness_per_gen_jnp,
+    mean_cai_per_gen=mean_cai_per_gen_jnp,
+    mean_mpnn_score_per_gen=mean_mpnn_score_per_gen_jnp,
+    entropy_per_gen=entropy_nuc_per_gen_jnp,
+    aa_entropy_per_gen=entropy_aa_per_gen_jnp,
+    beta_per_gen=beta_per_gen_jnp,
+    ess_per_gen=ess_per_gen_jnp,
+    final_logZhat=log_Z_estimate_final_py,
+    final_amino_acid_entropy=final_aa_entropy,
+  )
 
   if generations > 0:
     print(
-      f"Finished JAX SMC. Final MeanFit={mean_combined_fitness_per_gen_jnp[-1]:.4f}, "
-      f"LogZhat={log_Z_estimate_final_py:.4f}"
+      f"Finished JAX SMC. Final MeanFit={output.mean_combined_fitness_per_gen[-1]:.4f}, "
+      f"LogZhat={output.final_logZhat:.4f}"
     )
   else:
     print("Finished JAX SMC. No steps performed.")
 
-  return final_results
+  return output

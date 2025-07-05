@@ -30,6 +30,7 @@ from .fitness import (
   combine_fitness_scores,
 )
 from .metrics import (
+  calculate_logZ_increment,
   calculate_position_entropy,
   shannon_entropy,
 )
@@ -104,4 +105,5 @@ __all__ = [
   "ScalarInt",
   "RES_TO_CODON_CHAR",
   "CODON_TO_RES_CHAR",
+  "calculate_logZ_increment",
 ]

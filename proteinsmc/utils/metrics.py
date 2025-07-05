@@ -3,9 +3,38 @@ from logging import getLogger
 import jax.numpy as jnp
 from jax import jit, vmap
 
-from .types import PopulationSequences, ScalarFloat
+from .types import PopulationSequenceFloats, PopulationSequences, ScalarFloat
 
 logger = getLogger(__name__)
+
+
+@jit
+def calculate_logZ_increment(
+  log_weights: PopulationSequenceFloats,
+  population_size: int,
+) -> ScalarFloat:
+  """Calculate log evidence increment from log weights.
+
+  Args:
+    log_weights: Log weights for the population
+    population_size: Size of the population
+
+  Returns:
+    Log evidence increment for this step
+  """
+  valid_log_weights = jnp.where(jnp.isneginf(log_weights), -jnp.inf, log_weights)
+  max_l_w = jnp.max(valid_log_weights)
+  safe_max_l_w = jnp.where(jnp.isneginf(max_l_w), 0.0, max_l_w)
+  log_sum_exp_weights = safe_max_l_w + jnp.log(jnp.sum(jnp.exp(valid_log_weights - safe_max_l_w)))
+
+  current_logZ_increment = log_sum_exp_weights - jnp.log(jnp.maximum(population_size, 1.0))
+  current_logZ_increment = jnp.where(
+    jnp.isneginf(log_sum_exp_weights) | (population_size == 0),
+    -jnp.inf,
+    current_logZ_increment,
+  )
+
+  return current_logZ_increment
 
 
 @jit

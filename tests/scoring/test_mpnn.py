@@ -2,29 +2,42 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from src.scoring.mpnn import mpnn_score
-from src.utils.types import MPNNModel, ProteinSequence
+from proteinsmc.scoring.mpnn import mpnn_score
 
 
-class MockMPNNModel(MPNNModel):
-    def __init__(self):
-        pass
+class MockMPNNModel:
+  """A mock MPNNModel class for testing purposes."""
 
-    def score(self, protein_sequence: ProteinSequence, key: jax.random.PRNGKey):
-        return jnp.sum(protein_sequence.astype(jnp.float32))
-
-
-@pytest.fixture
-def mock_mpnn_model():
-    return MockMPNNModel()
+  def score(self, seq_numeric, key):
+    # Simple mock scoring: return the sum of the amino acid integers
+    return jnp.sum(seq_numeric)
 
 
 @pytest.fixture
-def aa_seq() -> ProteinSequence:
-    return jnp.array([11, 13, 7], dtype=jnp.int32)
+def mock_model():
+  """Fixture for the mock MPNN model."""
+  return MockMPNNModel()
 
 
-def test_mpnn_score(mock_mpnn_model, aa_seq):
-    key = jax.random.PRNGKey(0)
-    score = mpnn_score(key, aa_seq, mock_mpnn_model)
-    assert jnp.isclose(score, 31.0)
+def test_mpnn_score(mock_model):
+  """Test the mpnn_score function with a mock model."""
+  key = jax.random.PRNGKey(0)
+  # Represents a simple protein sequence, e.g., 'ACD'
+  protein_sequence = jnp.array([1, 2, 3])
+
+  score = mpnn_score(key, protein_sequence, mock_model)
+
+  # The mock score is the sum of the sequence integers
+  expected_score = jnp.sum(protein_sequence)
+  assert score == expected_score
+
+
+def test_mpnn_score_empty_sequence(mock_model):
+  """Test the mpnn_score function with an empty sequence."""
+  key = jax.random.PRNGKey(0)
+  protein_sequence = jnp.array([])
+
+  score = mpnn_score(key, protein_sequence, mock_model)
+
+  expected_score = 0.0
+  assert score == expected_score

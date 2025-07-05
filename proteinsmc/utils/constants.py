@@ -170,7 +170,6 @@ RES_TO_CODON_CHAR = collections.defaultdict(list)
 for codon_str, res_char in CODON_TO_RES_CHAR.items():
   if res_char != "X":
     RES_TO_CODON_CHAR[res_char].append(codon_str)
-print(f"RES_TO_CODON_CHAR: {RES_TO_CODON_CHAR}")
 
 num_colabdesign_aas = len(colabdesign_order_aa)
 ECOLI_MAX_FREQS_JAX_list = [0.0] * num_colabdesign_aas
