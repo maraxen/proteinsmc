@@ -17,7 +17,13 @@ from ..utils.types import (
 )
 
 
-@jit
+@partial(
+  jit,
+  static_argnames=(
+    "fitness_evaluator",
+    "evolve_as",
+  ),
+)
 def make_sequence_log_prob_fn(
   fitness_evaluator: FitnessEvaluator, evolve_as: Literal["protein", "nucleotide"]
 ) -> Callable[[EvoSequence], ScalarFloat]:

@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from proteinsmc.scoring.mpnn import mpnn_score
+from src.scoring.mpnn import mpnn_score
 
 
 class MockMPNNModel:

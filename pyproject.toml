@@ -6,3 +6,6 @@ exclude = [".venv", "venv", "build", "dist", "__pycache__"]
 
 [tool.ruff.lint]
 fix = true
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]

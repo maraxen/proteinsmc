@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from proteinsmc.utils.fitness import (
+from src.utils.fitness import (
   FitnessEvaluator,
   FitnessFunction,
   calculate_population_fitness,

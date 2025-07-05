@@ -2,7 +2,7 @@ import jax.numpy as jnp
 import pytest
 from jax import random
 
-from proteinsmc.sampling.nuts import nuts_sampler
+from src.sampling.nuts import nuts_sampler
 
 
 # Define a simple target distribution for testing (e.g., a multivariate Gaussian)

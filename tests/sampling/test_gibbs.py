@@ -2,12 +2,12 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from proteinsmc.sampling.gibbs import (
+from src.sampling.gibbs import (
   gibbs_sampler,
   make_gibbs_update_fns,
   make_sequence_log_prob_fn,
 )
-from proteinsmc.utils.fitness import FitnessEvaluator, FitnessFunction
+from src.utils.fitness import FitnessEvaluator, FitnessFunction
 
 
 # Mock fitness function for testing

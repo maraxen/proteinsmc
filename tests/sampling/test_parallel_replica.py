@@ -2,11 +2,11 @@ import jax.numpy as jnp
 import pytest
 from jax import random
 
-from proteinsmc.sampling.parallel_replica import (
+from src.sampling.parallel_replica import (
   ParallelReplicaConfig,
   run_parallel_replica_smc,
 )
-from proteinsmc.utils.fitness import FitnessEvaluator, FitnessFunction
+from src.utils.fitness import FitnessEvaluator, FitnessFunction
 
 
 # Mock fitness function for testing

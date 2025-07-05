@@ -2,12 +2,12 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from proteinsmc.utils.mutate import (
+from src.utils.mutate import (
   _revert_x_codons_if_mutated,
   diversify_initial_sequences,
   mutate,
 )
-from proteinsmc.utils.translate import translate
+from src.utils.translate import translate
 
 
 @pytest.fixture

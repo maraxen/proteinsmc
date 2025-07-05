@@ -1,6 +1,6 @@
 import jax.numpy as jnp
 
-from proteinsmc.utils.constants import (
+from src.utils.constants import (
   AA_CHAR_TO_INT_MAP,
   CODON_INT_TO_RES_INT_JAX,
   CODON_TO_RES_CHAR,

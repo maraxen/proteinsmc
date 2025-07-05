@@ -11,8 +11,8 @@ from .constants import (
   CODON_INT_TO_RES_INT_JAX,
   COLABDESIGN_X_INT,
 )
-from .types import NucleotideSequence, PopulationSequences
 from .translate import translate
+from .types import NucleotideSequence, PopulationSequences
 
 
 @partial(jit, static_argnames=("n_states", "mutation_rate"))
@@ -74,7 +74,7 @@ def _revert_x_codons_if_mutated(
   return final_nucleotide_sequences
 
 
-@partial(jit, static_argnames=("n_nuc_alphabet_size", "protein_length", "mu_nuc"))
+@partial(jit, static_argnames=("n_states", "sequence_length", "nucleotide"))
 def diversify_initial_sequences(
   key: PRNGKeyArray,
   template_sequences: PopulationSequences,

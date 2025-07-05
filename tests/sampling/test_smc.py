@@ -3,12 +3,12 @@ import jax.numpy as jnp
 import pytest
 from jax import random
 
-from proteinsmc.sampling.smc import (
+from src.sampling.smc import (
   SMCConfig,
   smc,
 )
-from proteinsmc.utils.annealing_schedules import linear_schedule
-from proteinsmc.utils.fitness import FitnessEvaluator, FitnessFunction
+from src.utils.annealing_schedules import linear_schedule
+from src.utils.fitness import FitnessEvaluator, FitnessFunction
 
 
 # Mock fitness function for testing

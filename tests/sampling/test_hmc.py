@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from proteinsmc.sampling.hmc import hmc_sampler
+from src.sampling.hmc import hmc_sampler
 
 
 # A simple, differentiable log probability function for testing
