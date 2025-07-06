@@ -24,7 +24,7 @@ def mock_fitness_fn(key, sequence, **kwargs):
 def setup_sampler():
   """Provides a standard setup for the Parallel Replica SMC sampler test."""
   key = random.PRNGKey(0)
-  sequence_length = 10
+  template_sequence = "MKY"
   n_islands = 4
   population_size_per_island = 8
 
@@ -66,17 +66,13 @@ def setup_sampler():
     exchange_config=exchange_config,
   )
 
-  template_sequences = jnp.zeros(
-    (population_size_per_island * n_islands, sequence_length), dtype=jnp.int32
-  )
-
   config = ParallelReplicaConfig(
-    template_sequences=template_sequences,
+    template_sequence=template_sequence,
     population_size_per_island=population_size_per_island,
     n_islands=n_islands,
     n_states=20,
     generations=100,
-    island_betas=jnp.linspace(0.1, 1.0, n_islands),
+    island_betas=[0.1] * n_islands,
     initial_diversity=0.1,
     fitness_evaluator=fitness_evaluator,
     step_config=step_config,
@@ -86,7 +82,7 @@ def setup_sampler():
 
 
 def test_run_parallel_replica_smc_output(setup_sampler):
-  """Tests that the Parallel Replica SMC sampler runs and produces output with the correct shapes."""
+  """Tests that the Parallel Replica sampler runs and produces output with the correct shapes."""
   key, config = setup_sampler
 
   output = prsmc_sampler(key, config)

@@ -9,7 +9,6 @@ from jaxtyping import PRNGKeyArray
 
 from proteinsmc.utils.types import (
   IslandFloats,
-  PopulationSequenceFloats,
   PopulationSequences,
   ScalarFloat,
   ScalarInt,
@@ -25,6 +24,7 @@ from ..utils import (
 from ..utils.annealing_schedules import (
   AnnealingScheduleConfig,
 )
+from ..utils.initiate import generate_template_population
 from ..utils.mutation import dispatch_mutation
 
 
@@ -74,12 +74,12 @@ class PRSMCStepConfig:
 class ParallelReplicaConfig:
   """Configuration for parallel replica SMC simulation."""
 
-  template_sequences: PopulationSequences
+  template_sequence: str
   population_size_per_island: int
   n_islands: int
   n_states: int
   generations: int
-  island_betas: PopulationSequenceFloats
+  island_betas: list[float]
   initial_diversity: float
   fitness_evaluator: FitnessEvaluator
   step_config: PRSMCStepConfig
@@ -415,27 +415,32 @@ def prsmc_sampler(
   """
 
   key_init_islands, key_smc_loop = jax.random.split(key)
-
-  initial_population_array = diversify_initial_sequences(
+  initial_population = generate_template_population(
+    initial_sequence=config.template_sequence,
+    population_size=config.population_size_per_island * config.n_islands,
+    input_sequence_type=config.step_config.sequence_type,
+    output_sequence_type=config.step_config.sequence_type,
+  )
+  initial_population = diversify_initial_sequences(
     key=key_init_islands,
-    template_sequences=config.template_sequences,
+    template_sequences=initial_population,
     mutation_rate=config.initial_diversity,
     n_states=config.n_states,
     nucleotide=config.step_config.sequence_type == "nucleotide",
   )
   initial_populations = jnp.split(
-    initial_population_array,
+    initial_population,
     config.n_islands,
     axis=0,
   )
 
   island_keys = jax.random.split(key_init_islands, config.n_islands)
-
+  island_betas = jnp.array(config.island_betas, dtype=jnp.float32)
   initial_island_states_list = [
     IslandState(
       key=island_keys[i],
       population=initial_populations[i],
-      beta=config.island_betas[i],
+      beta=island_betas[i],
       logZ_estimate=jnp.array(0.0, dtype=jnp.float32),
       mean_fitness=jnp.array(0.0, dtype=jnp.float32),
       ess=jnp.array(0.0, dtype=jnp.float32),
@@ -450,7 +455,7 @@ def prsmc_sampler(
   @partial(jit, static_argnames=("step_config",))
   def _parallel_replica_scan_step(
     carry_state: PRSMCCarryState,
-    step_idx: int,
+    step_idx: ScalarInt,
     step_config: PRSMCStepConfig,
   ):
     key_step, next_smc_loop_key = jax.random.split(carry_state.prng_key)
@@ -464,13 +469,15 @@ def prsmc_sampler(
     ess_p, mean_fit_p, max_fit_p, logZ_inc_p = island_metrics
 
     meta_annealing_schedule = step_config.meta_beta_annealing_schedule
+    annealing_len = jnp.array(meta_annealing_schedule.annealing_len, dtype=jnp.int32)
+    beta_max = jnp.array(meta_annealing_schedule.beta_max, dtype=jnp.float32)
     current_meta_beta = lax.cond(
       step_idx >= meta_annealing_schedule.annealing_len,
       lambda: jnp.array(meta_annealing_schedule.beta_max, dtype=jnp.float32),
       lambda: meta_annealing_schedule.schedule_fn(
         step_idx + 1,
-        meta_annealing_schedule.annealing_len,
-        meta_annealing_schedule.beta_max,
+        annealing_len,
+        beta_max,
         *meta_annealing_schedule.schedule_args,
       ).astype(jnp.float32),
     )
@@ -519,12 +526,13 @@ def prsmc_sampler(
     jnp.array(0, dtype=jnp.int32),
     jnp.array(0, dtype=jnp.int32),
   )
+  step_config = config.step_config
 
   final_carry_state, collected_outputs_scan = lax.scan(
     lambda carry, scan_input: _parallel_replica_scan_step(
       carry,
       scan_input,
-      config.step_config,
+      step_config,
     ),
     initial_carry,
     jnp.arange(config.generations, dtype=jnp.int32),

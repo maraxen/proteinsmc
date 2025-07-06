@@ -3,7 +3,7 @@ from .hmc import hmc_sampler
 from .mcmc import mcmc_sampler
 from .nuts import nuts_sampler
 from .parallel_replica import ParallelReplicaConfig, ParallelReplicaSMCOutput, prsmc_sampler
-from .smc import SMCCarryState, SMCConfig, SMCOutput, SMCScanInput, smc_sampler
+from .smc import SMCCarryState, SMCConfig, SMCOutput, smc_sampler
 
 __all__ = [
   "gibbs_sampler",
