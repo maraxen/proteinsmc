@@ -7,8 +7,8 @@ import jax.numpy as jnp
 from jax import jit, vmap
 from jaxtyping import PRNGKeyArray
 
-from proteinsmc.utils.translation import translate
-from proteinsmc.utils.types import (
+from .translation import reverse_translate, translate
+from .types import (
   FitnessWeights,
   PopulationSequenceFloats,
   PopulationSequences,
@@ -23,7 +23,6 @@ class FitnessFunction:
   input_type: Literal["nucleotide", "protein"]
   args: dict[str, Any]
   name: str
-  is_active: bool = True
 
   def __post_init__(self):
     if not callable(self.func):
@@ -34,9 +33,7 @@ class FitnessFunction:
       )
 
   def __hash__(self) -> int:
-    return hash(
-      (self.func, self.input_type, frozenset(self.args.items()), self.name, self.is_active)
-    )
+    return hash((self.func, self.input_type, frozenset(self.args.items()), self.name))
 
   def tree_flatten(self):
     children = ()
@@ -60,15 +57,11 @@ class FitnessEvaluator:
     if not self.fitness_functions:
       raise ValueError("At least one fitness function must be provided.")
 
-  def get_active_functions(self) -> list[FitnessFunction]:
-    """Get only the active fitness functions."""
-    return [f for f in self.fitness_functions if f.is_active]
-
   def get_functions_by_type(
     self, input_type: Literal["nucleotide", "protein"]
   ) -> list[FitnessFunction]:
     """Get active fitness functions that accept the specified input type."""
-    return [f for f in self.get_active_functions() if f.input_type == input_type]
+    return [f for f in self.fitness_functions if f.input_type == input_type]
 
   def __hash__(self) -> int:
     return hash(tuple(sorted(self.fitness_functions, key=lambda f: f.name)))
@@ -87,6 +80,7 @@ jax.tree_util.register_pytree_node_class(FitnessEvaluator)
 jax.tree_util.register_pytree_node_class(FitnessFunction)
 
 
+@partial(jit, static_argnames=["sequence_type", "fitness_evaluator"])
 def calculate_population_fitness(
   key: PRNGKeyArray,
   population: PopulationSequences,
@@ -104,13 +98,18 @@ def calculate_population_fitness(
     )
 
   aa_seqs = None
+  nuc_seqs = None
   if sequence_type == "nucleotide":
-    print(f"population.shape: {population.shape}")
-    print(f"population: {population}")
+    nuc_seqs = population
     if population.shape[1] % 3 != 0:
       raise ValueError("Nucleotide sequences must have a length that is a multiple of 3.")
     vmapped_translate = vmap(translate, in_axes=(0,))
     aa_seqs, _ = vmapped_translate(population)
+
+  elif sequence_type == "protein":
+    aa_seqs = population
+    vmapped_reverse_translate = vmap(reverse_translate, in_axes=(0,), out_axes=0)
+    nuc_seqs, valid_translation = vmapped_reverse_translate(population)
 
   fitness_components = {}
   main_scores = {}
@@ -118,16 +117,13 @@ def calculate_population_fitness(
 
   for func_key, fitness_func in zip(keys_for_functions, fitness_evaluator.fitness_functions):
     if fitness_func.input_type == "nucleotide":
-      if sequence_type != "nucleotide":
-        raise ValueError(
-          f"Function {fitness_func.name} requires nucleotide input but got {sequence_type}"
-        )
-      input_seqs = population
+      input_seqs = nuc_seqs
+    elif fitness_func.input_type == "protein":
+      input_seqs = aa_seqs
     else:
-      if sequence_type == "nucleotide":
-        input_seqs = aa_seqs
-      else:
-        input_seqs = population
+      raise ValueError(
+        f"Invalid input_type '{fitness_func.input_type}' for fitness function '{fitness_func.name}'."
+      )
 
     def create_fitness_evaluation(func: Callable, args: dict[str, Any]) -> Callable:
       def single_fitness_evaluation(seq_key: PRNGKeyArray, seq: jax.Array) -> jax.Array:
@@ -139,19 +135,15 @@ def calculate_population_fitness(
     vmapped_fitness = vmap(evaluation_func, in_axes=(0, 0))
     func_keys = jax.random.split(func_key, population.shape[0])
 
-    # Always expect a float per sequence (not a tuple, not a dict)
     result = vmapped_fitness(func_keys, input_seqs)
-    # result should be shape (population_size,)
     main_scores[fitness_func.name] = result
 
   if fitness_evaluator.combine_func is not None:
     combine_args = fitness_evaluator.combine_func_args or {}
     combined_fitness = fitness_evaluator.combine_func(main_scores, **combine_args)
   else:
-    # Default: sum all main fitness scores
     combined_fitness = jnp.sum(jnp.array(list(main_scores.values())), axis=0)
 
-  # Add the main scores to fitness_components for completeness
   for k, v in main_scores.items():
     fitness_components[k] = v
 
@@ -180,3 +172,19 @@ def combine_fitness_scores(
     combined_fitness = jnp.sum(jnp.array(list(fitness_components.values())), axis=0)
 
   return combined_fitness
+
+
+def make_sequence_log_prob_fn(
+  fitness_evaluator: FitnessEvaluator, sequence_type: Literal["protein", "nucleotide"]
+) -> Callable:
+  """Creates a JIT-compiled log-probability function."""
+
+  @jit
+  def log_prob_fn(seq: jax.Array) -> jax.Array:
+    seq_batch = jnp.atleast_2d(seq)
+    fitness_batch, _ = calculate_population_fitness(
+      jax.random.PRNGKey(0), seq_batch, sequence_type, fitness_evaluator
+    )
+    return fitness_batch[0] if seq.ndim == 1 else fitness_batch
+
+  return log_prob_fn

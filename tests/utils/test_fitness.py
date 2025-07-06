@@ -2,17 +2,16 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from src.utils.fitness import (
+from proteinsmc.utils.fitness import (
   FitnessEvaluator,
   FitnessFunction,
   calculate_population_fitness,
 )
 
 
-# Mock fitness functions
 def mock_protein_fitness_func(key, sequences, arg1):
   """Mock fitness function that operates on protein sequences."""
-  return jnp.full(sequences.shape[0], arg1)
+  return jnp.full((sequences.shape[0],), arg1).mean(axis=-1)
 
 
 def mock_nucleotide_fitness_func(key, sequences, arg1):
@@ -45,7 +44,6 @@ def nucleotide_ff():
 def test_fitness_function_init(protein_ff):
   """Test FitnessFunction initialization."""
   assert protein_ff.name == "mock_protein"
-  assert protein_ff.is_active
 
 
 def test_fitness_function_invalid_func():
@@ -80,15 +78,6 @@ def test_fitness_evaluator_no_functions():
   """Test that FitnessEvaluator raises ValueError if no functions are provided."""
   with pytest.raises(ValueError):
     FitnessEvaluator(fitness_functions=[])
-
-
-def test_fitness_evaluator_get_active_functions(protein_ff, nucleotide_ff):
-  """Test retrieving active functions from FitnessEvaluator."""
-  nucleotide_ff.is_active = False
-  fe = FitnessEvaluator(fitness_functions=[protein_ff, nucleotide_ff])
-  active_funcs = fe.get_active_functions()
-  assert len(active_funcs) == 1
-  assert active_funcs[0].name == "mock_protein"
 
 
 def test_fitness_evaluator_get_functions_by_type(protein_ff, nucleotide_ff):

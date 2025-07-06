@@ -3,39 +3,21 @@ This module implements the Hamiltonian Monte Carlo (HMC) sampling algorithm.
 """
 
 from functools import partial
-from typing import Callable, Literal
+from typing import Callable
 
 import jax
 import jax.numpy as jnp
 from jax import jit, random
 from jaxtyping import PRNGKeyArray
 
-from ..utils import FitnessEvaluator, calculate_population_fitness
-from ..utils.types import (
-  EvoSequence,
-  PopulationSequences,
-  ScalarFloat,
-)
-
-
-@jit
-def make_sequence_log_prob_fn(
-  fitness_evaluator: FitnessEvaluator, evolve_as: Literal["protein", "nucleotide"]
-) -> Callable[[EvoSequence], ScalarFloat]:
-  def log_prob_fn(seq: jax.Array) -> jax.Array:
-    seq_batch = seq if seq.ndim == 2 else seq[None, :]
-    fitness, _ = calculate_population_fitness(
-      random.PRNGKey(0), seq_batch, evolve_as, fitness_evaluator
-    )
-    return fitness[0] if seq.ndim == 1 else fitness
-
-  return log_prob_fn
+from proteinsmc.utils.types import EvoSequence, PopulationSequences, ScalarFloat
 
 
 @partial(
   jit,
   static_argnames=(
     "num_samples",
+    "log_prob_fn",
     "step_size",
     "num_leapfrog_steps",
   ),

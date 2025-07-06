@@ -1,18 +1,13 @@
-import jax
-import jax
 import jax.numpy as jnp
-from jax import jit
 
 from ..utils.constants import (
-  CODON_INT_TO_RES_INT_JAX,
   COLABDESIGN_X_INT,
   ECOLI_CODON_FREQ_JAX,
   ECOLI_MAX_FREQS_JAX,
 )
-from ..utils.types import NucleotideSequence, ProteinSequence, ScalarFloat
+from proteinsmc.utils.types import NucleotideSequence, ProteinSequence, ScalarFloat
 
 
-@jit
 def cai_score(nuc_seq: NucleotideSequence, aa_seq: ProteinSequence) -> ScalarFloat:
   """Calculates Codon Adaptation Index (CAI).
 

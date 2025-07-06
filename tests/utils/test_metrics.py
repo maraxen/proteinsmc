@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 import pytest
 
-from src.utils.metrics import (
+from proteinsmc.utils.metrics import (
   calculate_logZ_increment,
   calculate_position_entropy,
   shannon_entropy,

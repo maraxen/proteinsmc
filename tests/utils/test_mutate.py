@@ -2,12 +2,12 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from src.utils.mutate import (
+from proteinsmc.utils.mutation import (
   _revert_x_codons_if_mutated,
   diversify_initial_sequences,
   mutate,
 )
-from src.utils.translate import translate
+from proteinsmc.utils.translation import translate
 
 
 @pytest.fixture
@@ -33,17 +33,13 @@ def test_revert_x_codons():
   mutated = jnp.array([3, 0, 0])
 
   reverted = _revert_x_codons_if_mutated(
-    template_nucleotide_sequences=template,
-    candidate_nucleotide_sequences=mutated,
-    sequence_length=1,
+    template_nucleotide_sequences=template, candidate_nucleotide_sequences=mutated
   )
   assert jnp.array_equal(reverted, template)
 
   mutated_valid = jnp.array([2, 1, 1])
   reverted_valid = _revert_x_codons_if_mutated(
-    template_nucleotide_sequences=template,
-    candidate_nucleotide_sequences=mutated_valid,
-    sequence_length=1,
+    template_nucleotide_sequences=template, candidate_nucleotide_sequences=mutated_valid
   )
   assert jnp.array_equal(reverted_valid, mutated_valid)
 

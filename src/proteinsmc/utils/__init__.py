@@ -1,4 +1,5 @@
 from .annealing_schedules import (
+  AnnealingScheduleConfig,
   cosine_schedule,
   exponential_schedule,
   linear_schedule,
@@ -28,20 +29,21 @@ from .fitness import (
   FitnessFunction,
   calculate_population_fitness,
   combine_fitness_scores,
+  make_sequence_log_prob_fn,
 )
 from .metrics import (
   calculate_logZ_increment,
   calculate_position_entropy,
   shannon_entropy,
 )
-from .mutate import (
+from .mutation import (
   _revert_x_codons_if_mutated,
   dispatch_mutation,
   diversify_initial_sequences,
   mutate,
 )
-from .resample import resample
-from .translate import translate
+from .resampling import resample
+from .translation import reverse_translate, translate
 from .types import (
   EvoSequence,
   FitnessWeights,
@@ -90,6 +92,7 @@ __all__ = [
   "dispatch_mutation",
   "resample",
   "translate",
+  "reverse_translate",
   "EvoSequence",
   "FitnessWeights",
   "MPNNModel",
@@ -106,4 +109,6 @@ __all__ = [
   "RES_TO_CODON_CHAR",
   "CODON_TO_RES_CHAR",
   "calculate_logZ_increment",
+  "AnnealingScheduleConfig",
+  "make_sequence_log_prob_fn",
 ]

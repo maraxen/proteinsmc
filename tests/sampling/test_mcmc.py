@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from src.sampling.mcmc import make_random_mutation_proposal_fn, mcmc_sampler
+from proteinsmc.sampling.mcmc import make_random_mutation_proposal_fn, mcmc_sampler
 
 
 @pytest.fixture

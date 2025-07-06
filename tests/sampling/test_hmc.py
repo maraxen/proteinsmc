@@ -2,11 +2,9 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from src.sampling.hmc import hmc_sampler
+from proteinsmc.sampling.hmc import hmc_sampler
 
 
-# A simple, differentiable log probability function for testing
-# A multivariate normal distribution centered at zero.
 def gaussian_log_prob(x):
   return -0.5 * jnp.sum(x**2)
 

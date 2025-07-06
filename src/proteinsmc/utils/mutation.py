@@ -11,7 +11,6 @@ from .constants import (
   CODON_INT_TO_RES_INT_JAX,
   COLABDESIGN_X_INT,
 )
-from .translate import translate
 from .types import NucleotideSequence, PopulationSequences
 
 
@@ -23,7 +22,7 @@ def mutate(
   Args:
       key: JAX PRNG key.
       sequences: JAX array of nucleotide sequences
-                  (shape: (n_particles, nuc_len)).
+                  (shape: (n, nuc_len)).
       mutation_rate: Mutation rate for nucleotides.
       n_states: Number of states. e.g., nucleotide types (4 for A, C, G, T).
 
@@ -34,7 +33,7 @@ def mutate(
   offsets = random.randint(key_offsets, shape=sequences.shape, minval=1, maxval=n_states)
   proposed_mutations = (sequences + offsets) % n_states
   mutated_sequences = jnp.where(mutation_mask, proposed_mutations, sequences)
-  return mutated_sequences
+  return mutated_sequences.astype(jnp.int8)
 
 
 @jit
@@ -71,7 +70,7 @@ def _revert_x_codons_if_mutated(
 
   final_nucleotide_sequences = codons_final.reshape(-1)
 
-  return final_nucleotide_sequences
+  return final_nucleotide_sequences.astype(jnp.int8)
 
 
 @partial(jit, static_argnames=("n_states", "nucleotide"))
@@ -97,7 +96,7 @@ def diversify_initial_sequences(
       nucleotide: Whether to treat the sequences as nucleotide sequences.
 
   Returns:
-      final_particles_population: JAX array of nucleotide sequences after mutation
+      final_population: JAX array of nucleotide sequences after mutation
                             and 'X' check.
   """
   key_mask, key_offsets = random.split(key)
@@ -111,14 +110,14 @@ def diversify_initial_sequences(
   )
 
   if nucleotide:
-    final_particles_population = vmap(_revert_x_codons_if_mutated)(
+    final_population = vmap(_revert_x_codons_if_mutated)(
       template_sequences, particles_with_all_proposed_mutations
     )
-    final_particles_population = final_particles_population.astype(jnp.int8)
+    final_population = final_population.astype(jnp.int8)
   else:
-    final_particles_population = particles_with_all_proposed_mutations
+    final_population = particles_with_all_proposed_mutations.astype(jnp.int8)
 
-  return final_particles_population
+  return final_population.astype(jnp.int8)
 
 
 def dispatch_mutation(
@@ -126,27 +125,15 @@ def dispatch_mutation(
   sequences: PopulationSequences,
   mutation_rate: float,
   sequence_type: Literal["nucleotide", "protein"],
-  evolve_as: Literal["nucleotide", "protein"],
 ) -> PopulationSequences:
   """
   Dispatches the appropriate sequence processing function based on the sequence type.
-  Args:
-      key: JAX PRNG key.
-      sequences: JAX array of nucleotide sequences
-                  (shape: (n_particles, nuc_len)).
-      mutation_rate: Mutation rate for nucleotides.
-      n_states: Number of states. e.g., nucleotide types (4 for A, C, G, T).
-      sequence_length: Length of the protein sequence (number of amino acids).
   """
-  if sequence_type == "nucleotide" and evolve_as == "nucleotide":
+  if sequence_type == "nucleotide":
     n_states = 4
     return mutate(key, sequences, mutation_rate, n_states)
-  elif sequence_type == "protein" and evolve_as == "protein":
+  elif sequence_type == "protein":
     n_states = 20
-    return mutate(key, sequences, mutation_rate, n_states)
-  elif sequence_type == "nucleotide" and evolve_as == "protein":
-    n_states = 20
-    sequences = translate(sequences, n_states)
     return mutate(key, sequences, mutation_rate, n_states)
   else:
-    raise ValueError(f"Unsupported sequence type: {sequence_type}")
+    raise ValueError(f"Unsupported sequence_type='{sequence_type}'")

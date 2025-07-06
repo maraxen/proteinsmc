@@ -1,6 +1,6 @@
 import jax.numpy as jnp
 
-from src.utils.annealing_schedules import (
+from proteinsmc.utils.annealing_schedules import (
   cosine_schedule,
   exponential_schedule,
   linear_schedule,

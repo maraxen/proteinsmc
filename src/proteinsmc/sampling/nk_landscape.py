@@ -13,15 +13,13 @@ def generate_nk_interactions_jax(key, N, K, q):
   Corrected to handle dynamic slicing issues for JIT.
   Returns an (N, K) array of neighbor indices, padded with -1.
   """
-  # Initialize the final interactions array with padding value -1
+  if K == 0:
+    return jnp.full((N, K), -1, dtype=jnp.int32)
+
   interactions = jnp.full((N, K), -1, dtype=jnp.int32)
-  # Create an array of all site indices [0, 1, ..., N-1]
   sites = jnp.arange(N)
 
-  # Define the body function for the loop over each site 'i'
-  def body_fun_n(i, interactions_carry):  # interactions_carry is the \
-    # accumulating interactions table
-    # Create a unique JAX PRNG key for operations related to site 'i'
+  def body_fun_n(i, interactions_carry):
     key_site_i = jax_random.fold_in(key, i)
 
     # Determine all possible neighbors for site 'i' (all sites except 'i' itself)
@@ -50,21 +48,12 @@ def generate_nk_interactions_jax(key, N, K, q):
 
     # Define the body function for an inner loop that populates the K         # slots in the new_interaction_row_for_site_i
     def assign_kth_neighbor_in_row(k_idx, current_row_values_carry):
-      # k_idx is the current position in the K-sized interaction row (from 0 to K-1)
-
-      # Conditionally assign an actual neighbor or padding.
-      # An actual neighbor is assigned if k_idx is less than
-      # num_to_select_for_site_i.
-      # This ensures we only attempt to read from permuted_actual_possible_neighbors
-      # within the bounds of the neighbors we decided to select.
       value_to_assign = lax.cond(
         k_idx < num_to_select_for_site_i,
         lambda p_neighbors: p_neighbors[k_idx],  # Get the actual
-        # neighbor from the permuted list
         lambda p_neighbors: -1,  # Otherwise, assign padding value
         permuted_actual_possible_neighbors,  # Pass the permuted neighbors array to the lambda
       )
-      # Update the k_idx-th element of the current row being built
       return current_row_values_carry.at[k_idx].set(value_to_assign)
 
     # Populate the new_interaction_row_for_site_i by looping K times

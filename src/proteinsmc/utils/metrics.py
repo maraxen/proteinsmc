@@ -23,7 +23,7 @@ def calculate_logZ_increment(
     Log evidence increment for this step
   """
   if log_weights.shape[0] == 0:
-    return jnp.ndarray(-jnp.inf)
+    return jnp.array(-jnp.inf)
 
   valid_log_weights = jnp.where(jnp.isneginf(log_weights), -jnp.inf, log_weights)
   max_l_w = jnp.max(valid_log_weights)

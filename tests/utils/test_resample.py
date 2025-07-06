@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from src.utils.resample import resample
+from proteinsmc.utils.resampling import resample
 
 
 @pytest.fixture

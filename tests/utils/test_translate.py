@@ -1,7 +1,8 @@
 import jax.numpy as jnp
 import pytest
 
-from src.utils.translate import translate
+from proteinsmc.utils.constants import COLABDESIGN_X_INT
+from proteinsmc.utils.translation import reverse_translate, translate
 
 
 @pytest.mark.parametrize(
@@ -30,3 +31,19 @@ def test_translate(nuc_seq, expected_aa_seq, expected_validity):
 def test_translate_invalid_length():
   with pytest.raises(TypeError):
     translate(jnp.array([0, 1, 2, 3]))
+
+
+def test_reverse_translate():
+  """Tests the reverse translation logic for both valid and invalid amino acids."""
+
+  aa_seq_valid = jnp.array([13, 11])  # Example: F, K
+  nuc_seq_valid, is_valid_flag = reverse_translate(aa_seq_valid)
+  assert is_valid_flag
+  retranslated_aa, _ = translate(nuc_seq_valid)
+  assert jnp.array_equal(retranslated_aa, aa_seq_valid)
+  aa_seq_invalid = jnp.array([COLABDESIGN_X_INT])
+  nuc_seq_invalid, is_valid_flag_invalid = reverse_translate(aa_seq_invalid)
+  assert not is_valid_flag_invalid
+  assert nuc_seq_invalid.shape == (3,)
+  retranslated_stop, _ = translate(nuc_seq_invalid)
+  assert retranslated_stop[0] == COLABDESIGN_X_INT

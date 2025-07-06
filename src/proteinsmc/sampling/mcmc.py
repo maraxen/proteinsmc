@@ -3,41 +3,25 @@ This module implements the Metropolis-Hastings MCMC sampling algorithm.
 """
 
 from functools import partial
-from typing import Callable, Literal
+from typing import Callable
 
 import jax
 import jax.numpy as jnp
 from jax import jit, random
 from jaxtyping import PRNGKeyArray
 
-from ..utils import FitnessEvaluator, calculate_population_fitness
-from ..utils.types import (
+from proteinsmc.utils.types import (
   EvoSequence,
   PopulationSequences,
   ScalarFloat,
 )
 
 
-@jit
-def make_sequence_log_prob_fn(
-  fitness_evaluator: FitnessEvaluator, evolve_as: Literal["protein", "nucleotide"]
-) -> Callable[[EvoSequence], ScalarFloat]:
-  def log_prob_fn(seq: jax.Array) -> jax.Array:
-    seq_batch = seq if seq.ndim == 2 else seq[None, :]
-    fitness, _ = calculate_population_fitness(
-      random.PRNGKey(0), seq_batch, evolve_as, fitness_evaluator
-    )
-    return fitness[0] if seq.ndim == 1 else fitness
-
-  return log_prob_fn
-
-
-@jit
 def make_random_mutation_proposal_fn(
   n_states: int,
 ) -> Callable[[PRNGKeyArray, EvoSequence], EvoSequence]:
-  def proposal_fn(key: PRNGKeyArray, seq: jax.Array) -> jax.Array:
-    # Randomly mutate one position
+  @jit
+  def proposal_fn(key: PRNGKeyArray, seq: EvoSequence) -> EvoSequence:
     seq_new = seq.copy()
     pos = random.randint(key, (), 0, seq.shape[0])
     new_val = random.randint(key, (), 0, n_states)
@@ -47,7 +31,7 @@ def make_random_mutation_proposal_fn(
   return proposal_fn
 
 
-@partial(jit, static_argnames=("num_samples",))
+@partial(jit, static_argnames=("num_samples", "log_prob_fn", "proposal_fn"))
 def mcmc_sampler(
   key: PRNGKeyArray,
   initial_state: EvoSequence,
@@ -97,6 +81,6 @@ def mcmc_sampler(
 
 
 # Example usage:
-# log_prob_fn = make_sequence_log_prob_fn(fitness_evaluator, evolve_as)
+# log_prob_fn = make_sequence_log_prob_fn(fitness_evaluator, )
 # proposal_fn = make_random_mutation_proposal_fn(n_states)
 # samples = mcmc_sampler(key, initial_seq, num_samples, log_prob_fn, proposal_fn)

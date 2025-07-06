@@ -3,56 +3,34 @@ This module implements the Gibbs sampling algorithm for general and protein sequ
 """
 
 from functools import partial
-from typing import Callable, Literal
+from typing import Callable
 
 import jax
 import jax.numpy as jnp
 from jax import jit, random
+from jaxtyping import PRNGKeyArray
 
-from ..utils import FitnessEvaluator, calculate_population_fitness
-from ..utils.types import (
+from proteinsmc.utils.types import (
   EvoSequence,
   PopulationSequences,
   ScalarFloat,
 )
 
 
-@partial(
-  jit,
-  static_argnames=(
-    "fitness_evaluator",
-    "evolve_as",
-  ),
-)
-def make_sequence_log_prob_fn(
-  fitness_evaluator: FitnessEvaluator, evolve_as: Literal["protein", "nucleotide"]
-) -> Callable[[EvoSequence], ScalarFloat]:
-  """
-  Returns a log-probability function for a sequence array using the fitness evaluator.
-  """
-
-  def log_prob_fn(seq: jax.Array) -> jax.Array:
-    seq_batch = seq if seq.ndim == 2 else seq[None, :]
-    fitness, _ = calculate_population_fitness(
-      random.PRNGKey(0), seq_batch, evolve_as, fitness_evaluator
-    )
-    # Return log-prob as fitness (or sum if batch)
-    return fitness[0] if seq.ndim == 1 else fitness
-
-  return log_prob_fn
-
-
 def make_gibbs_update_fns(
-  sequence_length: int, n_states: int, evolve_as: Literal["protein", "nucleotide"]
-) -> list[Callable[[jax.Array, EvoSequence, Callable[[EvoSequence], ScalarFloat]], EvoSequence]]:
+  sequence_length: int, n_states: int
+) -> tuple[Callable[[jax.Array, EvoSequence, Callable[[EvoSequence], ScalarFloat]], EvoSequence]]:
   """
   Returns a list of update functions for each position in the sequence.
   Each update function samples a new value for one position conditioned on the rest.
   """
 
-  def update_fn_factory(pos):
-    def update_fn(key, seq, log_prob_fn):
-      # For each possible state at position pos, compute log-prob
+  def update_fn_factory(
+    pos: int,
+  ) -> Callable[[jax.Array, EvoSequence, Callable[[EvoSequence], ScalarFloat]], EvoSequence]:
+    def update_fn(
+      key: PRNGKeyArray, seq: EvoSequence, log_prob_fn: Callable[[EvoSequence], ScalarFloat]
+    ) -> EvoSequence:
       proposals = jnp.tile(seq, (n_states, 1))
       proposals = proposals.at[:, pos].set(jnp.arange(n_states))
       log_probs = jax.vmap(log_prob_fn)(proposals)
@@ -62,16 +40,19 @@ def make_gibbs_update_fns(
 
     return update_fn
 
-  return [update_fn_factory(pos) for pos in range(sequence_length)]
+  update_fns = []
+  for pos in range(sequence_length):
+    update_fns.append(update_fn_factory(pos))
+  return tuple(update_fns)
 
 
-@partial(jit, static_argnames=("num_samples",))
+@partial(jit, static_argnames=("num_samples", "log_prob_fn", "update_fns"))
 def gibbs_sampler(
-  key: jax.Array,
+  key: PRNGKeyArray,
   initial_state: EvoSequence,
   num_samples: int,
   log_prob_fn: Callable[[EvoSequence], ScalarFloat],
-  update_fns: list[
+  update_fns: tuple[
     Callable[[jax.Array, EvoSequence, Callable[[EvoSequence], ScalarFloat]], EvoSequence]
   ],
 ) -> PopulationSequences:

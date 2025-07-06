@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 
-from src.scoring.cai import cai_score
-from src.utils.constants import COLABDESIGN_X_INT
+from proteinsmc.scoring.cai import cai_score
+from proteinsmc.utils.constants import COLABDESIGN_X_INT
 
 # test_cai_score_valid_sequence
 nuc_seq_valid = jnp.array([0, 0, 0, 1, 1, 1, 2, 2, 2], dtype=jnp.int8)

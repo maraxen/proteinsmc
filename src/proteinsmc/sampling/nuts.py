@@ -8,49 +8,41 @@ NUTS sampler.
 """
 
 from functools import partial
-from typing import Callable, Literal
+from typing import Callable
 
 import jax
 import jax.numpy as jnp
 from jax import jit, random
 from jaxtyping import PRNGKeyArray
 
-from ..utils import FitnessEvaluator, calculate_population_fitness
-from ..utils.types import (
+from proteinsmc.utils.types import (
   EvoSequence,
   PopulationSequences,
   ScalarFloat,
 )
 
 
-@jit  # JIT the log_prob_fn for efficiency
-def make_sequence_log_prob_fn(
-  fitness_evaluator: FitnessEvaluator, evolve_as: Literal["protein", "nucleotide"]
-) -> Callable[[EvoSequence], ScalarFloat]:
-  def log_prob_fn(seq: jax.Array) -> jax.Array:
-    seq_batch = seq if seq.ndim == 2 else seq[None, :]
-    fitness, _ = calculate_population_fitness(
-      random.PRNGKey(0), seq_batch, evolve_as, fitness_evaluator
-    )
-    return fitness[0] if seq.ndim == 1 else fitness
-
-  return log_prob_fn
-
-
 @partial(
   jit,
   static_argnames=(
+    "log_prob_fn",
     "num_samples",
+    "warmup_steps",
+    "num_chains",
     "step_size",
+    "adapt_step_size",
     "num_leapfrog_steps",
   ),
 )
 def nuts_sampler(
   key: PRNGKeyArray,
+  log_prob_fn: Callable[[EvoSequence], ScalarFloat],
   initial_position: EvoSequence,
   num_samples: int,
-  log_prob_fn: Callable[[EvoSequence], ScalarFloat],
+  warmup_steps: int,
+  num_chains: int = 1,
   step_size: float = 0.1,
+  adapt_step_size: bool = True,  # TODO(mar): Implement step size adaptation
   num_leapfrog_steps: int = 10,
 ) -> PopulationSequences:
   """
@@ -61,10 +53,13 @@ def nuts_sampler(
 
   Args:
       key: JAX PRNG key.
+      log_prob_fn: Log probability function of the target distribution.
       initial_position: Initial position of the sampler.
       num_samples: Number of samples to generate.
-      log_prob_fn: Log probability function of the target distribution.
+      warmup_steps: Number of warmup steps.
+      num_chains: Number of parallel chains to run.
       step_size: Integration step size for leapfrog.
+      adapt_step_size: Whether to adapt the step size during warmup.
       num_leapfrog_steps: Number of leapfrog steps to take.
 
   Returns:
@@ -114,26 +109,25 @@ def nuts_sampler(
 
     return (next_q, p0, next_log_prob, key_nuts), next_q
 
-  # Initialize
-  initial_log_prob = log_prob_fn(initial_position)
-  initial_momentum = random.normal(key, shape=initial_position.shape)
+  def run_chain(key, initial_position):
+    # Initialize
+    initial_log_prob = log_prob_fn(initial_position)
+    initial_momentum = random.normal(key, shape=initial_position.shape)
 
-  # Run sampler
-  _, samples = jax.lax.scan(
-    nuts_step, (initial_position, initial_momentum, initial_log_prob, key), None, length=num_samples
-  )
+    # Run sampler
+    _, samples = jax.lax.scan(
+      nuts_step,
+      (initial_position, initial_momentum, initial_log_prob, key),
+      None,
+      length=num_samples + warmup_steps,
+    )
+    return samples[warmup_steps:]
+
+  keys = random.split(key, num_chains)
+  if num_chains > 1:
+    initial_positions = jnp.tile(initial_position, (num_chains, 1))
+    samples = jax.vmap(run_chain)(keys, initial_positions)
+  else:
+    samples = run_chain(key, initial_position)[None, ...]
 
   return samples
-
-
-if __name__ == "__main__":
-  key = random.PRNGKey(0)
-  initial_position = jnp.array([0.0, 0.0])
-  num_samples = 1000
-
-  samples = nuts_sampler(
-    key, initial_position, num_samples, lambda x: jnp.multiply(-0.5, jnp.sum(jnp.square(x)))
-  )
-  print("NUTS samples shape:", samples.shape)
-  print("Mean of samples:", jnp.mean(samples, axis=0))
-  print("Std of samples:", jnp.std(samples, axis=0))

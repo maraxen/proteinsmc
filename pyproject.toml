@@ -1,11 +1,23 @@
-[tool.ruff]
-line-length = 120
-select = ["E", "F", "W", "I", "N", "D", "UP", "YTT", "ANN", "S", "B", "A", "C4", "T20", "Q", "RUF"]
-ignore = []
-exclude = [".venv", "venv", "build", "dist", "__pycache__"]
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
 
-[tool.ruff.lint]
-fix = true
+[project]
+name = "proteinsmc"
+version = "0.1.0"
+authors = [
+    { name="Your Name", email="you@example.com" },
+]
+description = "A package for protein sequence Monte Carlo."
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+packages = ["proteinsmc"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

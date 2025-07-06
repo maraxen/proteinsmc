@@ -14,8 +14,17 @@
     "mpnn",
     "PRNG",
     "traj",
+    "unflatten",
     "vmap",
-    "Zhat"
+    "Zhat",
+    "mcmc",
+    "prsmc",
+    "proteinsmc",
+    "fori",
+    "vmapped",
+    "tensordot",
+    "allclose",
+    
   ],
   "python.testing.pytestArgs": [
     "tests"

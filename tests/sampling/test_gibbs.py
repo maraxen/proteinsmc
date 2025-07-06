@@ -2,36 +2,36 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from src.sampling.gibbs import (
+from proteinsmc.sampling.gibbs import (
   gibbs_sampler,
   make_gibbs_update_fns,
-  make_sequence_log_prob_fn,
 )
-from src.utils.fitness import FitnessEvaluator, FitnessFunction
-
-
-# Mock fitness function for testing
-def mock_fitness_func(key, sequences, const_val):
-  return jnp.full(sequences.shape[0], const_val)
+from proteinsmc.utils.fitness import FitnessEvaluator, FitnessFunction, make_sequence_log_prob_fn
 
 
 @pytest.fixture
 def fitness_evaluator():
-  """Provides a mock FitnessEvaluator."""
-  ff = FitnessFunction(
+  """Creates a mock fitness evaluator that returns a single score per sequence."""
+
+  def mock_fitness_func(key, seq, const_val=5.0):
+    return const_val
+
+  fitness_func = FitnessFunction(
     func=mock_fitness_func, input_type="protein", args={"const_val": 5.0}, name="mock"
   )
-  return FitnessEvaluator(fitness_functions=[ff])
+  return FitnessEvaluator(fitness_functions=[fitness_func])
 
 
 def test_make_sequence_log_prob_fn(fitness_evaluator):
   """Test that the created log_prob function returns the expected fitness."""
-  log_prob_fn = make_sequence_log_prob_fn(fitness_evaluator, evolve_as="protein")
-  test_seq = jnp.ones((10,))
-  log_prob = log_prob_fn(test_seq)
-  assert log_prob == 5.0
+  log_prob_fn = make_sequence_log_prob_fn(fitness_evaluator, sequence_type="protein")
 
-  # Test batching
+  test_seq = jnp.ones((2, 10))
+  log_prob = log_prob_fn(test_seq)
+  print(log_prob)
+  assert log_prob.shape == (2,)
+  assert jnp.all(log_prob == 5.0)
+
   test_batch = jnp.ones((5, 10))
   log_probs = log_prob_fn(test_batch)
   assert log_probs.shape == (5,)
@@ -40,7 +40,7 @@ def test_make_sequence_log_prob_fn(fitness_evaluator):
 
 def test_make_gibbs_update_fns():
   """Test the creation of Gibbs update functions."""
-  update_fns = make_gibbs_update_fns(sequence_length=5, n_states=4, evolve_as="protein")
+  update_fns = make_gibbs_update_fns(sequence_length=5, n_states=4)
   assert len(update_fns) == 5
 
   # Test a single update function
@@ -64,13 +64,10 @@ def test_gibbs_sampler():
   sequence_length = 2
   n_states = 4
 
-  # Target distribution: log_prob is high if seq[0] == seq[1], else low
   def log_prob_fn(seq):
     return jnp.where(seq[0] == seq[1], 1.0, -100.0)
 
-  update_fns = make_gibbs_update_fns(
-    sequence_length=sequence_length, n_states=n_states, evolve_as="protein"
-  )
+  update_fns = make_gibbs_update_fns(sequence_length=sequence_length, n_states=n_states)
 
   initial_state = jnp.array([0, 1])  # Start in a low-probability state
   num_samples = 100

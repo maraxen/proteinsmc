@@ -2,6 +2,9 @@
 line-length = 100
 fix = true
 indent-width = 2
+ignore = []
+exclude = [".venv", "venv", "build", "dist", "__pycache__"]
 
 [lint]
 select = ["F", "B", "E"]
+

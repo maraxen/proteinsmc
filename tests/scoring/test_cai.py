@@ -1,8 +1,8 @@
 import jax.numpy as jnp
 import pytest
 
-from src.scoring.cai import cai_score
-from src.utils.constants import AA_CHAR_TO_INT_MAP, COLABDESIGN_X_INT, NUCLEOTIDES_INT_MAP
+from proteinsmc.scoring.cai import cai_score
+from proteinsmc.utils.constants import AA_CHAR_TO_INT_MAP, COLABDESIGN_X_INT, NUCLEOTIDES_INT_MAP
 
 
 def nuc_to_int(seq_str):

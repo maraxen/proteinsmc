@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import pytest
 from jax import random
 
-from src.sampling.nk_landscape import (
+from proteinsmc.sampling.nk_landscape import (
   calculate_nk_fitness_population_jax,
   calculate_nk_fitness_single_jax,
   generate_nk_interactions_jax,

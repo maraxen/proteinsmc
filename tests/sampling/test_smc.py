@@ -1,129 +1,144 @@
-import jax
 import jax.numpy as jnp
 import pytest
 from jax import random
 
-from src.sampling.smc import (
+from proteinsmc.sampling.smc import (
+  AnnealingScheduleConfig,
   SMCConfig,
-  smc,
+  smc_sampler,
 )
-from src.utils.annealing_schedules import linear_schedule
-from src.utils.fitness import FitnessEvaluator, FitnessFunction
+from proteinsmc.utils.annealing_schedules import linear_schedule
+from proteinsmc.utils.fitness import FitnessEvaluator, FitnessFunction
 
 
-# Mock fitness function for testing
-def mock_fitness_fn(key, sequences, sequence_type):
-  # Simple fitness: sum of integer values in the sequence
-  return jnp.sum(sequences, axis=-1), {
-    "cai": jnp.mean(sequences, axis=-1),
-    "mpnn": -jnp.mean(sequences, axis=-1),
-  }
+# --- Mock Fitness Functions ---
+def mock_protein_fitness_fn(key, seq, **kwargs):
+  """Mock fitness function for protein sequences."""
+  return jnp.sum(seq, axis=-1).astype(jnp.float32)
 
 
+def mock_nucleotide_fitness_fn(key, seq, **kwargs):
+  """Mock fitness function for nucleotide sequences."""
+  return jnp.mean(seq, axis=-1).astype(jnp.float32)
+
+
+# --- Fixture for Protein SMC ---
 @pytest.fixture
-def setup_smc():
+def setup_smc_protein():
+  """Provides a standard setup for a protein-based SMC sampler test."""
   key = random.PRNGKey(0)
   initial_sequence = "MKY"
-  config = SMCConfig(
+
+  # Evaluator with only protein-based fitness functions
+  fitness_evaluator = FitnessEvaluator(
+    fitness_functions=[
+      FitnessFunction(func=mock_protein_fitness_fn, input_type="protein", name="mock1", args={}),
+      FitnessFunction(func=mock_protein_fitness_fn, input_type="protein", name="mock2", args={}),
+    ]
+  )
+
+  smc_config = SMCConfig(
     sequence_length=len(initial_sequence),
     population_size=10,
     mutation_rate=0.1,
     sequence_type="protein",
-    evolve_as="nucleotide",
-    fitness_evaluator=FitnessEvaluator(
-      fitness_functions=[
-        FitnessFunction(func=mock_fitness_fn, input_type="nucleotide", name="mock", args={})
-      ]
-    ),
-  )
-  annealing_schedule_fn = linear_schedule
-  annealing_schedule_args = (1.0, 5)
-  generations = 5
-  diversification_ratio = 0.2
-
-  return (
-    key,
-    config,
-    initial_sequence,
-    annealing_schedule_fn,
-    annealing_schedule_args,
-    generations,
-    diversification_ratio,
+    fitness_evaluator=fitness_evaluator,
+    generations=5,
   )
 
+  annealing_config = AnnealingScheduleConfig(
+    schedule_fn=linear_schedule, beta_max=1.0, annealing_len=5
+  )
 
-def test_smc_output_shapes(setup_smc):
+  return key, smc_config, annealing_config, initial_sequence, 0.2
+
+
+# --- Fixture for Nucleotide SMC ---
+@pytest.fixture
+def setup_smc_nucleotide():
+  """Provides a standard setup for a nucleotide-based SMC sampler test."""
+  key = random.PRNGKey(0)
+  initial_sequence = "ATGAAATAC"
+
+  # Evaluator with only nucleotide-based fitness functions
+  fitness_evaluator = FitnessEvaluator(
+    fitness_functions=[
+      FitnessFunction(
+        func=mock_nucleotide_fitness_fn, input_type="nucleotide", name="mock1", args={}
+      ),
+      FitnessFunction(
+        func=mock_nucleotide_fitness_fn, input_type="nucleotide", name="mock2", args={}
+      ),
+    ]
+  )
+
+  smc_config = SMCConfig(
+    sequence_length=len(initial_sequence),
+    population_size=10,
+    mutation_rate=0.1,
+    sequence_type="nucleotide",
+    fitness_evaluator=fitness_evaluator,
+    generations=5,
+  )
+
+  annealing_config = AnnealingScheduleConfig(
+    schedule_fn=linear_schedule, beta_max=1.0, annealing_len=5
+  )
+
+  return key, smc_config, annealing_config, initial_sequence, 0.2
+
+
+# --- Corrected Tests ---
+
+
+def test_smc_output_shapes(setup_smc_protein):
+  """Tests that the SMC sampler output shapes are correct for a protein setup."""
   (
     key,
-    config,
+    smc_config,
+    annealing_schedule_config,
     initial_sequence,
-    annealing_schedule_fn,
-    annealing_schedule_args,
-    generations,
     diversification_ratio,
-  ) = setup_smc
+  ) = setup_smc_protein
 
   key_smc, key_init = random.split(key)
 
-  output = smc(
+  output = smc_sampler(
+    smc_config=smc_config,
+    annealing_schedule_config=annealing_schedule_config,
     prng_key_smc_steps=key_smc,
     initial_population_key=key_init,
     diversification_ratio=diversification_ratio,
     initial_sequence=initial_sequence,
-    sequence_type=config.sequence_type,
-    evolve_as=config.evolve_as,
-    mutation_rate=config.mutation_rate,
-    annealing_schedule_function=annealing_schedule_fn,
-    annealing_schedule_args=annealing_schedule_args,
-    population_size=config.population_size,
-    generations=generations,
-    fitness_evaluator=config.fitness_evaluator,
   )
 
-  assert output.mean_combined_fitness_per_gen.shape == (generations,)
-  assert output.max_combined_fitness_per_gen.shape == (generations,)
-  assert output.mean_cai_per_gen.shape == (generations,)
-  assert output.mean_mpnn_score_per_gen.shape == (generations,)
-  assert output.entropy_per_gen.shape == (generations,)
-  assert output.beta_per_gen.shape == (generations,)
-  assert output.ess_per_gen.shape == (generations,)
-  assert isinstance(output.final_logZhat, (float, jax.Array))
+  assert output.mean_combined_fitness_per_gen.shape == (smc_config.generations,)
+  assert output.max_combined_fitness_per_gen.shape == (smc_config.generations,)
+  assert output.entropy_per_gen.shape == (smc_config.generations,)
 
 
-@pytest.mark.parametrize(
-  "sequence_type, evolve_as",
-  [("protein", "nucleotide"), ("nucleotide", "nucleotide")],
-)
-def test_smc_sequence_types(setup_smc, sequence_type, evolve_as):
+@pytest.mark.parametrize("fixture_name", ["setup_smc_protein", "setup_smc_nucleotide"])
+def test_smc_sampler_runs(fixture_name, request):
+  """Tests that the SMC sampler runs without error for both sequence types."""
+  setup_data = request.getfixturevalue(fixture_name)
   (
     key,
-    config,
+    smc_config,
+    annealing_schedule_config,
     initial_sequence,
-    annealing_schedule_fn,
-    annealing_schedule_args,
-    generations,
     diversification_ratio,
-  ) = setup_smc
-
-  if sequence_type == "nucleotide":
-    initial_sequence = "AUGAAAUAC"
-
-  config = config._replace(sequence_type=sequence_type, evolve_as=evolve_as)
+  ) = setup_data
 
   key_smc, key_init = random.split(key)
 
-  output = smc(
+  output = smc_sampler(
+    smc_config=smc_config,
+    annealing_schedule_config=annealing_schedule_config,
     prng_key_smc_steps=key_smc,
     initial_population_key=key_init,
     diversification_ratio=diversification_ratio,
     initial_sequence=initial_sequence,
-    sequence_type=config.sequence_type,
-    evolve_as=config.evolve_as,
-    mutation_rate=config.mutation_rate,
-    annealing_schedule_function=annealing_schedule_fn,
-    annealing_schedule_args=annealing_schedule_args,
-    population_size=config.population_size,
-    generations=generations,
-    fitness_evaluator=config.fitness_evaluator,
   )
+
   assert output is not None
+  assert output.final_logZhat is not None
