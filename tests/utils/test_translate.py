@@ -10,7 +10,7 @@ from proteinsmc.utils.translation import reverse_translate, translate
   [
     (
       jnp.array([3, 3, 1, 0, 0, 0]),  # TTC, AAA -> F, K
-      jnp.array([13, 11]),  # Corrected integer representation
+      jnp.array([13, 11]),
       True,
     ),
     (
@@ -36,7 +36,7 @@ def test_translate_invalid_length():
 def test_reverse_translate():
   """Tests the reverse translation logic for both valid and invalid amino acids."""
 
-  aa_seq_valid = jnp.array([13, 11])  # Example: F, K
+  aa_seq_valid = jnp.array([13, 11])
   nuc_seq_valid, is_valid_flag = reverse_translate(aa_seq_valid)
   assert is_valid_flag
   retranslated_aa, _ = translate(nuc_seq_valid)

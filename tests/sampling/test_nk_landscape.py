@@ -19,11 +19,9 @@ def test_generate_nk_interactions_jax(N, K, q):
   assert interactions.shape == (N, K)
   assert interactions.dtype == jnp.int32
 
-  # Check that no site is its own neighbor
   for i in range(N):
     assert i not in interactions[i, :]
 
-  # Check padding for K >= N-1
   if K >= N - 1 and N > 1:
     num_valid_neighbors = N - 1
     assert jnp.all(interactions[:, num_valid_neighbors:] == -1)
@@ -31,11 +29,9 @@ def test_generate_nk_interactions_jax(N, K, q):
 
 def test_generate_nk_interactions_jax_edge_cases():
   key = random.PRNGKey(0)
-  # Test N=1
   interactions_n1 = generate_nk_interactions_jax(key, 1, 0, 2)
   assert interactions_n1.shape == (1, 0)
 
-  # Test K=0
   interactions_k0 = generate_nk_interactions_jax(key, 10, 0, 2)
   assert interactions_k0.shape == (10, 0)
 
@@ -54,7 +50,6 @@ def test_get_nk_site_contribution_jax(K_plus_1):
   assert jnp.isclose(contribution1, contribution2)
   assert 0.0 <= contribution1 <= 1.0
 
-  # Different key should produce different result
   key2 = random.PRNGKey(43)
   contribution3 = get_nk_site_contribution_jax(
     site_idx, site_state, neighbor_states, key2, K_plus_1
@@ -84,14 +79,12 @@ def test_calculate_nk_fitness_population_jax(N=10, K=2, q=2, population_size=8):
   interactions_map = generate_nk_interactions_jax(key_landscape, N, K, q)
   landscape_master_key = random.PRNGKey(1)
 
-  # Calculate population fitness
   pop_fitness = calculate_nk_fitness_population_jax(
     configs_population, interactions_map, landscape_master_key, N, K, q
   )
 
   assert pop_fitness.shape == (population_size,)
 
-  # Calculate fitness for each individual and compare
   individual_fitnesses = []
   for i in range(population_size):
     fitness = calculate_nk_fitness_single_jax(

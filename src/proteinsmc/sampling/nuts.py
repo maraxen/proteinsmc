@@ -67,16 +67,12 @@ def nuts_sampler(
   """
 
   def leapfrog(current_q, current_p, log_prob_fn, step_size):
-    # Compute gradient of log_prob_fn (potential energy)
     grad_log_prob = jax.grad(log_prob_fn)
 
-    # Half step for momentum
     p_half = current_p + step_size * grad_log_prob(current_q) / 2.0
 
-    # Full step for position
     next_q = current_q + step_size * p_half
 
-    # Half step for momentum
     next_p = p_half + step_size * grad_log_prob(next_q) / 2.0
 
     return next_q, next_p
@@ -86,18 +82,14 @@ def nuts_sampler(
 
     key_momentum, key_accept, key_nuts = random.split(key, 3)
 
-    # Resample momentum
     p0 = random.normal(key_momentum, shape=current_q.shape)
 
-    # Perform a fixed number of leapfrog steps (simplified NUTS)
     q_new, p_new = current_q, p0
     for _ in range(num_leapfrog_steps):
       q_new, p_new = leapfrog(q_new, p_new, log_prob_fn, step_size)
 
-    # Metropolis-Hastings acceptance
     proposed_log_prob = log_prob_fn(q_new)
 
-    # Calculate Hamiltonian (simplified, assuming mass matrix is identity)
     current_hamiltonian = -current_log_prob + 0.5 * jnp.sum(current_p**2)
     proposed_hamiltonian = -proposed_log_prob + 0.5 * jnp.sum(p_new**2)
 
@@ -110,11 +102,9 @@ def nuts_sampler(
     return (next_q, p0, next_log_prob, key_nuts), next_q
 
   def run_chain(key, initial_position):
-    # Initialize
     initial_log_prob = log_prob_fn(initial_position)
     initial_momentum = random.normal(key, shape=initial_position.shape)
 
-    # Run sampler
     _, samples = jax.lax.scan(
       nuts_step,
       (initial_position, initial_momentum, initial_log_prob, key),

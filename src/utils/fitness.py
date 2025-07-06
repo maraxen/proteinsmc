@@ -139,19 +139,15 @@ def calculate_population_fitness(
     vmapped_fitness = vmap(evaluation_func, in_axes=(0, 0))
     func_keys = jax.random.split(func_key, population.shape[0])
 
-    # Always expect a float per sequence (not a tuple, not a dict)
     result = vmapped_fitness(func_keys, input_seqs)
-    # result should be shape (population_size,)
     main_scores[fitness_func.name] = result
 
   if fitness_evaluator.combine_func is not None:
     combine_args = fitness_evaluator.combine_func_args or {}
     combined_fitness = fitness_evaluator.combine_func(main_scores, **combine_args)
   else:
-    # Default: sum all main fitness scores
     combined_fitness = jnp.sum(jnp.array(list(main_scores.values())), axis=0)
 
-  # Add the main scores to fitness_components for completeness
   for k, v in main_scores.items():
     fitness_components[k] = v
 

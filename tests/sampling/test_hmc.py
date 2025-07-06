@@ -34,7 +34,6 @@ def test_hmc_sampler_converges(sampler_params):
   """Test that the HMC sampler converges to the target distribution."""
   samples = hmc_sampler(**sampler_params)
 
-  # After burn-in, the mean should be close to 0 and std dev close to 1
   burn_in = sampler_params["num_samples"] // 2
   converged_samples = samples[burn_in:]
 
@@ -47,8 +46,5 @@ def test_hmc_sampler_converges(sampler_params):
 
 def test_hmc_sampler_leapfrog_step():
   """Test a single leapfrog step."""
-  # This requires exposing the leapfrog function or testing its effect via hmc_sampler
-  # For simplicity, we test the overall sampler's correctness, which implies
-  # the leapfrog integrator is working to some degree.
-  # A more rigorous test would involve checking for energy conservation and reversibility.
+  # TODO(marielle): Implement this test
   pass

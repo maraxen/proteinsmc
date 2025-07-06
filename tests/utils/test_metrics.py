@@ -46,13 +46,13 @@ def test_calculate_position_entropy(pos_seqs, expected):
 @pytest.mark.parametrize(
   "seqs, expected",
   [
-    (jnp.array([[0, 0], [0, 0]]), 0.0),  # All identical
-    (jnp.array([[0, 1], [0, 1]]), 0.0),  # Two identical sequences
+    (jnp.array([[0, 0], [0, 0]]), 0.0),
+    (jnp.array([[0, 1], [0, 1]]), 0.0),
     (
       jnp.array([[0, 1], [1, 0]]),
-      (-2 * (0.5 * jnp.log(0.5))),  # Average of two positions with max entropy
+      (-2 * (0.5 * jnp.log(0.5))),
     ),
-    (jnp.array([]), 0.0),  # Empty input
+    (jnp.array([]), 0.0),
   ],
 )
 def test_shannon_entropy(seqs, expected):

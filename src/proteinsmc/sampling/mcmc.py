@@ -63,10 +63,8 @@ def mcmc_sampler(
     current_log_prob = log_prob_fn(current_state)
     proposed_log_prob = log_prob_fn(proposed_state)
 
-    # Metropolis-Hastings acceptance ratio
     acceptance_ratio = jnp.exp(proposed_log_prob - current_log_prob)
 
-    # Accept or reject the proposed state
     accept = random.uniform(key_accept) < acceptance_ratio
 
     next_state = jnp.where(accept, proposed_state, current_state)
@@ -78,9 +76,3 @@ def mcmc_sampler(
   _, final_samples = jax.lax.fori_loop(0, num_samples, body_fn, (initial_state, samples))
 
   return final_samples
-
-
-# Example usage:
-# log_prob_fn = make_sequence_log_prob_fn(fitness_evaluator, )
-# proposal_fn = make_random_mutation_proposal_fn(n_states)
-# samples = mcmc_sampler(key, initial_seq, num_samples, log_prob_fn, proposal_fn)

@@ -50,11 +50,8 @@ def hmc_sampler(
 
     def body_fn(i, carry):
       q, p = carry
-      # Half step for momentum
       p_half = p + step_size * grad_log_prob(q) / 2.0
-      # Full step for position
       q_new = q + step_size * p_half
-      # Half step for momentum
       p_new = p_half + step_size * grad_log_prob(q_new) / 2.0
       return q_new, p_new
 
@@ -66,18 +63,14 @@ def hmc_sampler(
 
     key_momentum, key_leapfrog, key_accept = random.split(key, 3)
 
-    # Resample momentum
     p0 = random.normal(key_momentum, shape=current_q.shape)
 
-    # Perform leapfrog steps
     q_new, p_new = leapfrog(current_q, p0, log_prob_fn, step_size, num_leapfrog_steps)
 
-    # Calculate Hamiltonian
     current_hamiltonian = -current_log_prob + 0.5 * jnp.sum(p0**2)
     proposed_log_prob = log_prob_fn(q_new)
     proposed_hamiltonian = -proposed_log_prob + 0.5 * jnp.sum(p_new**2)
 
-    # Metropolis-Hastings acceptance
     acceptance_ratio = jnp.exp(current_hamiltonian - proposed_hamiltonian)
     accept = random.uniform(key_accept) < acceptance_ratio
 
@@ -86,10 +79,8 @@ def hmc_sampler(
 
     return (next_q, next_log_prob, key_accept), next_q
 
-  # Initialize
   initial_log_prob = log_prob_fn(initial_position)
 
-  # Run sampler
   _, samples = jax.lax.scan(
     hmc_step, (initial_position, initial_log_prob, key), None, length=num_samples
   )

@@ -19,26 +19,22 @@ def aa_to_int(seq_str):
   "nuc_seq_str, aa_seq_str, expected_cai",
   [
     (
-      "ACGTTT",  # T, F
+      "ACGTTT",
       "TF",
-      # w_ACG = 11.5 / 22.8, w_TTT = 19.7 / 19.7 = 1.0
-      # cai = exp((log(11.5/22.8) + log(1.0)) / 2) = sqrt(0.50438)
       jnp.sqrt(11.5 / 22.8),
     ),
     (
-      "ACGTAA",  # T, X (Stop)
+      "ACGTAA",
       "TX",
-      # Stop codon is ignored, so only w_ACG is considered.
-      # cai = exp(log(11.5/22.8) / 1) = 11.5 / 22.8
       11.5 / 22.8,
     ),
     (
-      "",  # Empty sequence
+      "",
       "",
       0.0,
     ),
     (
-      "TAATAG",  # Two stop codons
+      "TAATAG",
       "XX",
       0.0,
     ),

@@ -46,7 +46,6 @@ def test_exponential_schedule():
     )
     == 1.0
   )
-  # Test intermediate value
   p = 5
   n_steps = 10
   beta_max = 1.0

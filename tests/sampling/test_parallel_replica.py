@@ -66,7 +66,6 @@ def setup_sampler():
     exchange_config=exchange_config,
   )
 
-  # 3. Create the main configuration object
   template_sequences = jnp.zeros(
     (population_size_per_island * n_islands, sequence_length), dtype=jnp.int32
   )
@@ -75,7 +74,7 @@ def setup_sampler():
     template_sequences=template_sequences,
     population_size_per_island=population_size_per_island,
     n_islands=n_islands,
-    n_states=20,  # For proteins
+    n_states=20,
     generations=100,
     island_betas=jnp.linspace(0.1, 1.0, n_islands),
     initial_diversity=0.1,

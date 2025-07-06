@@ -9,7 +9,6 @@ class MockMPNNModel:
   """A mock MPNNModel class for testing purposes."""
 
   def score(self, seq_numeric, key):
-    # Simple mock scoring: return the sum of the amino acid integers
     return jnp.sum(seq_numeric)
 
 
@@ -22,12 +21,10 @@ def mock_model():
 def test_mpnn_score(mock_model):
   """Test the mpnn_score function with a mock model."""
   key = jax.random.PRNGKey(0)
-  # Represents a simple protein sequence, e.g., 'ACD'
   protein_sequence = jnp.array([1, 2, 3])
 
   score = mpnn_score(key, protein_sequence, mock_model)
 
-  # The mock score is the sum of the sequence integers
   expected_score = jnp.sum(protein_sequence)
   assert score == expected_score
 

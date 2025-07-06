@@ -15,6 +15,7 @@ from ..utils import (
   RES_TO_CODON_CHAR,
   AnnealingScheduleConfig,
   FitnessEvaluator,
+  ScalarFloat,
   calculate_logZ_increment,
   calculate_population_fitness,
   diversify_initial_sequences,
@@ -24,9 +25,7 @@ from ..utils import (
 from ..utils.mutation import dispatch_mutation
 
 logger = getLogger(__name__)
-logger.setLevel("INFO")  # TODO: have this set from main script or config
-
-# --- JAX-registered dataclasses for configuration and output ---
+logger.setLevel("INFO")  # TODO(marielle): have this set from main script or config
 
 
 @dataclass(frozen=True)
@@ -50,7 +49,7 @@ class SMCConfig:
 
 @dataclass
 class SMCOutput:
-  mean_combined_fitness_per_gen: jnp.ndarray
+  mean_combined_fitness_per_gen: ScalarFloat
   max_combined_fitness_per_gen: jnp.ndarray
   mean_cai_per_gen: jnp.ndarray
   mean_mpnn_score_per_gen: jnp.ndarray
@@ -60,7 +59,6 @@ class SMCOutput:
   ess_per_gen: jnp.ndarray
   final_logZhat: float
   final_amino_acid_entropy: float
-  # Add more fields as needed
 
   def tree_flatten(self):
     children = (
@@ -179,7 +177,7 @@ def smc_sampler(
 
   if smc_config.sequence_type == "protein":
     initial_nucleotide_seq_int_list = [NUCLEOTIDES_INT_MAP["A"]] * (3 * len(initial_sequence))
-    i = 0  # Initialize i before the loop
+    i = 0
     try:
       for i in range(len(initial_sequence)):
         aa_char = initial_sequence[i]
@@ -211,7 +209,6 @@ def smc_sampler(
 
   _template_population = jnp.tile(initial_single_sequence, (population_size, 1))
 
-  # Create initial population
   initial_population = diversify_initial_sequences(
     key=initial_population_key,
     template_sequences=_template_population,
@@ -229,7 +226,6 @@ def smc_sampler(
     key_for_initial_metric_calc,
   )
 
-  # Calculate initial fitness using new system
   init_cond_fitness_values, init_cond_fitness_components = calculate_population_fitness(
     key_for_initial_metric_calc,
     initial_population,
@@ -237,7 +233,6 @@ def smc_sampler(
     smc_config.fitness_evaluator,
   )
 
-  # Extract individual fitness components for reporting
   init_cond_cai_values = init_cond_fitness_components.get(
     "cai", jnp.zeros_like(init_cond_fitness_values)
   )
@@ -245,7 +240,6 @@ def smc_sampler(
     "mpnn", jnp.zeros_like(init_cond_fitness_values)
   )
 
-  # Calculate initial metrics
   ic_mean_fitness = jnp.mean(init_cond_fitness_values)
   ic_max_fitness = jnp.max(init_cond_fitness_values)
   ic_mean_cai = jnp.mean(init_cond_cai_values)
@@ -258,7 +252,6 @@ def smc_sampler(
   logger.info(f"  Mean MPNN Score: {ic_mean_mpnn:.4f}")
   logger.info(f"  Nucleotide Entropy: {ic_nuc_entropy:.4f}")
 
-  # Create annealing schedule
   beta_schedule_jax = jnp.array(
     [
       annealing_schedule_config.schedule_fn(p_step + 1, annealing_len_val, beta_max_val)
@@ -267,7 +260,6 @@ def smc_sampler(
     dtype=jnp.float32,
   )
 
-  # Prepare initial carry state and scan inputs using dataclasses
   initial_carry = SMCCarryState(
     population=initial_population,
     logZ_estimate=jnp.array(0.0, dtype=jnp.float32),
@@ -453,7 +445,6 @@ def smc_sampler(
     entropy_nuc_per_gen_jnp = jnp.array([])
     entropy_aa_per_gen_jnp = jnp.array([])
 
-  # Print progress
   for p_step in range(generations):
     if ((p_step + 1) % max(1, generations // 10) == 0) or (p_step == 0):
       logger.info(
@@ -463,13 +454,10 @@ def smc_sampler(
         f"ESS={ess_per_gen_jnp[p_step]:.2f}"
       )
 
-  # Final logZ estimate
   log_Z_estimate_final_py = float(final_log_Z_estimate_jax)
 
-  # Final entropy calculations
   final_aa_entropy = shannon_entropy(final_population_state) if generations > 0 else jnp.nan
 
-  # Package Results using SMCOutput dataclass
   output = SMCOutput(
     mean_combined_fitness_per_gen=mean_combined_fitness_per_gen_jnp,
     max_combined_fitness_per_gen=max_combined_fitness_per_gen_jnp,

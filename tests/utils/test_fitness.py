@@ -106,5 +106,4 @@ def test_calculate_population_fitness_nucleotide(protein_ff, nucleotide_ff):
   assert "mock_protein" in components
   assert jnp.allclose(components["mock_nucleotide"], jnp.array([3.0]))
   assert jnp.allclose(components["mock_protein"], jnp.array([2.0]))
-  # Default combination is weighted sum with weights of 1.0
   assert jnp.allclose(combined_fitness, jnp.array([5.0]))

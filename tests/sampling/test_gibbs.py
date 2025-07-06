@@ -43,12 +43,10 @@ def test_make_gibbs_update_fns():
   update_fns = make_gibbs_update_fns(sequence_length=5, n_states=4)
   assert len(update_fns) == 5
 
-  # Test a single update function
   update_pos_0 = update_fns[0]
   key = jax.random.PRNGKey(0)
   seq = jnp.zeros((5,), dtype=jnp.int8)
 
-  # Mock log_prob_fn that strongly prefers state 3 at position 0
   def deterministic_log_prob(s):
     return jnp.where(s[0] == 3, 100.0, 0.0)
 
@@ -69,14 +67,12 @@ def test_gibbs_sampler():
 
   update_fns = make_gibbs_update_fns(sequence_length=sequence_length, n_states=n_states)
 
-  initial_state = jnp.array([0, 1])  # Start in a low-probability state
+  initial_state = jnp.array([0, 1])
   num_samples = 100
 
   samples = gibbs_sampler(key, initial_state, num_samples, log_prob_fn, update_fns)
 
   assert samples.shape == (num_samples, sequence_length)
 
-  # After burn-in, most samples should have seq[0] == seq[1]
-  # Check the last 50 samples
   matches = jnp.sum(samples[-50:, 0] == samples[-50:, 1])
-  assert matches > 40  # High probability of matching
+  assert matches > 40

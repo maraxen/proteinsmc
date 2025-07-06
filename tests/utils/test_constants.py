@@ -21,7 +21,7 @@ def test_nucleotide_constants():
 
 def test_codon_to_res_char():
   assert CODON_TO_RES_CHAR["TTC"] == "F"
-  assert CODON_TO_RES_CHAR["TAA"] == "X"  # Stop codon
+  assert CODON_TO_RES_CHAR["TAA"] == "X"
 
 
 def test_aa_char_to_int_map():

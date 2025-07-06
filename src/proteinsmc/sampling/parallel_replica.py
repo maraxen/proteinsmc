@@ -104,10 +104,17 @@ class IslandState:
   mean_fitness: ScalarFloat
   step: ScalarInt = field(default_factory=lambda: jnp.array(0, dtype=jnp.int32))
 
-  # This method correctly separates dynamic JAX arrays from static data.
   def tree_flatten(self):
-    children = (self.key, self.population, self.beta, self.logZ_estimate, self.ess, self.mean_fitness, self.step)
-    aux_data = {} # No static data in this case
+    children = (
+      self.key,
+      self.population,
+      self.beta,
+      self.logZ_estimate,
+      self.ess,
+      self.mean_fitness,
+      self.step,
+    )
+    aux_data = {}
     return children, aux_data
 
   @classmethod
@@ -123,13 +130,19 @@ class PRSMCCarryState:
   total_swaps_accepted: ScalarInt = field(default_factory=lambda: jnp.array(0, dtype=jnp.int32))
 
   def tree_flatten(self):
-    children = (self.current_overall_state, self.prng_key, self.total_swaps_attempted, self.total_swaps_accepted)
+    children = (
+      self.current_overall_state,
+      self.prng_key,
+      self.total_swaps_attempted,
+      self.total_swaps_accepted,
+    )
     aux_data = {}
     return children, aux_data
 
   @classmethod
   def tree_unflatten(cls, aux_data, children):
     return cls(*children)
+
 
 @dataclass
 class ParallelReplicaSMCOutput:
@@ -188,7 +201,9 @@ def island_smc_step(
 
   mutated_population = jax.lax.cond(
     (p_step > 0),
-    lambda x: dispatch_mutation(key_mutate, x, config.mutation_rate, config.sequence_type).astype(x.dtype),
+    lambda x: dispatch_mutation(key_mutate, x, config.mutation_rate, config.sequence_type).astype(
+      x.dtype
+    ),
     lambda x: x,
     current_population,
   )
@@ -202,7 +217,7 @@ def island_smc_step(
   )
   log_weights = log_potential_values
 
-  # Note: This is unconditional resampling, not adaptive. TODO: allow for adaptive
+  # TODO(marielle): allow for adaptive
   final_population_for_step, ess, normalized_weights = resample(
     key_resample, mutated_population, log_weights
   )
@@ -254,6 +269,7 @@ def island_smc_step(
   )
   return updated_island_state
 
+
 @partial(jit, static_argnames=("config",))
 def island_smc_step_with_metrics(
   island_state: IslandState,
@@ -261,7 +277,10 @@ def island_smc_step_with_metrics(
 ):
   updated_island_state = island_smc_step(island_state, config)
   fitness_values, _ = calculate_population_fitness(
-    updated_island_state.key, updated_island_state.population, config.sequence_type, config.fitness_evaluator
+    updated_island_state.key,
+    updated_island_state.population,
+    config.sequence_type,
+    config.fitness_evaluator,
   )
   ess = updated_island_state.ess
   mean_fitness = updated_island_state.mean_fitness
@@ -325,7 +344,6 @@ def migrate(
     )
     idx2 = (idx1 + offset_for_idx2) % config.n_islands
     idx2 = jax.lax.cond(config.n_islands <= 1, lambda: idx1, lambda: idx2)
-    # The population state is already stacked, so we index directly.
     island_a_population = current_population_state[idx1]
     island_b_population = current_population_state[idx2]
     beta_a = all_betas[idx1]
@@ -374,20 +392,18 @@ def migrate(
     lambda: lax.fori_loop(0, config.n_exchange_attempts, attempt_exchange, initial_loop_state)[1:],
     lambda: (all_population_stacked, num_swaps_accepted_total),
   )
-  
-  # Return a new SoA IslandState with the updated population
+
   updated_island_states = IslandState(
-      key=island_states.key,
-      population=final_population_state,
-      beta=island_states.beta,
-      logZ_estimate=island_states.logZ_estimate,
-      mean_fitness=island_states.mean_fitness,
-      ess=island_states.ess,
-      step=island_states.step,
+    key=island_states.key,
+    population=final_population_state,
+    beta=island_states.beta,
+    logZ_estimate=island_states.logZ_estimate,
+    mean_fitness=island_states.mean_fitness,
+    ess=island_states.ess,
+    step=island_states.step,
   )
 
   return updated_island_states, total_accepted_swaps
-
 
 
 def prsmc_sampler(
@@ -426,75 +442,76 @@ def prsmc_sampler(
     )
     for i in range(config.n_islands)
   ]
-  
-  initial_island_states = jax.tree_util.tree_map(lambda *xs: jnp.stack(xs, axis=0), *initial_island_states_list)
 
+  initial_island_states = jax.tree_util.tree_map(
+    lambda *xs: jnp.stack(xs, axis=0), *initial_island_states_list
+  )
 
   @partial(jit, static_argnames=("step_config",))
   def _parallel_replica_scan_step(
-      carry_state: PRSMCCarryState,
-      step_idx: int,
-      step_config: PRSMCStepConfig,
+    carry_state: PRSMCCarryState,
+    step_idx: int,
+    step_config: PRSMCStepConfig,
   ):
-      key_step, next_smc_loop_key = jax.random.split(carry_state.prng_key)
+    key_step, next_smc_loop_key = jax.random.split(carry_state.prng_key)
 
-      print(carry_state.current_overall_state)
-      current_overall_state, island_metrics = vmapped_smc_step(
-          carry_state.current_overall_state,
-          step_config,
-      )
-      print(current_overall_state)
-      ess_p, mean_fit_p, max_fit_p, logZ_inc_p = island_metrics
+    print(carry_state.current_overall_state)
+    current_overall_state, island_metrics = vmapped_smc_step(
+      carry_state.current_overall_state,
+      step_config,
+    )
+    print(current_overall_state)
+    ess_p, mean_fit_p, max_fit_p, logZ_inc_p = island_metrics
 
-      meta_annealing_schedule = step_config.meta_beta_annealing_schedule
-      current_meta_beta = lax.cond(
-          step_idx >= meta_annealing_schedule.annealing_len,
-          lambda: jnp.array(meta_annealing_schedule.beta_max, dtype=jnp.float32),
-          lambda: meta_annealing_schedule.schedule_fn(
-              step_idx + 1,
-              meta_annealing_schedule.annealing_len,
-              meta_annealing_schedule.beta_max,
-              *meta_annealing_schedule.schedule_args,
-          ).astype(jnp.float32)
-      )
+    meta_annealing_schedule = step_config.meta_beta_annealing_schedule
+    current_meta_beta = lax.cond(
+      step_idx >= meta_annealing_schedule.annealing_len,
+      lambda: jnp.array(meta_annealing_schedule.beta_max, dtype=jnp.float32),
+      lambda: meta_annealing_schedule.schedule_fn(
+        step_idx + 1,
+        meta_annealing_schedule.annealing_len,
+        meta_annealing_schedule.beta_max,
+        *meta_annealing_schedule.schedule_args,
+      ).astype(jnp.float32),
+    )
 
-      exchange_config = step_config.exchange_config
-      do_exchange = (step_idx + 1) % exchange_config.exchange_frequency == 0
+    exchange_config = step_config.exchange_config
+    do_exchange = (step_idx + 1) % exchange_config.exchange_frequency == 0
 
-      current_overall_state, num_accepted_this_cycle = lax.cond(
-          do_exchange & (exchange_config.n_islands > 1),
-          lambda: migrate(
-              island_states=current_overall_state,
-              meta_beta_current_value=current_meta_beta,
-              key_exchange=key_step,
-              config=exchange_config,
-          ),
-          lambda: (current_overall_state, jnp.array(0, dtype=jnp.int32)),
-      )
-      
-      total_swaps_attempted_this_cycle = lax.cond(
-          do_exchange & (exchange_config.n_islands > 1),
-          lambda: jnp.array(exchange_config.n_exchange_attempts, dtype=jnp.int32),
-          lambda: jnp.array(0, dtype=jnp.int32),
-      )
+    current_overall_state, num_accepted_this_cycle = lax.cond(
+      do_exchange & (exchange_config.n_islands > 1),
+      lambda: migrate(
+        island_states=current_overall_state,
+        meta_beta_current_value=current_meta_beta,
+        key_exchange=key_step,
+        config=exchange_config,
+      ),
+      lambda: (current_overall_state, jnp.array(0, dtype=jnp.int32)),
+    )
 
-      next_carry_state = PRSMCCarryState(
-          current_overall_state=current_overall_state,
-          prng_key=next_smc_loop_key,
-          total_swaps_attempted=carry_state.total_swaps_attempted + total_swaps_attempted_this_cycle,
-          total_swaps_accepted=carry_state.total_swaps_accepted + num_accepted_this_cycle,
-      )
+    total_swaps_attempted_this_cycle = lax.cond(
+      do_exchange & (exchange_config.n_islands > 1),
+      lambda: jnp.array(exchange_config.n_exchange_attempts, dtype=jnp.int32),
+      lambda: jnp.array(0, dtype=jnp.int32),
+    )
 
-      collected_metrics = {
-          "ess_per_island": ess_p,
-          "mean_fitness_per_island": mean_fit_p,
-          "max_fitness_per_island": max_fit_p,
-          "logZ_increment_per_island": logZ_inc_p,
-          "meta_beta": current_meta_beta,
-          "num_accepted_swaps": num_accepted_this_cycle,
-          "num_attempted_swaps": total_swaps_attempted_this_cycle,
-      }
-      return next_carry_state, collected_metrics
+    next_carry_state = PRSMCCarryState(
+      current_overall_state=current_overall_state,
+      prng_key=next_smc_loop_key,
+      total_swaps_attempted=carry_state.total_swaps_attempted + total_swaps_attempted_this_cycle,
+      total_swaps_accepted=carry_state.total_swaps_accepted + num_accepted_this_cycle,
+    )
+
+    collected_metrics = {
+      "ess_per_island": ess_p,
+      "mean_fitness_per_island": mean_fit_p,
+      "max_fitness_per_island": max_fit_p,
+      "logZ_increment_per_island": logZ_inc_p,
+      "meta_beta": current_meta_beta,
+      "num_accepted_swaps": num_accepted_this_cycle,
+      "num_attempted_swaps": total_swaps_attempted_this_cycle,
+    }
+    return next_carry_state, collected_metrics
 
   initial_carry = PRSMCCarryState(
     initial_island_states,

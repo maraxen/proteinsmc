@@ -169,7 +169,6 @@ for codon_str, freq in ECOLI_CODON_FREQ_CHAR.items():
   n1, n2, n3 = (NUCLEOTIDES_INT_MAP[c] for c in codon_str)
   ECOLI_CODON_FREQ_JAX = ECOLI_CODON_FREQ_JAX.at[n1, n2, n3].set(freq)
 
-# Compute ECOLI_MAX_FREQS_JAX
 RES_TO_CODON_CHAR = collections.defaultdict(list)
 for codon_str, res_char in CODON_TO_RES_CHAR.items():
   if res_char != "X":

@@ -11,7 +11,6 @@ from proteinsmc.utils.annealing_schedules import linear_schedule
 from proteinsmc.utils.fitness import FitnessEvaluator, FitnessFunction
 
 
-# --- Mock Fitness Functions ---
 def mock_protein_fitness_fn(key, seq, **kwargs):
   """Mock fitness function for protein sequences."""
   return jnp.sum(seq, axis=-1).astype(jnp.float32)
@@ -22,14 +21,12 @@ def mock_nucleotide_fitness_fn(key, seq, **kwargs):
   return jnp.mean(seq, axis=-1).astype(jnp.float32)
 
 
-# --- Fixture for Protein SMC ---
 @pytest.fixture
 def setup_smc_protein():
   """Provides a standard setup for a protein-based SMC sampler test."""
   key = random.PRNGKey(0)
   initial_sequence = "MKY"
 
-  # Evaluator with only protein-based fitness functions
   fitness_evaluator = FitnessEvaluator(
     fitness_functions=[
       FitnessFunction(func=mock_protein_fitness_fn, input_type="protein", name="mock1", args={}),
@@ -53,14 +50,12 @@ def setup_smc_protein():
   return key, smc_config, annealing_config, initial_sequence, 0.2
 
 
-# --- Fixture for Nucleotide SMC ---
 @pytest.fixture
 def setup_smc_nucleotide():
   """Provides a standard setup for a nucleotide-based SMC sampler test."""
   key = random.PRNGKey(0)
   initial_sequence = "ATGAAATAC"
 
-  # Evaluator with only nucleotide-based fitness functions
   fitness_evaluator = FitnessEvaluator(
     fitness_functions=[
       FitnessFunction(
@@ -86,9 +81,6 @@ def setup_smc_nucleotide():
   )
 
   return key, smc_config, annealing_config, initial_sequence, 0.2
-
-
-# --- Corrected Tests ---
 
 
 def test_smc_output_shapes(setup_smc_protein):
