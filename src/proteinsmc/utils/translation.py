@@ -1,3 +1,9 @@
+"""Utilities for translating between nucleotide and protein sequences."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import jax.numpy as jnp
 from jax import jit, vmap
 
@@ -5,26 +11,32 @@ from .constants import (
   CODON_INT_TO_RES_INT_JAX,
   COLABDESIGN_X_INT,
 )
-from .types import NucleotideSequence, ProteinSequence, ScalarBool
+
+if TYPE_CHECKING:
+  from proteinsmc.utils.types import NucleotideSequence, ProteinSequence, ScalarBool
 
 
 @jit
 def translate(nuc_seq: NucleotideSequence) -> tuple[ProteinSequence, ScalarBool]:
-  """Translates a nucleotide sequence to an amino acid sequence.
+  """Translate a nucleotide sequence to an amino acid sequence.
 
   Uses ColabDesign's AA integers.
+
   Args:
       nuc_seq: JAX array of nucleotide sequence (integer encoded).
+
   Returns:
       aa_seq: JAX array of amino acid sequence (integer encoded in
               ColabDesign's scheme).
       has_x_residue: Boolean indicating if the sequence contains 'X' residues.
+
   """
   if nuc_seq.shape[0] == 0:
-    return jnp.array([], dtype=jnp.int8), jnp.array(True, dtype=jnp.bool_)
+    return jnp.array([], dtype=jnp.int8), jnp.array(1, dtype=jnp.bool_)
   protein_len = nuc_seq.shape[0] // 3
   if nuc_seq.shape[0] % 3 != 0:
-    raise TypeError("Nucleotide sequence length must be a multiple of 3.")
+    msg = "Nucleotide sequence length must be a multiple of 3."
+    raise TypeError(msg)
   codons_int = nuc_seq[: protein_len * 3].reshape((protein_len, 3))
   aa_seq = CODON_INT_TO_RES_INT_JAX[codons_int[:, 0], codons_int[:, 1], codons_int[:, 2]]
   is_valid_translation = jnp.all(aa_seq != COLABDESIGN_X_INT)
@@ -37,11 +49,11 @@ def reverse_translate(
 ) -> tuple[NucleotideSequence, ScalarBool]:
   """Reverses the translation of an amino acid sequence to a nucleotide sequence."""
   if aa_seq.shape[0] == 0:
-    return jnp.array([], dtype=jnp.int8), jnp.array(True, dtype=jnp.bool_)
+    return jnp.array([], dtype=jnp.int8), jnp.array(1, dtype=jnp.bool_)
 
-  def find_first_codon(aa):
-    """Finds the first codon that translates to the given amino acid."""
-    match_indices = jnp.argwhere(CODON_INT_TO_RES_INT_JAX == aa, size=6, fill_value=-1)
+  def find_first_codon(aa: jnp.ndarray) -> jnp.ndarray:
+    """Find the first codon that translates to the given amino acid."""
+    match_indices = jnp.argwhere(aa == CODON_INT_TO_RES_INT_JAX, size=6, fill_value=-1)
     return match_indices[0]
 
   codons = vmap(find_first_codon)(aa_seq)

@@ -1,3 +1,5 @@
+"""Utilities for protein sampling."""
+
 from .sampling import (
   gibbs,
   hmc,

@@ -1,32 +1,40 @@
-"""
-This module implements the Metropolis-Hastings MCMC sampling algorithm.
-"""
+"""Implements Metropolis-Hastings MCMC sampling algorithm."""
+
+from __future__ import annotations
 
 from functools import partial
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 import jax
 import jax.numpy as jnp
 from jax import jit, random
-from jaxtyping import PRNGKeyArray
 
-from proteinsmc.utils.types import (
-  EvoSequence,
-  PopulationSequences,
-  ScalarFloat,
-)
+if TYPE_CHECKING:
+  from jaxtyping import PRNGKeyArray
+
+  from proteinsmc.utils.types import EvoSequence, PopulationSequences, ScalarFloat
 
 
 def make_random_mutation_proposal_fn(
   n_states: int,
 ) -> Callable[[PRNGKeyArray, EvoSequence], EvoSequence]:
+  """Create a proposal function that generates a new sequence by randomly mutating one position.
+
+  Args:
+      n_states: The number of possible states (e.g., amino acids) for each position in the sequence.
+
+  Returns:
+      A function that takes a PRNG key and an EvoSequence, and returns a new EvoSequence with one
+      position mutated.
+
+  """
+
   @jit
   def proposal_fn(key: PRNGKeyArray, seq: EvoSequence) -> EvoSequence:
     seq_new = seq.copy()
     pos = random.randint(key, (), 0, seq.shape[0])
     new_val = random.randint(key, (), 0, n_states)
-    seq_new = seq_new.at[pos].set(new_val)
-    return seq_new
+    return seq_new.at[pos].set(new_val)
 
   return proposal_fn
 
@@ -39,8 +47,7 @@ def mcmc_sampler(
   log_prob_fn: Callable[[EvoSequence], ScalarFloat],
   proposal_fn: Callable[[PRNGKeyArray, EvoSequence], EvoSequence],
 ) -> PopulationSequences:
-  """
-  This function runs the Metropolis-Hastings MCMC sampler.
+  """Run the Metropolis-Hastings MCMC sampler.
 
   Args:
       key: JAX PRNG key.
@@ -51,9 +58,13 @@ def mcmc_sampler(
 
   Returns:
       Array of samples.
+
   """
 
-  def body_fn(i, state_and_samples):
+  def body_fn(
+    i: int,
+    state_and_samples: tuple[EvoSequence, PopulationSequences],
+  ) -> tuple[EvoSequence, PopulationSequences]:
     current_state, samples = state_and_samples
 
     key_proposal, key_accept = random.split(random.fold_in(key, i))
@@ -72,7 +83,7 @@ def mcmc_sampler(
 
     return next_state, samples
 
-  samples = jnp.zeros((num_samples,) + initial_state.shape)
+  samples = jnp.zeros((num_samples, *initial_state.shape))
   _, final_samples = jax.lax.fori_loop(0, num_samples, body_fn, (initial_state, samples))
 
   return final_samples

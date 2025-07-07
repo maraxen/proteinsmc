@@ -1,3 +1,5 @@
+"""Utility functions for protein sequence modeling and sampling."""
+
 from .annealing_schedules import (
   AnnealingScheduleConfig,
   cosine_schedule,
@@ -31,6 +33,7 @@ from .fitness import (
   combine_fitness_scores,
   make_sequence_log_prob_fn,
 )
+from .initiate import generate_template_population
 from .metrics import (
   calculate_logZ_increment,
   calculate_position_entropy,
@@ -47,6 +50,7 @@ from .translation import reverse_translate, translate
 from .types import (
   EvoSequence,
   FitnessWeights,
+  IslandFloats,
   MPNNModel,
   NucleotideSequence,
   PopulationNucleotideSequences,
@@ -111,4 +115,6 @@ __all__ = [
   "calculate_logZ_increment",
   "AnnealingScheduleConfig",
   "make_sequence_log_prob_fn",
+  "generate_template_population",
+  "IslandFloats",
 ]

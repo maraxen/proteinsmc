@@ -1,9 +1,17 @@
+"""Performs systematic resampling on a population."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import jax
 import jax.numpy as jnp
 from jax import jit, random
-from jaxtyping import PRNGKeyArray
 
-from .types import PopulationSequenceFloats, PopulationSequences, ScalarFloat
+if TYPE_CHECKING:
+  from jaxtyping import PRNGKeyArray
+
+  from proteinsmc.utils.types import PopulationSequenceFloats, PopulationSequences, ScalarFloat
 
 
 @jit
@@ -12,16 +20,18 @@ def resample(
   population: PopulationSequences,
   log_weights: PopulationSequenceFloats,
 ) -> tuple[PopulationSequences, ScalarFloat, PopulationSequenceFloats]:
-  """
-  Performs systematic resampling on a population.
+  """Perform systematic resampling on a population.
+
   Args:
       key: JAX PRNG key.
       population: JAX array of population (shape: (population_size, seq_len)).
       log_weights: JAX array of log weights for each individual.
+
   Returns:
         - Resampled population.
         - Effective Sample Size (ESS).
         - Normalized weights.
+
   """
   n_population = population.shape[0]
   log_weights_safe = jnp.where(jnp.isneginf(log_weights), -1e9, log_weights)

@@ -1,9 +1,16 @@
+"""MPNN scoring functions."""
+
+from __future__ import annotations
+
 from functools import partial
+from typing import TYPE_CHECKING
 
 from jax import jit
-from jaxtyping import PRNGKeyArray
 
-from ..utils.types import MPNNModel, ProteinSequence, ScalarFloat
+if TYPE_CHECKING:
+  from jaxtyping import PRNGKeyArray
+
+  from proteinsmc.utils.types import MPNNModel, ProteinSequence, ScalarFloat
 
 
 @partial(jit, static_argnames=("mpnn_model",))
@@ -21,5 +28,6 @@ def mpnn_score(
 
   Returns:
       MPNN score for the protein sequence.
+
   """
   return mpnn_model.score(seq_numeric=protein_sequence, key=key)

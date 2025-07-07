@@ -1,3 +1,7 @@
+"""Constants for nucleotide and amino acid sequences, including mappings and codon frequencies."""
+
+from __future__ import annotations
+
 import collections
 
 import jax.numpy as jnp
@@ -10,7 +14,7 @@ from colabdesign.mpnn.model import (
 
 NUCLEOTIDES_CHAR = ["A", "C", "G", "T"]
 NUCLEOTIDES_INT_MAP = {n: i for i, n in enumerate(NUCLEOTIDES_CHAR)}
-INT_TO_NUCLEOTIDES_CHAR_MAP = {i: n for i, n in enumerate(NUCLEOTIDES_CHAR)}
+INT_TO_NUCLEOTIDES_CHAR_MAP = dict(enumerate(NUCLEOTIDES_CHAR))
 NUCLEOTIDES_JAX = jnp.array([NUCLEOTIDES_INT_MAP[n] for n in NUCLEOTIDES_CHAR])
 
 CODON_TO_RES_CHAR = {
@@ -81,14 +85,16 @@ CODON_TO_RES_CHAR = {
 }
 
 AA_CHAR_TO_INT_MAP = colabdesign_aa_order
-INT_TO_AA_CHAR_MAP = {i: char for i, char in enumerate(colabdesign_order_aa.values())}
+INT_TO_AA_CHAR_MAP = dict(enumerate(colabdesign_order_aa.values()))
 COLABDESIGN_X_INT = 21
 STOP_INT = COLABDESIGN_X_INT
 UNKNOWN_AA_INT = COLABDESIGN_X_INT
 MAX_NUC_INT = len(NUCLEOTIDES_CHAR) - 1
 
 CODON_INT_TO_RES_INT_JAX = jnp.full(
-  (MAX_NUC_INT + 1, MAX_NUC_INT + 1, MAX_NUC_INT + 1), UNKNOWN_AA_INT, dtype=jnp.int8
+  (MAX_NUC_INT + 1, MAX_NUC_INT + 1, MAX_NUC_INT + 1),
+  UNKNOWN_AA_INT,
+  dtype=jnp.int8,
 )
 for codon_str, res_char in CODON_TO_RES_CHAR.items():
   n1, n2, n3 = (NUCLEOTIDES_INT_MAP[c] for c in codon_str)
@@ -163,7 +169,8 @@ ECOLI_CODON_FREQ_CHAR = {
   "GGT": 11.3,
 }
 ECOLI_CODON_FREQ_JAX = jnp.zeros(
-  (MAX_NUC_INT + 1, MAX_NUC_INT + 1, MAX_NUC_INT + 1), dtype=jnp.float32
+  (MAX_NUC_INT + 1, MAX_NUC_INT + 1, MAX_NUC_INT + 1),
+  dtype=jnp.float32,
 )
 for codon_str, freq in ECOLI_CODON_FREQ_CHAR.items():
   n1, n2, n3 = (NUCLEOTIDES_INT_MAP[c] for c in codon_str)

@@ -15,14 +15,14 @@ from proteinsmc.utils.annealing_schedules import (
 from proteinsmc.utils.fitness import FitnessEvaluator, FitnessFunction
 
 
-def mock_fitness_fn(key, sequence, **kwargs):
+def mock_fitness_fn(key, sequence, **kwargs) -> jnp.ndarray:
   """Mock fitness function that returns a single score per sequence."""
   return jnp.sum(sequence, axis=-1).astype(jnp.float32)
 
 
 @pytest.fixture
 def setup_sampler():
-  """Provides a standard setup for the Parallel Replica SMC sampler test."""
+  """Provide a standard setup for the Parallel Replica SMC sampler test."""
   key = random.PRNGKey(0)
   template_sequence = "MKY"
   n_islands = 4
@@ -35,8 +35,8 @@ def setup_sampler():
         input_type="protein",
         name="mock_fitness",
         args={},
-      )
-    ]
+      ),
+    ],
   )
 
   exchange_config = ExchangeConfig(

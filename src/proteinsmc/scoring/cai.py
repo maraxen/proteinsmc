@@ -1,23 +1,34 @@
+"""Calculates the Codon Adaptation Index (CAI) for a given nucleotide and amino acid sequence."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import jax.numpy as jnp
 
-from ..utils.constants import (
+from proteinsmc.utils.constants import (
   COLABDESIGN_X_INT,
   ECOLI_CODON_FREQ_JAX,
   ECOLI_MAX_FREQS_JAX,
 )
-from proteinsmc.utils.types import NucleotideSequence, ProteinSequence, ScalarFloat
+
+if TYPE_CHECKING:
+  from proteinsmc.utils.types import NucleotideSequence, ProteinSequence, ScalarFloat
 
 
 def cai_score(nuc_seq: NucleotideSequence, aa_seq: ProteinSequence) -> ScalarFloat:
-  """Calculates Codon Adaptation Index (CAI).
+  """Calculate Codon Adaptation Index (CAI).
 
   `aa_seq` uses ColabDesign's AA integers.
+
   Args:
       nuc_seq: JAX array of nucleotide sequence (integer encoded).
       aa_seq: JAX array of amino acid sequence (integer encoded in
               ColabDesign's scheme).
+
   Returns:
       cai: JAX array of CAI values.
+
   """
   protein_len = nuc_seq.shape[0] // 3
   codons_int = nuc_seq[: protein_len * 3].reshape((protein_len, 3))

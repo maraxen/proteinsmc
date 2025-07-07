@@ -1,3 +1,5 @@
+"""Samplers for protein sequence exploration."""
+
 from .gibbs import gibbs_sampler, make_gibbs_update_fns
 from .hmc import hmc_sampler
 from .mcmc import mcmc_sampler
@@ -17,6 +19,5 @@ __all__ = [
   "SMCCarryState",
   "SMCConfig",
   "SMCOutput",
-  "SMCScanInput",
   "smc_sampler",
 ]

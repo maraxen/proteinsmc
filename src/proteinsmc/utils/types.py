@@ -1,3 +1,5 @@
+"""Type aliases for nucleotide and protein sequences."""
+
 from colabdesign.mpnn.model import mk_mpnn_model  # type: ignore[import]
 from jaxtyping import Array, Bool, Float, Int
 

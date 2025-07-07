@@ -1,35 +1,42 @@
+"""Implementation of Parallel Replica inspired Sequential Monte Carlo (PRSMC) sampling."""
+
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import jax
 import jax.numpy as jnp
 from jax import jit, lax, vmap
-from jaxtyping import PRNGKeyArray
 
-from proteinsmc.utils.types import (
-  IslandFloats,
-  PopulationSequences,
-  ScalarFloat,
-  ScalarInt,
-)
+if TYPE_CHECKING:
+  from jaxtyping import PRNGKeyArray
 
-from ..utils import (
-  FitnessEvaluator,
+  from proteinsmc.utils import (
+    AnnealingScheduleConfig,
+    FitnessEvaluator,
+    IslandFloats,
+    PopulationSequences,
+    ScalarFloat,
+    ScalarInt,
+  )
+
+
+from proteinsmc.utils import (
   calculate_logZ_increment,
   calculate_population_fitness,
+  dispatch_mutation,
   diversify_initial_sequences,
+  generate_template_population,
   resample,
 )
-from ..utils.annealing_schedules import (
-  AnnealingScheduleConfig,
-)
-from ..utils.initiate import generate_template_population
-from ..utils.mutation import dispatch_mutation
 
 
 @dataclass(frozen=True)
 class ExchangeConfig:
+  """Configuration for parallel replica exchange."""
+
   population_size_per_island: int
   n_islands: int
   n_exchange_attempts: int
@@ -39,18 +46,26 @@ class ExchangeConfig:
   n_exchange_attempts_per_cycle: int
   ess_threshold_fraction: float
 
-  def tree_flatten(self):
-    children = ()
-    aux_data = self.__dict__
+  def tree_flatten(self: ExchangeConfig) -> tuple[tuple, dict]:
+    """Flatten the dataclass for JAX PyTree compatibility."""
+    children: tuple = ()
+    aux_data: dict = self.__dict__
     return (children, aux_data)
 
   @classmethod
-  def tree_unflatten(cls, aux_data, children):
+  def tree_unflatten(
+    cls: type[ExchangeConfig],
+    aux_data: dict,
+    _children: tuple,
+  ) -> ExchangeConfig:
+    """Unflatten the dataclass for JAX PyTree compatibility."""
     return cls(**aux_data)
 
 
 @dataclass(frozen=True)
 class PRSMCStepConfig:
+  """Configuration for a single step in the PRSMC algorithm."""
+
   population_size_per_island: int
   mutation_rate: float
   fitness_evaluator: FitnessEvaluator
@@ -59,14 +74,19 @@ class PRSMCStepConfig:
   meta_beta_annealing_schedule: AnnealingScheduleConfig
   exchange_config: ExchangeConfig
 
-  def tree_flatten(self):
-    children = ()
-
-    aux_data = self.__dict__
+  def tree_flatten(self: PRSMCStepConfig) -> tuple[tuple, dict]:
+    """Flatten the dataclass for JAX PyTree compatibility."""
+    children: tuple = ()
+    aux_data: dict = self.__dict__
     return (children, aux_data)
 
   @classmethod
-  def tree_unflatten(cls, aux_data, children):
+  def tree_unflatten(
+    cls: type[PRSMCStepConfig],
+    aux_data: dict,
+    _children: tuple,
+  ) -> PRSMCStepConfig:
+    """Unflatten the dataclass for JAX PyTree compatibility."""
     return cls(**aux_data)
 
 
@@ -84,28 +104,37 @@ class ParallelReplicaConfig:
   fitness_evaluator: FitnessEvaluator
   step_config: PRSMCStepConfig
 
-  def tree_flatten(self):
-    children = ()
-    aux_data = self.__dict__
-    return (children, aux_data)
+  def tree_flatten(self: ParallelReplicaConfig) -> tuple[tuple, dict]:
+    """Flatten the dataclass for JAX PyTree compatibility."""
+    _children: tuple = ()
+    aux_data: dict = self.__dict__
+    return (_children, aux_data)
 
   @classmethod
-  def tree_unflatten(cls, aux_data, children):
+  def tree_unflatten(
+    cls: type[ParallelReplicaConfig],
+    aux_data: dict,
+    _children: tuple,
+  ) -> ParallelReplicaConfig:
+    """Unflatten the dataclass for JAX PyTree compatibility."""
     return cls(**aux_data)
 
 
 @dataclass
 class IslandState:
+  """State of a single island in the PRSMC algorithm."""
+
   key: PRNGKeyArray
   population: PopulationSequences
   beta: ScalarFloat
-  logZ_estimate: ScalarFloat
+  logZ_estimate: ScalarFloat  # noqa: N815
   ess: ScalarFloat
   mean_fitness: ScalarFloat
   step: ScalarInt = field(default_factory=lambda: jnp.array(0, dtype=jnp.int32))
 
-  def tree_flatten(self):
-    children = (
+  def tree_flatten(self: IslandState) -> tuple[tuple, dict]:
+    """Flatten the dataclass for JAX PyTree compatibility."""
+    children: tuple = (
       self.key,
       self.population,
       self.beta,
@@ -114,51 +143,63 @@ class IslandState:
       self.mean_fitness,
       self.step,
     )
-    aux_data = {}
+    aux_data: dict = {}
     return children, aux_data
 
   @classmethod
-  def tree_unflatten(cls, aux_data, children):
+  def tree_unflatten(cls: type[IslandState], _aux_data: dict, children: tuple) -> IslandState:
+    """Unflatten the dataclass for JAX PyTree compatibility."""
     return cls(*children)
 
 
 @dataclass
 class PRSMCCarryState:
+  """Carry state for the PRSMC algorithm, containing overall state and PRNG key."""
+
   current_overall_state: IslandState
   prng_key: PRNGKeyArray
   total_swaps_attempted: ScalarInt = field(default_factory=lambda: jnp.array(0, dtype=jnp.int32))
   total_swaps_accepted: ScalarInt = field(default_factory=lambda: jnp.array(0, dtype=jnp.int32))
 
-  def tree_flatten(self):
-    children = (
+  def tree_flatten(self: PRSMCCarryState) -> tuple[tuple, dict]:
+    """Flatten the dataclass for JAX PyTree compatibility."""
+    children: tuple = (
       self.current_overall_state,
       self.prng_key,
       self.total_swaps_attempted,
       self.total_swaps_accepted,
     )
-    aux_data = {}
+    aux_data: dict = {}
     return children, aux_data
 
   @classmethod
-  def tree_unflatten(cls, aux_data, children):
+  def tree_unflatten(
+    cls: type[PRSMCCarryState],
+    _aux_data: dict,
+    children: tuple,
+  ) -> PRSMCCarryState:
+    """Unflatten the dataclass for JAX PyTree compatibility."""
     return cls(*children)
 
 
 @dataclass
 class ParallelReplicaSMCOutput:
+  """Output of the Parallel Replica SMC algorithm."""
+
   input_config: ParallelReplicaConfig
   final_island_states: IslandState
   swap_acceptance_rate: IslandFloats
   history_mean_fitness_per_island: IslandFloats
   history_max_fitness_per_island: IslandFloats
   history_ess_per_island: IslandFloats
-  history_logZ_increment_per_island: IslandFloats
+  history_logZ_increment_per_island: IslandFloats  # noqa: N815
   history_meta_beta: IslandFloats
   history_num_accepted_swaps: IslandFloats
   history_num_attempted_swaps: IslandFloats
 
-  def tree_flatten(self):
-    children = (
+  def tree_flatten(self: ParallelReplicaSMCOutput) -> tuple[tuple, dict]:
+    """Flatten the dataclass for JAX PyTree compatibility."""
+    children: tuple = (
       self.input_config,
       self.final_island_states,
       self.swap_acceptance_rate,
@@ -170,12 +211,17 @@ class ParallelReplicaSMCOutput:
       self.history_num_accepted_swaps,
       self.history_num_attempted_swaps,
     )
-    aux_data = {}
+    aux_data: dict = {}
     return children, aux_data
 
   @classmethod
-  def tree_unflatten(cls, aux_data, children):
-    return cls(**children)
+  def tree_unflatten(
+    cls: type[ParallelReplicaSMCOutput],
+    _aux_data: dict,
+    children: tuple,
+  ) -> ParallelReplicaSMCOutput:
+    """Unflatten the dataclass for JAX PyTree compatibility."""
+    return cls(*children)
 
 
 jax.tree_util.register_pytree_node_class(ExchangeConfig)
@@ -191,9 +237,18 @@ def island_smc_step(
   island_state: IslandState,
   config: PRSMCStepConfig,
 ) -> IslandState:
-  """
-  Performs one SMC step (mutation, weighting, UNCONDITIONAL resampling) for a single island.
-  ESS is calculated for metrics only. ess_threshold_frac is not used for resampling decision.
+  """Perform one SMC step (mutation, weighting, UNCONDITIONAL resampling) for a single island.
+
+  ESS is calculated for metrics only currently.
+  ess_threshold_frac is not used for resampling decision.
+
+  Args:
+    island_state (IslandState): Current state of the island.
+    config (PRSMCStepConfig): Configuration for the SMC step.
+
+  Returns:
+    IslandState: Updated state of the island.
+
   """
   key_mutate, key_fitness, key_resample, key_next_island = jax.random.split(island_state.key, 4)
   current_population = island_state.population
@@ -202,30 +257,39 @@ def island_smc_step(
   mutated_population = jax.lax.cond(
     (p_step > 0),
     lambda x: dispatch_mutation(key_mutate, x, config.mutation_rate, config.sequence_type).astype(
-      x.dtype
+      x.dtype,
     ),
     lambda x: x,
     current_population,
   )
 
   fitness_values, fitness_components = calculate_population_fitness(
-    key_fitness, mutated_population, config.sequence_type, config.fitness_evaluator
+    key_fitness,
+    mutated_population,
+    config.sequence_type,
+    config.fitness_evaluator,
   )
 
   log_potential_values = jnp.where(
-    jnp.isneginf(fitness_values), -jnp.inf, island_state.beta * fitness_values
+    jnp.isneginf(fitness_values),
+    -jnp.inf,
+    island_state.beta * fitness_values,
   )
   log_weights = log_potential_values
 
   # TODO(marielle): allow for adaptive
   final_population_for_step, ess, normalized_weights = resample(
-    key_resample, mutated_population, log_weights
+    key_resample,
+    mutated_population,
+    log_weights,
   )
 
   finite_fitness_mask = jnp.isfinite(fitness_values)
   if isinstance(normalized_weights, jax.Array) and isinstance(finite_fitness_mask, jax.Array):
     weighted_finite_fitness = jnp.where(
-      finite_fitness_mask, fitness_values * normalized_weights, 0.0
+      finite_fitness_mask,
+      fitness_values * normalized_weights,
+      0.0,
     )
     sum_weights_for_finite = jnp.sum(jnp.where(finite_fitness_mask, normalized_weights, 0.0))
   else:
@@ -233,32 +297,41 @@ def island_smc_step(
     sum_weights_for_finite = jnp.array(0.0)
 
   if not isinstance(weighted_finite_fitness, jax.Array):
+    msg = f"Expected weighted_finite_fitness to be a jax.Array, got {type(weighted_finite_fitness)}"
     raise TypeError(
-      f"Expected weighted_finite_fitness to be a jax.Array, got {type(weighted_finite_fitness)}"
+      msg,
     )
 
+  eps = 1e-9
   mean_fitness_this_step = jax.lax.cond(
-    sum_weights_for_finite > 1e-9,
+    sum_weights_for_finite > eps,
     lambda: jnp.sum(weighted_finite_fitness) / sum_weights_for_finite,
     lambda: jnp.nan,
   )
 
   if not isinstance(mean_fitness_this_step, jax.Array):
+    msg = f"Expected mean_fitness_this_step to be a jax.Array, got {type(mean_fitness_this_step)}"
     raise TypeError(
-      f"Expected mean_fitness_this_step to be a jax.Array, got {type(mean_fitness_this_step)}"
+      msg,
     )
 
   if not isinstance(fitness_values, jax.Array):
-    raise TypeError(f"Expected fitness_values to be a jax.Array, got {type(fitness_values)}")
+    msg = f"Expected fitness_values to be a jax.Array, got {type(fitness_values)}"
+    raise TypeError(msg)
 
   max_fitness_this_step = jnp.max(jnp.where(jnp.isfinite(fitness_values), fitness_values, -jnp.inf))
   max_fitness_this_step = jnp.where(
-    jnp.all(~jnp.isfinite(fitness_values)), jnp.nan, max_fitness_this_step
+    jnp.all(~jnp.isfinite(fitness_values)),
+    jnp.nan,
+    max_fitness_this_step,
   )
 
-  current_logZ_increment = calculate_logZ_increment(log_weights, config.population_size_per_island)
+  current_logZ_increment = calculate_logZ_increment(  # noqa: N806
+    log_weights,
+    config.population_size_per_island,
+  )
 
-  updated_island_state = IslandState(
+  return IslandState(
     key=key_next_island,
     population=final_population_for_step,
     beta=island_state.beta,
@@ -267,14 +340,28 @@ def island_smc_step(
     ess=ess,
     step=island_state.step + 1,
   )
-  return updated_island_state
 
 
 @partial(jit, static_argnames=("config",))
 def island_smc_step_with_metrics(
   island_state: IslandState,
   config: PRSMCStepConfig,
-):
+) -> tuple[IslandState, tuple[ScalarFloat, ScalarFloat, ScalarFloat, ScalarFloat]]:
+  """Perform a single step of the island SMC algorithm with metrics.
+
+  Args:
+    island_state (IslandState): Current state of the island.
+    config (PRSMCStepConfig): Configuration for the SMC step.
+
+  Returns:
+    tuple[IslandState, tuple[ScalarFloat, ScalarFloat, ScalarFloat, ScalarFloat]]:
+      Updated island state and a tuple containing:
+        - Effective Sample Size (ESS)
+        - Mean fitness of the population
+        - Maximum fitness of the population
+        - LogZ increment for the step
+
+  """
   updated_island_state = island_smc_step(island_state, config)
   fitness_values, _ = calculate_population_fitness(
     updated_island_state.key,
@@ -285,9 +372,10 @@ def island_smc_step_with_metrics(
   ess = updated_island_state.ess
   mean_fitness = updated_island_state.mean_fitness
   if not isinstance(fitness_values, jax.Array):
-    raise TypeError(f"Expected fitness_values to be a jax.Array, got {type(fitness_values)}")
+    msg = f"Expected fitness_values to be a jax.Array, got {type(fitness_values)}"
+    raise TypeError(msg)
   max_fitness = jnp.max(jnp.where(jnp.isfinite(fitness_values), fitness_values, -jnp.inf))
-  logZ_increment = updated_island_state.logZ_estimate - island_state.logZ_estimate
+  logZ_increment = updated_island_state.logZ_estimate - island_state.logZ_estimate  # noqa: N806
   return updated_island_state, (ess, mean_fitness, max_fitness, logZ_increment)
 
 
@@ -308,9 +396,17 @@ def migrate(
   key_exchange: PRNGKeyArray,
   config: ExchangeConfig,
 ) -> tuple[IslandState, ScalarInt]:
-  """
-  Perform replica exchange attempts. Acceptance is scaled by meta_beta_current_value.
-  This version is updated to work with a "Struct of Arrays" IslandState Pytree.
+  """Perform replica exchange attempts. Acceptance is scaled by meta_beta_current_value.
+
+  Args:
+    island_states (IslandState): Current state of the islands.
+    meta_beta_current_value (ScalarFloat): Current value of the meta beta parameter.
+    key_exchange (PRNGKeyArray): JAX PRNG key for random operations.
+    config (ExchangeConfig): Configuration for the exchange process.
+
+  Returns:
+    tuple[IslandState, ScalarInt]: Updated island states and total number of accepted swaps.
+
   """
   all_population_stacked = island_states.population
   all_betas = island_states.beta
@@ -322,13 +418,14 @@ def migrate(
   min_fitness_val = jnp.min(safe_mean_fitness)
   shifted_fitness = safe_mean_fitness - min_fitness_val + 1e-9
   sum_shifted_fitness = jnp.sum(shifted_fitness)
+  eps = 1e-9
   probs_idx1 = jax.lax.cond(
-    (sum_shifted_fitness > 1e-9) & (config.n_islands > 0),
+    (sum_shifted_fitness > eps) & (config.n_islands > 0),
     lambda: shifted_fitness / sum_shifted_fitness,
     lambda: jnp.ones(config.n_islands, dtype=jnp.float32) / jnp.maximum(config.n_islands, 1.0),
   )
 
-  def attempt_exchange(attempt_idx, loop_state):
+  def attempt_exchange(_: int, loop_state: tuple) -> tuple:
     key_attempt, current_population_state, current_accepted_swaps = loop_state
     (
       key_select_idx1,
@@ -340,7 +437,10 @@ def migrate(
     ) = jax.random.split(key_attempt, 6)
     idx1 = jax.random.choice(key_select_idx1, jnp.arange(config.n_islands), p=probs_idx1)
     offset_for_idx2 = jax.random.randint(
-      key_select_idx2, shape=(), minval=1, maxval=jnp.maximum(config.n_islands, 2)
+      key_select_idx2,
+      shape=(),
+      minval=1,
+      maxval=jnp.maximum(config.n_islands, 2),
     )
     idx2 = (idx1 + offset_for_idx2) % config.n_islands
     idx2 = jax.lax.cond(config.n_islands <= 1, lambda: idx1, lambda: idx2)
@@ -349,26 +449,40 @@ def migrate(
     beta_a = all_betas[idx1]
     beta_b = all_betas[idx2]
     sequence_idx_a = jax.random.randint(
-      key_particle_choice1, shape=(), minval=0, maxval=config.population_size_per_island
+      key_particle_choice1,
+      shape=(),
+      minval=0,
+      maxval=config.population_size_per_island,
     )
     sequence_idx_b = jax.random.randint(
-      key_particle_choice2, shape=(), minval=0, maxval=config.population_size_per_island
+      key_particle_choice2,
+      shape=(),
+      minval=0,
+      maxval=config.population_size_per_island,
     )
     config_a = island_a_population[sequence_idx_a]
     config_b = island_b_population[sequence_idx_b]
 
     fitness_a, _ = calculate_population_fitness(
-      key_acceptance, jnp.expand_dims(config_a, 0), config.sequence_type, config.fitness_evaluator
+      key_acceptance,
+      jnp.expand_dims(config_a, 0),
+      config.sequence_type,
+      config.fitness_evaluator,
     )
     fitness_b, _ = calculate_population_fitness(
-      key_acceptance, jnp.expand_dims(config_b, 0), config.sequence_type, config.fitness_evaluator
+      key_acceptance,
+      jnp.expand_dims(config_b, 0),
+      config.sequence_type,
+      config.fitness_evaluator,
     )
     fitness_a = jnp.mean(fitness_a)
     fitness_b = jnp.mean(fitness_b)
 
     log_acceptance_ratio = meta_beta_current_value * (beta_a - beta_b) * (fitness_b - fitness_a)
     log_acceptance_ratio = jnp.where(
-      jnp.isinf(fitness_a) | jnp.isinf(fitness_b) | (idx1 == idx2), -jnp.inf, log_acceptance_ratio
+      jnp.isinf(fitness_a) | jnp.isinf(fitness_b) | (idx1 == idx2),
+      -jnp.inf,
+      log_acceptance_ratio,
     )
     accept = (
       jnp.log(jax.random.uniform(key_acceptance, shape=(), minval=1e-38, maxval=1.0))
@@ -410,10 +524,7 @@ def prsmc_sampler(
   key: PRNGKeyArray,
   config: ParallelReplicaConfig,
 ) -> ParallelReplicaSMCOutput:
-  """
-  Runs Parallel Replica SMC with the new fitness evaluation system.
-  """
-
+  """Run Parallel Replica inspired SMC with the new fitness evaluation system."""
   key_init_islands, key_smc_loop = jax.random.split(key)
   initial_population = generate_template_population(
     initial_sequence=config.template_sequence,
@@ -425,8 +536,7 @@ def prsmc_sampler(
     key=key_init_islands,
     template_sequences=initial_population,
     mutation_rate=config.initial_diversity,
-    n_states=config.n_states,
-    nucleotide=config.step_config.sequence_type == "nucleotide",
+    sequence_type=config.step_config.sequence_type,
   )
   initial_populations = jnp.split(
     initial_population,
@@ -449,7 +559,8 @@ def prsmc_sampler(
   ]
 
   initial_island_states = jax.tree_util.tree_map(
-    lambda *xs: jnp.stack(xs, axis=0), *initial_island_states_list
+    lambda *xs: jnp.stack(xs, axis=0),
+    *initial_island_states_list,
   )
 
   @partial(jit, static_argnames=("step_config",))
@@ -457,16 +568,14 @@ def prsmc_sampler(
     carry_state: PRSMCCarryState,
     step_idx: ScalarInt,
     step_config: PRSMCStepConfig,
-  ):
+  ) -> tuple[PRSMCCarryState, dict]:
     key_step, next_smc_loop_key = jax.random.split(carry_state.prng_key)
 
-    print(carry_state.current_overall_state)
     current_overall_state, island_metrics = vmapped_smc_step(
       carry_state.current_overall_state,
       step_config,
     )
-    print(current_overall_state)
-    ess_p, mean_fit_p, max_fit_p, logZ_inc_p = island_metrics
+    ess_p, mean_fit_p, max_fit_p, logZ_inc_p = island_metrics  # noqa: N806
 
     meta_annealing_schedule = step_config.meta_beta_annealing_schedule
     annealing_len = jnp.array(meta_annealing_schedule.annealing_len, dtype=jnp.int32)

@@ -1,3 +1,7 @@
+"""Utility functions to generate a population of sequences from a single initial sequence."""
+
+from __future__ import annotations
+
 from typing import Literal
 
 import jax.numpy as jnp
@@ -13,8 +17,7 @@ def generate_template_population(
   input_sequence_type: Literal["protein", "nucleotide"],
   output_sequence_type: Literal["protein", "nucleotide"] = "nucleotide",
 ) -> PopulationSequences:
-  """
-  Creates a JAX array representing a population from a single string sequence.
+  """Creates a JAX array representing a population from a single string sequence.
 
   This is a utility to easily create the `template_sequences` needed for `SMCConfig`.
 
@@ -25,8 +28,8 @@ def generate_template_population(
 
   Returns:
       A JAX array of shape (population_size, sequence_length).
-  """
 
+  """
   valid_types = ("protein", "nucleotide")
   if input_sequence_type not in valid_types:
     raise ValueError("Invalid input_sequence_type")
