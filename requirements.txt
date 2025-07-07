@@ -1,6 +1,5 @@
 jax
 jaxlib
-numpy
-scipy
-pyarrow
+flax
+jaxtyping
 git+https://github.com/maraxen/ColabDesign.git
