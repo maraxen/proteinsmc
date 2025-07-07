@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from proteinsmc.scoring.mpnn import mpnn_score
+from proteinsmc.scoring.mpnn import make_mpnn_score
 
 
 class MockMPNNModel:
@@ -23,10 +23,10 @@ def test_mpnn_score(mock_model):
   key = jax.random.PRNGKey(0)
   protein_sequence = jnp.array([1, 2, 3])
 
-  score = mpnn_score(key, protein_sequence, mock_model)
+  score_func = make_mpnn_score(mock_model)
 
   expected_score = jnp.sum(protein_sequence)
-  assert score == expected_score
+  assert score_func(key, protein_sequence) == expected_score
 
 
 def test_mpnn_score_empty_sequence(mock_model):
@@ -34,7 +34,7 @@ def test_mpnn_score_empty_sequence(mock_model):
   key = jax.random.PRNGKey(0)
   protein_sequence = jnp.array([])
 
-  score = mpnn_score(key, protein_sequence, mock_model)
+  score_func = make_mpnn_score(mock_model)
 
   expected_score = 0.0
-  assert score == expected_score
+  assert score_func(key, protein_sequence) == expected_score

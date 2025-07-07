@@ -14,9 +14,11 @@ if TYPE_CHECKING:
   from jaxtyping import PRNGKeyArray
 
   from proteinsmc.utils.types import (
+    EvoSequence,
     FitnessWeights,
     PopulationSequenceFloats,
     PopulationSequences,
+    ScalarFloat,
   )
 
 from .translation import reverse_translate, translate
@@ -140,7 +142,7 @@ def calculate_population_fitness(
   population: PopulationSequences,
   sequence_type: Literal["nucleotide", "protein"],
   fitness_evaluator: FitnessEvaluator,
-) -> tuple[jax.Array, dict[str, jax.Array]]:
+) -> tuple[PopulationSequenceFloats, dict[str, ScalarFloat]]:
   """Calculate fitness for a population using configurable fitness functions.
 
   Returns:
@@ -165,7 +167,7 @@ def calculate_population_fitness(
       )
 
     def create_fitness_evaluation(func: Callable, args: dict[str, Any]) -> Callable:
-      def single_fitness_evaluation(seq_key: PRNGKeyArray, seq: jax.Array) -> jax.Array:
+      def single_fitness_evaluation(seq_key: PRNGKeyArray, seq: EvoSequence) -> ScalarFloat:
         return func(seq_key, seq, **args)
 
       return single_fitness_evaluation
