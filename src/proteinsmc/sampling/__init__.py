@@ -2,7 +2,7 @@
 
 from .gibbs import gibbs_sampler, make_gibbs_update_fns
 from .hmc import hmc_sampler
-from .mcmc import mcmc_sampler
+from .mcmc import make_random_mutation_proposal_fn, mcmc_sampler
 from .nuts import nuts_sampler
 from .parallel_replica import (
   ExchangeConfig,
@@ -28,4 +28,5 @@ __all__ = [
   "smc_sampler",
   "ExchangeConfig",
   "PRSMCStepConfig",
+  "make_random_mutation_proposal_fn",
 ]

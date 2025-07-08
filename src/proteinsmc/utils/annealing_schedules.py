@@ -89,6 +89,6 @@ def cosine_schedule(p: ScalarInt, n_steps: ScalarInt, beta_max: ScalarFloat) -> 
   return beta_max * 0.5 * (1.0 - jnp.cos(jnp.pi * x))
 
 
-def static_schedule(beta_max: ScalarFloat | float) -> ScalarFloat:
+def static_schedule(_p: ScalarInt, _n: ScalarInt, beta_max: ScalarFloat) -> ScalarFloat:
   """Run static annealing schedule (beta is constant)."""
   return jnp.array(beta_max, dtype=jnp.float32)
