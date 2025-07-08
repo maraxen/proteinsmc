@@ -16,9 +16,10 @@ if TYPE_CHECKING:
   from proteinsmc.utils.types import (
     EvoSequence,
     FitnessWeights,
+    FunctionFloats,
     PopulationSequenceFloats,
     PopulationSequences,
-    ScalarFloat,
+    StackedPopulationSequenceFloats,
   )
 
 from .translation import reverse_translate, translate
@@ -28,9 +29,8 @@ from .translation import reverse_translate, translate
 class FitnessFunction:
   """Data structure for managing fitness function metadata."""
 
-  func: Callable
+  func: Callable[[PRNGKeyArray, EvoSequence], PopulationSequenceFloats]
   input_type: Literal["nucleotide", "protein"]
-  args: dict[str, Any]
   name: str
 
   def __post_init__(self) -> None:
@@ -43,10 +43,13 @@ class FitnessFunction:
       raise ValueError(
         msg,
       )
+    if not isinstance(self.name, str):
+      msg = "name must be a string."
+      raise TypeError(msg)
 
   def __hash__(self) -> int:
     """Hash the fitness function based on its properties."""
-    return hash((self.func, self.input_type, frozenset(self.args.items()), self.name))
+    return hash((self.func, self.input_type, frozenset(self.name)))
 
   def tree_flatten(self) -> tuple[tuple, dict]:
     """Flatten the dataclass for JAX PyTree compatibility."""
@@ -65,8 +68,7 @@ class FitnessEvaluator:
   """Manager for collection of fitness functions."""
 
   fitness_functions: list[FitnessFunction]
-  combine_func: Callable | None = None
-  combine_func_args: dict[str, Any] | None = None
+  combine_func: Callable[[StackedPopulationSequenceFloats], PopulationSequenceFloats] | None = None
 
   def __post_init__(self) -> None:
     """Validate the fitness evaluator configuration."""
@@ -99,6 +101,66 @@ class FitnessEvaluator:
 
 jax.tree_util.register_pytree_node_class(FitnessEvaluator)
 jax.tree_util.register_pytree_node_class(FitnessFunction)
+
+
+def make_fitness_function(
+  func: Callable[[PRNGKeyArray, EvoSequence], PopulationSequenceFloats],
+  **kwargs: Any,  # noqa: ANN401
+) -> Callable[[PRNGKeyArray, EvoSequence], PopulationSequenceFloats]:
+  """Create a fitness function with the specified properties.
+
+  Args:
+      func: The function to be used as the fitness function.
+      **kwargs: Additional keyword arguments for the fitness function.
+
+  Returns:
+      A FitnessFunction instance.
+
+  """
+
+  @jit
+  def fitness_func(key: PRNGKeyArray, sequences: EvoSequence) -> PopulationSequenceFloats:
+    """Call the provided fitness function."""
+    return func(key, sequences, **kwargs)
+
+  return fitness_func
+
+
+def make_combine_fitness_function(
+  func: Callable[[StackedPopulationSequenceFloats], FunctionFloats],
+  **kwargs: Any,  # noqa: ANN401
+) -> Callable:
+  """Create a function to combine fitness scores.
+
+  Needed for keeping sampling compatible with JAX's JIT compilation.
+
+  This function allows for flexible combination of fitness scores from
+  different fitness functions. It can be used to sum, average, or apply
+  any custom combination logic to the fitness scores.
+
+  To use this function, you need to provide a callable `func` that
+  takes a dictionary of fitness scores and returns a single combined score.
+
+  The `kwargs` can be used to pass additional parameters to the combining function, but this needs
+  to be done before incorporating the function into the `FitnessEvaluator`.
+
+  Args:
+      func: The function to combine fitness scores.
+      **kwargs: Additional keyword arguments for the combining function.
+
+  Returns:
+      A callable that combines fitness scores.
+
+  """
+
+  @jit
+  def combine_func(
+    fitness_components: StackedPopulationSequenceFloats,
+  ) -> StackedPopulationSequenceFloats:
+    """Combine individual fitness scores into a single score."""
+    return func(fitness_components, **kwargs)
+
+  return combine_func
 
 
 def _get_seqs(
@@ -136,13 +198,34 @@ def _get_seqs(
   return nuc_seqs, aa_seqs
 
 
+def dispatch_fitness_function(
+  key: PRNGKeyArray,
+  nuc_seqs: PopulationSequences,
+  aa_seqs: PopulationSequences,
+  fitness_function: FitnessFunction,
+) -> PopulationSequenceFloats:
+  """Dispatch a fitness function based on the sequence type."""
+  vmapped_func = vmap(
+    fitness_function.func,
+    in_axes=(None, 0),
+  )  # TODO(mar): do we want different keys within the batch?
+
+  if fitness_function.input_type == "nucleotide":
+    return vmapped_func(key, nuc_seqs)
+  if fitness_function.input_type == "protein":
+    return vmapped_func(key, aa_seqs)
+
+  msg = f"Invalid input_type '{fitness_function.input_type}' for '{fitness_function.name}'."
+  raise ValueError(msg)
+
+
 @partial(jit, static_argnames=["sequence_type", "fitness_evaluator"])
 def calculate_population_fitness(
   key: PRNGKeyArray,
   population: PopulationSequences,
   sequence_type: Literal["nucleotide", "protein"],
   fitness_evaluator: FitnessEvaluator,
-) -> tuple[PopulationSequenceFloats, dict[str, ScalarFloat]]:
+) -> tuple[PopulationSequenceFloats, FunctionFloats]:
   """Calculate fitness for a population using configurable fitness functions.
 
   Returns:
@@ -150,49 +233,31 @@ def calculate_population_fitness(
 
   """
   nuc_seqs, aa_seqs = _get_seqs(sequence_type, population)
-  fitness_components = {}
-  main_scores = {}
   keys_for_functions = jax.random.split(key, len(fitness_evaluator.fitness_functions))
 
-  for func_key, fitness_func in zip(keys_for_functions, fitness_evaluator.fitness_functions):
-    if fitness_func.input_type == "nucleotide":
-      input_seqs = nuc_seqs
-    elif fitness_func.input_type == "protein":
-      input_seqs = aa_seqs
-    else:
-      msg = f"Invalid input_type '{fitness_func.input_type}' for fitness function"
-      f"'{fitness_func.name}'."
-      raise ValueError(
-        msg,
-      )
-
-    def create_fitness_evaluation(func: Callable, args: dict[str, Any]) -> Callable:
-      def single_fitness_evaluation(seq_key: PRNGKeyArray, seq: EvoSequence) -> ScalarFloat:
-        return func(seq_key, seq, **args)
-
-      return single_fitness_evaluation
-
-    evaluation_func = create_fitness_evaluation(fitness_func.func, fitness_func.args)
-    vmapped_fitness = vmap(evaluation_func, in_axes=(0, 0))
-    func_keys = jax.random.split(func_key, population.shape[0])
-
-    result = vmapped_fitness(func_keys, input_seqs)
-    main_scores[fitness_func.name] = result
+  results = [
+    dispatch_fitness_function(
+      func_key,
+      nuc_seqs,
+      aa_seqs,
+      fitness_func,
+    )
+    for func_key, fitness_func in zip(keys_for_functions, fitness_evaluator.fitness_functions)
+  ]
 
   if fitness_evaluator.combine_func is not None:
-    combine_args = fitness_evaluator.combine_func_args or {}
-    combined_fitness = fitness_evaluator.combine_func(main_scores, **combine_args)
+    combined_fitness = fitness_evaluator.combine_func(jnp.array(results))
   else:
-    combined_fitness = jnp.sum(jnp.array(list(main_scores.values())), axis=0)
+    combined_fitness = jnp.sum(jnp.array(results), axis=0)
 
-  fitness_components = dict(main_scores.items())
+  fitness_components = jnp.stack(results)
 
   return combined_fitness, fitness_components
 
 
 @partial(jit)
 def combine_fitness_scores(
-  fitness_components: dict,
+  fitness_components: FunctionFloats,
   fitness_weights: FitnessWeights | None = None,
 ) -> PopulationSequenceFloats:
   """Combine individual fitness scores into a single score using weights.
@@ -208,11 +273,11 @@ def combine_fitness_scores(
   if fitness_weights is not None:
     combined_fitness = jnp.tensordot(
       fitness_weights,
-      jnp.array(list(fitness_components.values())),
+      fitness_components,
       axes=1,
     )
   else:
-    combined_fitness = jnp.sum(jnp.array(list(fitness_components.values())), axis=0)
+    combined_fitness = jnp.sum(fitness_components, axis=0)
 
   return combined_fitness
 

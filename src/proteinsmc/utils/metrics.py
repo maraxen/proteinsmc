@@ -85,6 +85,6 @@ def shannon_entropy(seqs: PopulationSequences) -> ScalarFloat:
     seq_length = seqs.shape[1]
     position_entropies = vmap(calculate_position_entropy)(seqs.T)
     entropy = jnp.sum(position_entropies)
-    return entropy / seq_length
+    return jnp.divide(entropy, seq_length)
   logger.warning("Warning: shannon_entropy received unexpected type %s", type(seqs))
   return jnp.array(0.0, dtype=jnp.float32)

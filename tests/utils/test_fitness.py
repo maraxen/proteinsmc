@@ -8,6 +8,15 @@ from proteinsmc.utils.fitness import (
   calculate_population_fitness,
 )
 
+def make_mock_fitness_function(mock_func, **kwargs):
+  """Create a mock fitness function for testing."""
+  
+  def mock_fitness_func(key, sequences):
+    """Mock fitness function that returns a constant value."""
+    return mock_func(key, sequences, **kwargs)
+
+  return mock_fitness_func
+
 
 def mock_protein_fitness_func(key, sequences, arg1):
   """Mock fitness function that operates on protein sequences."""
@@ -18,14 +27,19 @@ def mock_nucleotide_fitness_func(key, sequences, arg1):
   """Mock fitness function that operates on nucleotide sequences."""
   return jnp.full((sequences.shape[0],), arg1).mean(axis=-1)
 
+made_mock_protein_fitness_func = make_mock_fitness_function(
+  mock_protein_fitness_func, arg1=2.0
+)
+made_mock_nucleotide_fitness_func = make_mock_fitness_function(
+  mock_nucleotide_fitness_func, arg1=3.0
+)
 
 @pytest.fixture
 def protein_ff():
   """Fixture for a protein-based fitness function."""
   return FitnessFunction(
-    func=mock_protein_fitness_func,
+    func=made_mock_protein_fitness_func,
     input_type="protein",
-    args={"arg1": 2.0},
     name="mock_protein",
   )
 
@@ -34,9 +48,8 @@ def protein_ff():
 def nucleotide_ff():
   """Fixture for a nucleotide-based fitness function."""
   return FitnessFunction(
-    func=mock_nucleotide_fitness_func,
+    func=made_mock_nucleotide_fitness_func,
     input_type="nucleotide",
-    args={"arg1": 3.0},
     name="mock_nucleotide",
   )
 
@@ -48,11 +61,10 @@ def test_fitness_function_init(protein_ff):
 
 def test_fitness_function_invalid_func():
   """Test that FitnessFunction raises ValueError for a non-callable func."""
-  with pytest.raises(ValueError):
+  with pytest.raises(TypeError):
     FitnessFunction(
       func="not_a_function",  # type: ignore
       input_type="protein",
-      args={},
       name="invalid",
     )
 
@@ -61,9 +73,8 @@ def test_fitness_function_invalid_input_type():
   """Test that FitnessFunction raises ValueError for an invalid input_type."""
   with pytest.raises(ValueError):
     FitnessFunction(
-      func=mock_protein_fitness_func,
+      func=made_mock_protein_fitness_func,
       input_type="invalid_type",  # type: ignore
-      args={},
       name="invalid",
     )
 

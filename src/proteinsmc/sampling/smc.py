@@ -102,14 +102,12 @@ class SMCOutput:
   input_config: SMCConfig
   mean_combined_fitness_per_gen: jnp.ndarray
   max_combined_fitness_per_gen: jnp.ndarray
-  mean_cai_per_gen: jnp.ndarray
-  mean_mpnn_score_per_gen: jnp.ndarray
   entropy_per_gen: jnp.ndarray
-  aa_entropy_per_gen: jnp.ndarray
   beta_per_gen: jnp.ndarray
   ess_per_gen: jnp.ndarray
-  final_logZhat: float  # noqa: N815
-  final_amino_acid_entropy: float
+  fitness_components_per_gen: jnp.ndarray
+  final_logZhat: ScalarFloat  # noqa: N815
+  final_amino_acid_entropy: ScalarFloat
 
   def tree_flatten(self: SMCOutput) -> tuple[tuple, dict]:
     """Flatten the dataclass for JAX PyTree compatibility."""
@@ -117,12 +115,10 @@ class SMCOutput:
       self.input_config,
       self.mean_combined_fitness_per_gen,
       self.max_combined_fitness_per_gen,
-      self.mean_cai_per_gen,
-      self.mean_mpnn_score_per_gen,
       self.entropy_per_gen,
-      self.aa_entropy_per_gen,
       self.beta_per_gen,
       self.ess_per_gen,
+      self.fitness_components_per_gen,
     )
     aux_data: dict = {
       "final_logZhat": self.final_logZhat,
@@ -141,12 +137,10 @@ class SMCOutput:
       input_config=children[0],
       mean_combined_fitness_per_gen=children[1],
       max_combined_fitness_per_gen=children[2],
-      mean_cai_per_gen=children[3],
-      mean_mpnn_score_per_gen=children[4],
-      entropy_per_gen=children[5],
-      aa_entropy_per_gen=children[6],
-      beta_per_gen=children[7],
-      ess_per_gen=children[8],
+      entropy_per_gen=children[3],
+      beta_per_gen=children[4],
+      ess_per_gen=children[5],
+      fitness_components_per_gen=children[6],
       **aux_data,
     )
 
@@ -225,37 +219,14 @@ def smc_step(state: SMCCarryState, config: SMCConfig) -> tuple[SMCCarryState, di
     raise TypeError(msg)
   max_combined_fitness = jnp.max(jnp.where(valid_fitness_mask, fitness_values, -jnp.inf))
 
-  cai_values = fitness_components.get("cai", jnp.zeros_like(fitness_values))
-  valid_cai_mask = (cai_values > 0) & jnp.isfinite(cai_values)
-  sum_valid_cai_weights = jnp.sum(jnp.where(valid_cai_mask, normalized_weights, 0.0))
-  mean_cai = safe_weighted_mean(
-    cai_values,
-    normalized_weights,
-    valid_cai_mask,
-    sum_valid_cai_weights,
-  )
-
-  mpnn_values = fitness_components.get("mpnn", jnp.zeros_like(fitness_values))
-  valid_mpnn_mask = jnp.isfinite(mpnn_values)
-  sum_valid_mpnn_weights = jnp.sum(jnp.where(valid_mpnn_mask, normalized_weights, 0.0))
-  mean_mpnn_score = safe_weighted_mean(
-    mpnn_values,
-    normalized_weights,
-    valid_mpnn_mask,
-    sum_valid_mpnn_weights,
-  )
-
   entropy = shannon_entropy(mutated_population)
-  aa_entropy = jnp.nan
 
   metrics = {
     "mean_combined_fitness": mean_combined_fitness,
     "max_combined_fitness": max_combined_fitness,
-    "mean_cai": mean_cai,
-    "mean_mpnn_score": mean_mpnn_score,
+    "fitness_components": fitness_components,
     "ess": ess,
     "entropy": entropy,
-    "aa_entropy": aa_entropy,
     "beta": state.beta,
   }
 
@@ -398,7 +369,9 @@ def smc_sampler(key: PRNGKeyArray, config: SMCConfig) -> SMCOutput:
     length=config.generations,
   )
 
-  final_aa_entropy = shannon_entropy(final_state.population) if config.generations > 0 else jnp.nan
+  final_entropy = (
+    shannon_entropy(final_state.population) if config.generations > 0 else jnp.array(jnp.nan)
+  )
 
   logger.info("Finished JAX SMC. Final LogZhat=%.4f", float(final_state.logZ_estimate))
 
@@ -406,12 +379,10 @@ def smc_sampler(key: PRNGKeyArray, config: SMCConfig) -> SMCOutput:
     input_config=config,
     mean_combined_fitness_per_gen=collected_metrics["mean_combined_fitness"],
     max_combined_fitness_per_gen=collected_metrics["max_combined_fitness"],
-    mean_cai_per_gen=collected_metrics["mean_cai"],
-    mean_mpnn_score_per_gen=collected_metrics["mean_mpnn_score"],
     entropy_per_gen=collected_metrics["entropy"],
-    aa_entropy_per_gen=collected_metrics["aa_entropy"],
     beta_per_gen=collected_metrics["beta"],
     ess_per_gen=collected_metrics["ess"],
-    final_logZhat=float(final_state.logZ_estimate),
-    final_amino_acid_entropy=float(final_aa_entropy),
+    fitness_components_per_gen=collected_metrics["fitness_components"],
+    final_logZhat=final_state.logZ_estimate,
+    final_amino_acid_entropy=final_entropy,
   )
