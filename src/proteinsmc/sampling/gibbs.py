@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING, Callable
 
@@ -15,12 +16,43 @@ if TYPE_CHECKING:
   from proteinsmc.utils.types import EvoSequence, PopulationSequences, ScalarFloat
 
 
+@dataclass(frozen=True)
+class GibbsSamplerOutput:
+  """Data structure to hold the output of the Gibbs sampler.
+
+  Attributes:
+      final_samples: Array of sampled sequences.
+      final_fitness: Fitness value of the final state.
+
+  """
+
+  final_samples: PopulationSequences
+  final_fitness: ScalarFloat
+
+  def tree_flatten(self) -> tuple[tuple, dict]:
+    """Flatten the dataclass for JAX PyTree compatibility."""
+    children = (self.final_samples, self.final_fitness)
+    aux_data = {}
+    return (children, aux_data)
+
+  @classmethod
+  def tree_unflatten(cls, _aux_data: dict, children: tuple) -> GibbsSamplerOutput:
+    """Unflatten the dataclass for JAX PyTree compatibility."""
+    return cls(
+      final_samples=children[0],
+      final_fitness=children[1],
+    )
+
+
+jax.tree_util.register_pytree_node_class(GibbsSamplerOutput)
+
+
 def make_gibbs_update_fns(
   sequence_length: int,
   n_states: int,
 ) -> tuple[
   Callable[
-    [jax.Array, EvoSequence, Callable[[EvoSequence], ScalarFloat]],
+    [jax.Array, EvoSequence, Callable[[PRNGKeyArray, EvoSequence], ScalarFloat]],
     EvoSequence,
   ],
   ...,
@@ -47,19 +79,21 @@ def make_gibbs_update_fns(
   def update_fn_factory(
     pos: int,
   ) -> Callable[
-    [jax.Array, EvoSequence, Callable[[EvoSequence, ScalarFloat], ScalarFloat]],
+    [jax.Array, EvoSequence, Callable[[PRNGKeyArray, EvoSequence], ScalarFloat]],
     EvoSequence,
   ]:
     def update_fn(
       key: PRNGKeyArray,
       seq: EvoSequence,
-      log_prob_fn: Callable[[EvoSequence], ScalarFloat],
+      log_prob_fn: Callable[[PRNGKeyArray, EvoSequence], ScalarFloat],
     ) -> EvoSequence:
+      proposal_key, new_val_key = random.split(key)
+      proposal_keys = random.split(random.fold_in(proposal_key, pos), n_states)
       proposals = jnp.tile(seq, (n_states, 1))
       proposals = proposals.at[:, pos].set(jnp.arange(n_states))
-      log_probs = jax.vmap(log_prob_fn)(proposals)
+      log_probs = jax.vmap(log_prob_fn)(proposal_keys, proposals)
       probs = jax.nn.softmax(log_probs)
-      new_val = jax.random.choice(key, n_states, p=probs)
+      new_val = jax.random.choice(new_val_key, n_states, p=probs)
       return seq.at[pos].set(new_val)
 
     return update_fn  # type: ignore[return-value]
@@ -75,15 +109,15 @@ def gibbs_sampler(
   key: PRNGKeyArray,
   initial_state: EvoSequence,
   num_samples: int,
-  log_prob_fn: Callable[[EvoSequence], ScalarFloat],
+  log_prob_fn: Callable[[PRNGKeyArray, EvoSequence], ScalarFloat],
   update_fns: tuple[
     Callable[
-      [jax.Array, EvoSequence, Callable[[EvoSequence], ScalarFloat]],
+      [jax.Array, EvoSequence, Callable[[PRNGKeyArray, EvoSequence], ScalarFloat]],
       EvoSequence,
     ],
     ...,
   ],
-) -> PopulationSequences:
+) -> GibbsSamplerOutput:
   """Run the Gibbs sampler.
 
   Args:
@@ -106,9 +140,9 @@ def gibbs_sampler(
 
   def body_fn(
     i: int,
-    state_and_samples: tuple[EvoSequence, PopulationSequences],
-  ) -> tuple[EvoSequence, PopulationSequences]:
-    current_state, samples = state_and_samples
+    state_and_samples: tuple[EvoSequence, PopulationSequences, ScalarFloat],
+  ) -> tuple[EvoSequence, PopulationSequences, ScalarFloat]:
+    current_state, samples, fitness = state_and_samples
 
     new_state = current_state
     for j, update_fn in enumerate(update_fns):
@@ -116,9 +150,22 @@ def gibbs_sampler(
       new_state = update_fn(key_comp, new_state, log_prob_fn)
 
     samples = samples.at[i].set(new_state)
-    return new_state, samples
+    return (
+      new_state,
+      samples,
+      jnp.where(
+        i == 0,
+        log_prob_fn(key, new_state),
+        fitness,
+      ),
+    )
 
   samples = jnp.zeros((num_samples, *initial_state.shape), dtype=initial_state.dtype)
-  _, final_samples = jax.lax.fori_loop(0, num_samples, body_fn, (initial_state, samples))
+  _, final_samples, final_fitness = jax.lax.fori_loop(
+    0,
+    num_samples,
+    body_fn,
+    (initial_state, samples, 0.0),
+  )
 
   return final_samples

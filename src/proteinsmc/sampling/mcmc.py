@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING, Callable
 
@@ -10,9 +11,36 @@ import jax.numpy as jnp
 from jax import jit, random
 
 if TYPE_CHECKING:
-  from jaxtyping import PRNGKeyArray
+  from jaxtyping import Float, PRNGKeyArray
 
   from proteinsmc.utils.types import EvoSequence, PopulationSequences, ScalarFloat
+
+
+@dataclass(frozen=True)
+class MCMCOutput:
+  """Data structure to hold the output of the MCMC sampler."""
+
+  final_samples: PopulationSequences
+  final_state: EvoSequence
+  final_fitness: Float
+
+  def tree_flatten(self) -> tuple[tuple, dict]:
+    """Flatten the dataclass for JAX PyTree compatibility."""
+    children = (self.final_samples, self.final_state, self.final_fitness)
+    aux_data = {}
+    return (children, aux_data)
+
+  @classmethod
+  def tree_unflatten(cls, _aux_data: dict, children: tuple) -> MCMCOutput:
+    """Unflatten the dataclass for JAX PyTree compatibility."""
+    return cls(
+      final_samples=children[0],
+      final_state=children[1],
+      final_fitness=children[2],
+    )
+
+
+jax.tree_util.register_pytree_node_class(MCMCOutput)
 
 
 def make_random_mutation_proposal_fn(
@@ -44,9 +72,9 @@ def mcmc_sampler(
   key: PRNGKeyArray,
   initial_state: EvoSequence,
   num_samples: int,
-  log_prob_fn: Callable[[EvoSequence], ScalarFloat],
+  log_prob_fn: Callable[[PRNGKeyArray, EvoSequence], ScalarFloat],
   proposal_fn: Callable[[PRNGKeyArray, EvoSequence], EvoSequence],
-) -> PopulationSequences:
+) -> MCMCOutput:
   """Run the Metropolis-Hastings MCMC sampler.
 
   Args:
@@ -63,16 +91,16 @@ def mcmc_sampler(
 
   def body_fn(
     i: int,
-    state_and_samples: tuple[EvoSequence, PopulationSequences],
-  ) -> tuple[EvoSequence, PopulationSequences]:
-    current_state, samples = state_and_samples
+    state_and_samples: tuple[EvoSequence, PopulationSequences, Float],
+  ) -> tuple[EvoSequence, PopulationSequences, Float]:
+    current_state, samples, _ = state_and_samples
 
-    key_proposal, key_accept = random.split(random.fold_in(key, i))
+    key_proposal, key_accept, key_log_prob = random.split(random.fold_in(key, i), 3)
 
     proposed_state = proposal_fn(key_proposal, current_state)
 
-    current_log_prob = log_prob_fn(current_state)
-    proposed_log_prob = log_prob_fn(proposed_state)
+    current_log_prob = log_prob_fn(key_log_prob, current_state)
+    proposed_log_prob = log_prob_fn(key_log_prob, proposed_state)
 
     acceptance_ratio = jnp.exp(proposed_log_prob - current_log_prob)
 
@@ -81,9 +109,18 @@ def mcmc_sampler(
     next_state = jnp.where(accept, proposed_state, current_state)
     samples = samples.at[i].set(next_state)
 
-    return next_state, samples
+    return next_state, samples, jnp.where(accept, proposed_log_prob, current_log_prob)
 
   samples = jnp.zeros((num_samples, *initial_state.shape))
-  _, final_samples = jax.lax.fori_loop(0, num_samples, body_fn, (initial_state, samples))
+  final_state, final_samples, final_fitness = jax.lax.fori_loop(
+    0,
+    num_samples,
+    body_fn,
+    (initial_state, samples, 0.0),
+  )
 
-  return final_samples
+  return MCMCOutput(
+    final_samples=final_samples,
+    final_state=final_state,
+    final_fitness=final_fitness,
+  )
