@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import jax.numpy as jnp
 
 from .constants import AA_CHAR_TO_INT_MAP, NUCLEOTIDES_INT_MAP
 from .translation import reverse_translate, translate
-from .types import PopulationSequences
+
+if TYPE_CHECKING:
+  from .types import PopulationSequences
 
 
 def generate_template_population(
@@ -32,21 +34,25 @@ def generate_template_population(
   """
   valid_types = ("protein", "nucleotide")
   if input_sequence_type not in valid_types:
-    raise ValueError("Invalid input_sequence_type")
+    msg = "Invalid input_sequence_type"
+    raise ValueError(msg)
   if output_sequence_type not in valid_types:
-    raise ValueError("Invalid output_sequence_type")
+    msg = "Invalid output_sequence_type"
+    raise ValueError(msg)
 
   if input_sequence_type == "protein":
     try:
       aa_seq = [AA_CHAR_TO_INT_MAP[res] for res in initial_sequence]
     except KeyError as e:
-      raise ValueError(f"Invalid amino acid: {e.args[0]}") from e
+      msg = f"Invalid amino acid: {e.args[0]}"
+      raise ValueError(msg) from e
     aa_seq = jnp.array(aa_seq, dtype=jnp.int8)
   elif input_sequence_type == "nucleotide":
     try:
       nuc_seq = [NUCLEOTIDES_INT_MAP[nuc] for nuc in initial_sequence]
     except KeyError as e:
-      raise ValueError(f"Invalid nucleotide: {e.args[0]}") from e
+      msg = f"Invalid nucleotide: {e.args[0]}"
+      raise ValueError(msg) from e
     nuc_seq = jnp.array(nuc_seq, dtype=jnp.int8)
     aa_seq, _ = translate(nuc_seq)
 

@@ -2,7 +2,7 @@ import jax.numpy as jnp
 import pytest
 from jax import random
 
-from proteinsmc.sampling.nuts import nuts_sampler
+from proteinsmc.sampling.nuts import NUTSConfig, nuts_sampler
 
 
 def log_prob_fn(x):
@@ -17,14 +17,17 @@ def test_nuts_sampler_output_shape(num_samples, warmup_steps, num_chains):
   key = random.PRNGKey(0)
   initial_position = jnp.zeros(2)
 
-  samples = nuts_sampler(
-    key,
-    log_prob_fn,
-    initial_position,
+  config = NUTSConfig(
+    log_prob_fn=log_prob_fn,
+    step_size=0.1,
     num_samples=num_samples,
     warmup_steps=warmup_steps,
     num_chains=num_chains,
+    num_leapfrog_steps=10,
+    adapt_step_size=True,
   )
+
+  samples = nuts_sampler(key, initial_position, config)
 
   assert samples.shape == (num_chains, num_samples, 2)
 
@@ -37,14 +40,17 @@ def test_nuts_sampler_convergence():
   warmup_steps = 500
   num_chains = 4
 
-  samples = nuts_sampler(
-    key,
-    log_prob_fn,
-    initial_position,
+  config = NUTSConfig(
+    log_prob_fn=log_prob_fn,
+    step_size=0.1,
     num_samples=num_samples,
     warmup_steps=warmup_steps,
     num_chains=num_chains,
+    num_leapfrog_steps=10,
+    adapt_step_size=True,
   )
+
+  samples = nuts_sampler(key, initial_position, config)
   assert jnp.allclose(jnp.mean(samples), 0.0, atol=0.1)
   assert jnp.allclose(jnp.var(samples), 1.0, atol=0.5)
 
@@ -56,15 +62,17 @@ def test_nuts_sampler_options(step_size, adapt_step_size):
   num_samples = 100
   warmup_steps = 50
 
-  samples = nuts_sampler(
-    key,
-    log_prob_fn,
-    initial_position,
+  config = NUTSConfig(
+    log_prob_fn=log_prob_fn,
+    step_size=step_size,
     num_samples=num_samples,
     warmup_steps=warmup_steps,
-    step_size=step_size,
+    num_chains=1,
+    num_leapfrog_steps=10,
     adapt_step_size=adapt_step_size,
   )
+
+  samples = nuts_sampler(key, initial_position, config)
 
   assert samples.shape == (1, num_samples, 1)
 
@@ -76,6 +84,16 @@ def test_nuts_sampler_high_dimension():
   num_samples = 100
   warmup_steps = 50
 
-  samples = nuts_sampler(key, log_prob_fn, initial_position, num_samples, warmup_steps)
+  config = NUTSConfig(
+    log_prob_fn=log_prob_fn,
+    step_size=0.1,
+    num_samples=num_samples,
+    warmup_steps=warmup_steps,
+    num_chains=1,
+    num_leapfrog_steps=10,
+    adapt_step_size=True,
+  )
+
+  samples = nuts_sampler(key, initial_position, config)
 
   assert samples.shape == (1, num_samples, dim)

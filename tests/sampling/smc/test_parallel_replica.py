@@ -2,7 +2,7 @@ import jax.numpy as jnp
 import pytest
 from jax import random
 
-from proteinsmc.sampling.parallel_replica import (
+from proteinsmc.sampling.smc.parallel_replica import (
   ExchangeConfig,
   ParallelReplicaConfig,
   PRSMCStepConfig,
@@ -29,14 +29,13 @@ def setup_sampler():
   population_size_per_island = 8
 
   fitness_evaluator = FitnessEvaluator(
-    fitness_functions=[
+    fitness_functions=(
       FitnessFunction(
         func=mock_fitness_fn,
         input_type="protein",
         name="mock_fitness",
-        args={},
       ),
-    ],
+    ),
   )
 
   exchange_config = ExchangeConfig(

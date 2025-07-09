@@ -4,14 +4,19 @@ from .gibbs import gibbs_sampler, make_gibbs_update_fns
 from .hmc import hmc_sampler
 from .mcmc import make_random_mutation_proposal_fn, mcmc_sampler
 from .nuts import nuts_sampler
-from .parallel_replica import (
+from .smc import (
+  SMCCarryState,
+  SMCConfig,
+  SMCOutput,
+  smc_sampler,
+)
+from .smc.parallel_replica import (
   ExchangeConfig,
   ParallelReplicaConfig,
   ParallelReplicaSMCOutput,
   PRSMCStepConfig,
   prsmc_sampler,
 )
-from .smc import SMCCarryState, SMCConfig, SMCOutput, smc_sampler
 
 __all__ = [
   "gibbs_sampler",

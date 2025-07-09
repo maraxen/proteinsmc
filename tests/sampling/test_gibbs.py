@@ -13,13 +13,15 @@ from proteinsmc.utils.fitness import FitnessEvaluator, FitnessFunction, make_seq
 def fitness_evaluator():
   """Creates a mock fitness evaluator that returns a single score per sequence."""
 
-  def mock_fitness_func(key, seq, const_val=5.0):
-    return const_val
+  def mock_fitness(_key: jax.Array, _seq: jax.Array, const_val=5.0) -> jax.Array:
+    return jnp.array(const_val, dtype=jnp.float32)
+  
+  mock_fitness_func = lambda key, seq: mock_fitness(key, seq, const_val=5.0)
 
   fitness_func = FitnessFunction(
-    func=mock_fitness_func, input_type="protein", args={"const_val": 5.0}, name="mock"
+    func=mock_fitness_func, input_type="protein", name="mock"
   )
-  return FitnessEvaluator(fitness_functions=[fitness_func])
+  return FitnessEvaluator(fitness_functions=(fitness_func,))
 
 
 def test_make_sequence_log_prob_fn(fitness_evaluator):
@@ -47,7 +49,7 @@ def test_make_gibbs_update_fns():
   key = jax.random.PRNGKey(0)
   seq = jnp.zeros((5,), dtype=jnp.int8)
 
-  def deterministic_log_prob(s):
+  def deterministic_log_prob(key, s):  # Updated signature
     return jnp.where(s[0] == 3, 100.0, 0.0)
 
   updated_seq = update_pos_0(key, seq, deterministic_log_prob)
@@ -62,7 +64,7 @@ def test_gibbs_sampler():
   sequence_length = 2
   n_states = 4
 
-  def log_prob_fn(seq):
+  def log_prob_fn(key, seq):  # Updated signature
     return jnp.where(seq[0] == seq[1], 1.0, -100.0)
 
   update_fns = make_gibbs_update_fns(sequence_length=sequence_length, n_states=n_states)

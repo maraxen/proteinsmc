@@ -76,5 +76,5 @@ def test_cosine_schedule():
 
 
 def test_static_schedule():
-  assert static_schedule(beta_max=jnp.array(0.5)) == 0.5
-  assert static_schedule(beta_max=jnp.array(1.0)) == 1.0
+  assert static_schedule(_p=jnp.array(1, dtype=jnp.int32), _n=jnp.array(10, dtype=jnp.int32), beta_max=jnp.array(0.5)) == 0.5
+  assert static_schedule(_p=jnp.array(1, dtype=jnp.int32), _n=jnp.array(10, dtype=jnp.int32), beta_max=jnp.array(1.0)) == 1.0

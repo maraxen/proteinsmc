@@ -19,3 +19,4 @@ FunctionFloats = Float[Array, "n_fitness_funcs"]
 MPNNModel = mk_mpnn_model
 FitnessWeights = Float[Array, "n_fitness_funcs"]
 IslandFloats = Float[Array, "n_islands"]
+PerGenerationFloat = Float[Array, "generations"]

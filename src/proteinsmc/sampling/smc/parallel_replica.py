@@ -22,7 +22,6 @@ if TYPE_CHECKING:
     ScalarInt,
   )
 
-
 from proteinsmc.utils import (
   calculate_logZ_increment,
   calculate_population_fitness,
@@ -277,7 +276,7 @@ def island_smc_step(
   )
   log_weights = log_potential_values
 
-  # TODO(marielle): allow for adaptive
+  # Unconditional resampling for now - could be made adaptive in future
   final_population_for_step, ess, normalized_weights = resample(
     key_resample,
     mutated_population,

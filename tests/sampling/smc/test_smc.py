@@ -3,20 +3,19 @@ import pytest
 from jax import random
 
 from proteinsmc.sampling.smc import (
-  AnnealingScheduleConfig,
   SMCConfig,
   smc_sampler,
 )
-from proteinsmc.utils.annealing_schedules import linear_schedule
+from proteinsmc.utils.annealing_schedules import AnnealingScheduleConfig, linear_schedule
 from proteinsmc.utils.fitness import FitnessEvaluator, FitnessFunction
 
 
-def mock_protein_fitness_fn(key, seq, **kwargs):
+def mock_protein_fitness_fn(_key, seq, **kwargs):
   """Mock fitness function for protein sequences."""
   return jnp.sum(seq, axis=-1).astype(jnp.float32)
 
 
-def mock_nucleotide_fitness_fn(key, seq, **kwargs):
+def mock_nucleotide_fitness_fn(_key, seq, **kwargs):
   """Mock fitness function for nucleotide sequences."""
   return jnp.mean(seq, axis=-1).astype(jnp.float32)
 
@@ -28,10 +27,10 @@ def setup_smc_protein():
   template_sequence = "MKY"
 
   fitness_evaluator = FitnessEvaluator(
-    fitness_functions=[
-      FitnessFunction(func=mock_protein_fitness_fn, input_type="protein", name="mock1", args={}),
-      FitnessFunction(func=mock_protein_fitness_fn, input_type="protein", name="mock2", args={}),
-    ]
+    fitness_functions=(
+      FitnessFunction(func=mock_protein_fitness_fn, input_type="protein", name="mock1"),
+      FitnessFunction(func=mock_protein_fitness_fn, input_type="protein", name="mock2"),
+    )
   )
 
   annealing_config = AnnealingScheduleConfig(
@@ -68,14 +67,14 @@ def setup_smc_nucleotide():
   template_sequence = "ATGAAATAC"
 
   fitness_evaluator = FitnessEvaluator(
-    fitness_functions=[
+    fitness_functions=(
       FitnessFunction(
-        func=mock_nucleotide_fitness_fn, input_type="nucleotide", name="mock1", args={}
+        func=mock_nucleotide_fitness_fn, input_type="nucleotide", name="mock1"
       ),
       FitnessFunction(
-        func=mock_nucleotide_fitness_fn, input_type="nucleotide", name="mock2", args={}
+        func=mock_nucleotide_fitness_fn, input_type="nucleotide", name="mock2"
       ),
-    ]
+    )
   )
 
   annealing_config = AnnealingScheduleConfig(

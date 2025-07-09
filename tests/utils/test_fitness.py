@@ -35,18 +35,17 @@ made_mock_nucleotide_fitness_func = make_mock_fitness_function(
 )
 
 @pytest.fixture
-def protein_ff():
-  """Fixture for a protein-based fitness function."""
+def protein_ff() -> FitnessFunction:
+  """Fixture to create a mock protein fitness function."""
   return FitnessFunction(
     func=made_mock_protein_fitness_func,
     input_type="protein",
     name="mock_protein",
   )
 
-
 @pytest.fixture
-def nucleotide_ff():
-  """Fixture for a nucleotide-based fitness function."""
+def nucleotide_ff() -> FitnessFunction:
+  """Fixture to create a mock nucleotide fitness function."""
   return FitnessFunction(
     func=made_mock_nucleotide_fitness_func,
     input_type="nucleotide",
@@ -81,19 +80,19 @@ def test_fitness_function_invalid_input_type():
 
 def test_fitness_evaluator_init(protein_ff):
   """Test FitnessEvaluator initialization."""
-  fe = FitnessEvaluator(fitness_functions=[protein_ff])
+  fe = FitnessEvaluator(fitness_functions=(protein_ff,))
   assert len(fe.fitness_functions) == 1
 
 
 def test_fitness_evaluator_no_functions():
   """Test that FitnessEvaluator raises ValueError if no functions are provided."""
   with pytest.raises(ValueError):
-    FitnessEvaluator(fitness_functions=[])
+    FitnessEvaluator(fitness_functions=())
 
 
 def test_fitness_evaluator_get_functions_by_type(protein_ff, nucleotide_ff):
   """Test retrieving functions by type from FitnessEvaluator."""
-  fe = FitnessEvaluator(fitness_functions=[protein_ff, nucleotide_ff])
+  fe = FitnessEvaluator(fitness_functions=(protein_ff, nucleotide_ff,))
   protein_funcs = fe.get_functions_by_type("protein")
   nucleotide_funcs = fe.get_functions_by_type("nucleotide")
   assert len(protein_funcs) == 1
@@ -107,14 +106,13 @@ def test_calculate_population_fitness_nucleotide(protein_ff, nucleotide_ff):
   key = jax.random.PRNGKey(0)
   population = jnp.array([[0, 1, 2, 3, 0, 1]])
 
-  evaluator = FitnessEvaluator(fitness_functions=[protein_ff, nucleotide_ff])
+  evaluator = FitnessEvaluator(fitness_functions=(protein_ff, nucleotide_ff,))
 
   combined_fitness, components = calculate_population_fitness(
     key, population, "nucleotide", evaluator
   )
 
-  assert "mock_nucleotide" in components
-  assert "mock_protein" in components
-  assert jnp.allclose(components["mock_nucleotide"], jnp.array([3.0]))
-  assert jnp.allclose(components["mock_protein"], jnp.array([2.0]))
+
+  assert jnp.allclose(components[0], jnp.array([2.0]))
+  assert jnp.allclose(components[1], jnp.array([3.0]))
   assert jnp.allclose(combined_fitness, jnp.array([5.0]))

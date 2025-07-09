@@ -67,7 +67,7 @@ class FitnessFunction:
 class FitnessEvaluator:
   """Manager for collection of fitness functions."""
 
-  fitness_functions: list[FitnessFunction]
+  fitness_functions: tuple[FitnessFunction, ...]
   combine_func: Callable[[StackedPopulationSequenceFloats], PopulationSequenceFloats] | None = None
 
   def __post_init__(self) -> None:

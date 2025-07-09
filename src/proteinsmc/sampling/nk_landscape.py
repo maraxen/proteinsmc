@@ -123,8 +123,13 @@ def generate_nk_interactions(
       size=n - 1,
       fill_value=-1,
     )
-    possible_neighbors = possible_neighbors[possible_neighbors != -1]
-    num_possible = possible_neighbors.shape[0]
+    # Replace boolean indexing with JAX-compatible approach
+    valid_mask = possible_neighbors != -1
+    num_possible = jnp.sum(valid_mask)
+    # Use jnp.where to get indices, then take only the valid ones
+    valid_indices = jnp.where(valid_mask, size=n - 1, fill_value=-1)[0]
+    # Take only the first num_possible valid indices
+    possible_neighbors = possible_neighbors[valid_indices[:num_possible]]
 
     num_to_select = jnp.minimum(k, num_possible)
 
@@ -177,7 +182,7 @@ def generate_nk_model(
   return NKLandscape(interactions=interactions, fitness_tables=fitness_tables)
 
 
-@partial(jit, static_argnames=("n", "k"))
+@partial(jit, static_argnames=("landscape", "n", "k"))
 def calculate_nk_fitness_single_jax(
   single_sequence: NKInput,
   landscape: NKLandscape,

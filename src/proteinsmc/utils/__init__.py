@@ -7,6 +7,15 @@ from .annealing_schedules import (
   linear_schedule,
   static_schedule,
 )
+from .auto_tuning import (
+  AutoTuningConfig,
+  BenchmarkResult,
+  auto_tune_chunk_size,
+  create_test_population,
+  estimate_memory_usage,
+  get_device_memory_mb,
+  suggest_chunk_size_heuristic,
+)
 from .constants import (
   AA_CHAR_TO_INT_MAP,
   CODON_INT_TO_RES_INT_JAX,
@@ -42,9 +51,12 @@ from .metrics import (
 from .mutation import (
   _revert_x_codons_if_mutated,
   dispatch_mutation,
+  dispatch_mutation_single,
   diversify_initial_sequences,
   mutate,
+  mutate_single,
 )
+from .pmap_utils import distribute
 from .resampling import resample
 from .translation import reverse_translate, translate
 from .types import (
@@ -53,6 +65,7 @@ from .types import (
   IslandFloats,
   MPNNModel,
   NucleotideSequence,
+  PerGenerationFloat,
   PopulationNucleotideSequences,
   PopulationProteinSequences,
   PopulationSequenceBools,
@@ -63,6 +76,7 @@ from .types import (
   ScalarFloat,
   ScalarInt,
 )
+from .vmap_utils import chunked_vmap
 
 __all__ = [
   "AA_CHAR_TO_INT_MAP",
@@ -84,6 +98,13 @@ __all__ = [
   "exponential_schedule",
   "linear_schedule",
   "static_schedule",
+  "AutoTuningConfig",
+  "BenchmarkResult",
+  "auto_tune_chunk_size",
+  "create_test_population",
+  "estimate_memory_usage",
+  "get_device_memory_mb",
+  "suggest_chunk_size_heuristic",
   "FitnessEvaluator",
   "FitnessFunction",
   "calculate_population_fitness",
@@ -93,7 +114,9 @@ __all__ = [
   "_revert_x_codons_if_mutated",
   "diversify_initial_sequences",
   "mutate",
+  "mutate_single",
   "dispatch_mutation",
+  "dispatch_mutation_single",
   "resample",
   "translate",
   "reverse_translate",
@@ -117,4 +140,7 @@ __all__ = [
   "make_sequence_log_prob_fn",
   "generate_template_population",
   "IslandFloats",
+  "distribute",
+  "chunked_vmap",
+  "PerGenerationFloat",
 ]

@@ -25,7 +25,7 @@ def test_mcmc_sampler_output_shape(simple_sequence):
   key = jax.random.PRNGKey(0)
   num_samples = 100
 
-  def lpfn(x):
+  def lpfn(key, x):  # Updated signature
     return -jnp.sum(x)
 
   log_prob_fn = lpfn
@@ -42,7 +42,7 @@ def test_mcmc_sampler_converges():
   sequence_length = 5
   n_states = 2
 
-  def log_prob_fn(seq):
+  def log_prob_fn(key, seq):  # Updated signature
     return jnp.sum(seq) * 10.0
 
   proposal_fn = make_random_mutation_proposal_fn(n_states=n_states)
