@@ -11,7 +11,7 @@ import jax.numpy as jnp
 from jax import jit, vmap
 
 if TYPE_CHECKING:
-  from jaxtyping import PRNGKeyArray
+  from jaxtyping import Array, Float, PRNGKeyArray
 
   from proteinsmc.utils.types import (
     EvoSequence,
@@ -104,9 +104,9 @@ jax.tree_util.register_pytree_node_class(FitnessFunction)
 
 
 def make_fitness_function(
-  func: Callable[[PRNGKeyArray, EvoSequence], PopulationSequenceFloats],
+  func: Callable[[PRNGKeyArray, EvoSequence], Float],
   **kwargs: Any,  # noqa: ANN401
-) -> Callable[[PRNGKeyArray, EvoSequence], PopulationSequenceFloats]:
+) -> Callable[[PRNGKeyArray, EvoSequence], Float]:
   """Create a fitness function with the specified properties.
 
   Args:
@@ -119,9 +119,9 @@ def make_fitness_function(
   """
 
   @jit
-  def fitness_func(key: PRNGKeyArray, sequences: EvoSequence) -> PopulationSequenceFloats:
+  def fitness_func(key: PRNGKeyArray, sequence: EvoSequence) -> Float:
     """Call the provided fitness function."""
-    return func(key, sequences, **kwargs)
+    return func(key, sequence, **kwargs)
 
   return fitness_func
 
@@ -129,7 +129,7 @@ def make_fitness_function(
 def make_combine_fitness_function(
   func: Callable[[StackedPopulationSequenceFloats], FunctionFloats],
   **kwargs: Any,  # noqa: ANN401
-) -> Callable:
+) -> Callable[[Array], Float]:
   """Create a function to combine fitness scores.
 
   Needed for keeping sampling compatible with JAX's JIT compilation.
@@ -155,8 +155,8 @@ def make_combine_fitness_function(
 
   @jit
   def combine_func(
-    fitness_components: StackedPopulationSequenceFloats,
-  ) -> StackedPopulationSequenceFloats:
+    fitness_components: Array,
+  ) -> Float:
     """Combine individual fitness scores into a single score."""
     return func(fitness_components, **kwargs)
 
@@ -300,3 +300,53 @@ def make_sequence_log_prob_fn(
     return fitness_batch[0] if seq.ndim == 1 else fitness_batch
 
   return log_prob_fn
+
+
+def chunked_calculate_population_fitness(
+  key: PRNGKeyArray,
+  population: PopulationSequences,
+  fitness_evaluator: FitnessEvaluator,
+  sequence_type: Literal["nucleotide", "protein"],
+  chunk_size: int = 32,
+) -> tuple[Array, Array]:
+  """Calculate population fitness in chunks for memory efficiency using lax.scan."""
+  population_size = population.shape[0]
+  num_chunks = (population_size + chunk_size - 1) // chunk_size
+
+  padded_size = num_chunks * chunk_size
+  pad_width = ((0, padded_size - population_size), (0, 0))
+  population_padded = jnp.pad(population, pad_width, mode="constant")
+
+  population_chunked = population_padded.reshape(
+    (num_chunks, chunk_size, population.shape[-1]),
+  )
+
+  keys = jax.random.split(key, num_chunks)
+
+  def scan_body(
+    carry: None,
+    chunk_data: tuple[PRNGKeyArray, PopulationSequences],
+  ) -> tuple[None, tuple[Array, Array]]:
+    """Process each chunk of the population to calculate fitness."""
+    chunk_key, chunk_pop = chunk_data
+    fitness_vals, fitness_comps = calculate_population_fitness(
+      chunk_key,
+      chunk_pop,
+      sequence_type,
+      fitness_evaluator,
+    )
+    return carry, (fitness_vals, fitness_comps)
+
+  _, (fitness_chunked, components_chunked) = jax.lax.scan(
+    scan_body,
+    None,
+    (keys, population_chunked),
+  )
+
+  flat_fitness = fitness_chunked.flatten()
+
+  num_funcs = components_chunked.shape[1]
+  transposed_components = components_chunked.transpose((1, 0, 2))
+  flat_components = transposed_components.reshape((num_funcs, padded_size))
+
+  return flat_fitness[:population_size], flat_components[:, :population_size]

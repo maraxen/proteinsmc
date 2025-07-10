@@ -11,15 +11,13 @@ import jax.numpy as jnp
 from jax import jit, lax, vmap
 
 if TYPE_CHECKING:
-  from jaxtyping import PRNGKeyArray
+  from jaxtyping import Float, Int, PRNGKeyArray
 
   from proteinsmc.utils import (
     AnnealingScheduleConfig,
     FitnessEvaluator,
     IslandFloats,
     PopulationSequences,
-    ScalarFloat,
-    ScalarInt,
   )
 
 from proteinsmc.utils import (
@@ -125,11 +123,11 @@ class IslandState:
 
   key: PRNGKeyArray
   population: PopulationSequences
-  beta: ScalarFloat
-  logZ_estimate: ScalarFloat  # noqa: N815
-  ess: ScalarFloat
-  mean_fitness: ScalarFloat
-  step: ScalarInt = field(default_factory=lambda: jnp.array(0, dtype=jnp.int32))
+  beta: Float
+  logZ_estimate: Float  # noqa: N815
+  ess: Float
+  mean_fitness: Float
+  step: Int = field(default_factory=lambda: jnp.array(0, dtype=jnp.int32))
 
   def tree_flatten(self: IslandState) -> tuple[tuple, dict]:
     """Flatten the dataclass for JAX PyTree compatibility."""
@@ -157,8 +155,8 @@ class PRSMCCarryState:
 
   current_overall_state: IslandState
   prng_key: PRNGKeyArray
-  total_swaps_attempted: ScalarInt = field(default_factory=lambda: jnp.array(0, dtype=jnp.int32))
-  total_swaps_accepted: ScalarInt = field(default_factory=lambda: jnp.array(0, dtype=jnp.int32))
+  total_swaps_attempted: Int = field(default_factory=lambda: jnp.array(0, dtype=jnp.int32))
+  total_swaps_accepted: Int = field(default_factory=lambda: jnp.array(0, dtype=jnp.int32))
 
   def tree_flatten(self: PRSMCCarryState) -> tuple[tuple, dict]:
     """Flatten the dataclass for JAX PyTree compatibility."""
@@ -345,7 +343,7 @@ def island_smc_step(
 def island_smc_step_with_metrics(
   island_state: IslandState,
   config: PRSMCStepConfig,
-) -> tuple[IslandState, tuple[ScalarFloat, ScalarFloat, ScalarFloat, ScalarFloat]]:
+) -> tuple[IslandState, tuple[Float, Float, Float, Float]]:
   """Perform a single step of the island SMC algorithm with metrics.
 
   Args:
@@ -353,7 +351,7 @@ def island_smc_step_with_metrics(
     config (PRSMCStepConfig): Configuration for the SMC step.
 
   Returns:
-    tuple[IslandState, tuple[ScalarFloat, ScalarFloat, ScalarFloat, ScalarFloat]]:
+    tuple[IslandState, tuple[Float, Float, Float, Float]]:
       Updated island state and a tuple containing:
         - Effective Sample Size (ESS)
         - Mean fitness of the population
@@ -391,20 +389,20 @@ vmapped_smc_step = jit(
 @partial(jit, static_argnames=("config",))
 def migrate(
   island_states: IslandState,
-  meta_beta_current_value: ScalarFloat,
+  meta_beta_current_value: Float,
   key_exchange: PRNGKeyArray,
   config: ExchangeConfig,
-) -> tuple[IslandState, ScalarInt]:
+) -> tuple[IslandState, Int]:
   """Perform replica exchange attempts. Acceptance is scaled by meta_beta_current_value.
 
   Args:
     island_states (IslandState): Current state of the islands.
-    meta_beta_current_value (ScalarFloat): Current value of the meta beta parameter.
+    meta_beta_current_value (Float): Current value of the meta beta parameter.
     key_exchange (PRNGKeyArray): JAX PRNG key for random operations.
     config (ExchangeConfig): Configuration for the exchange process.
 
   Returns:
-    tuple[IslandState, ScalarInt]: Updated island states and total number of accepted swaps.
+    tuple[IslandState, Int]: Updated island states and total number of accepted swaps.
 
   """
   all_population_stacked = island_states.population
@@ -565,7 +563,7 @@ def prsmc_sampler(
   @partial(jit, static_argnames=("step_config",))
   def _parallel_replica_scan_step(
     carry_state: PRSMCCarryState,
-    step_idx: ScalarInt,
+    step_idx: Int,
     step_config: PRSMCStepConfig,
   ) -> tuple[PRSMCCarryState, dict]:
     key_step, next_smc_loop_key = jax.random.split(carry_state.prng_key)
@@ -656,6 +654,10 @@ def prsmc_sampler(
     final_total_swaps_accepted / final_total_swaps_attempted,
     jnp.array(0.0, dtype=jnp.float32),
   )
+
+  if not isinstance(swap_acceptance_rate, jax.Array):
+    msg = f"Expected swap_acceptance_rate to be a jax.Array, got {type(swap_acceptance_rate)}"
+    raise TypeError(msg)
 
   return ParallelReplicaSMCOutput(
     input_config=config,

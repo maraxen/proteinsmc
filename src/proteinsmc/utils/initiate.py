@@ -19,14 +19,16 @@ def generate_template_population(
   input_sequence_type: Literal["protein", "nucleotide"],
   output_sequence_type: Literal["protein", "nucleotide"] = "nucleotide",
 ) -> PopulationSequences:
-  """Creates a JAX array representing a population from a single string sequence.
+  """Create a JAX array representing a population from a single string sequence.
 
   This is a utility to easily create the `template_sequences` needed for `SMCConfig`.
 
   Args:
       initial_sequence: The sequence as a string.
       population_size: The number of identical sequences in the population.
-      sequence_type: The type of sequence, 'protein' or 'nucleotide'.
+      input_sequence_type: The type of the initial sequence, either "protein" or "nucleotide".
+      output_sequence_type: The type of the output sequences, either "protein" or "nucleotide".
+          Defaults to "nucleotide".
 
   Returns:
       A JAX array of shape (population_size, sequence_length).

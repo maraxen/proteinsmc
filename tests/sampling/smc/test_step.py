@@ -1,7 +1,9 @@
 """Tests for SMC step logic and chunked processing."""
 
+
 import jax
 import jax.numpy as jnp
+import chex
 import pytest
 from jax import random
 
@@ -63,7 +65,7 @@ def test_safe_weighted_mean():
   
   # Should compute weighted mean of valid values: (1*0.1 + 2*0.2 + 4*0.4) / (0.1+0.2+0.4)
   expected = (1.0 * 0.1 + 2.0 * 0.2 + 4.0 * 0.4) / (0.1 + 0.2 + 0.4)
-  assert jnp.isclose(result, expected)
+  chex.assert_trees_all_close(result, expected)
 
 
 def test_safe_weighted_mean_no_valid():
@@ -74,8 +76,8 @@ def test_safe_weighted_mean_no_valid():
   sum_valid_w = jnp.array(0.0)
   
   result = safe_weighted_mean(metric, weights, valid_mask, sum_valid_w)
-  
-  assert jnp.isnan(result)
+  # Check that result is NaN
+  assert jnp.isnan(result), f"Expected NaN, got {result}"
 
 
 def test_safe_weighted_mean_type_validation():
@@ -97,8 +99,8 @@ def test_chunked_mutation_step():
   
   mutated = chunked_mutation_step(key, population, mutation_rate, sequence_type, chunk_size)
   
-  assert mutated.shape == population.shape
-  assert mutated.dtype == population.dtype
+  chex.assert_shape(mutated, population.shape)
+  chex.assert_equal(mutated.dtype, population.dtype)
 
 
 
@@ -113,9 +115,9 @@ def test_chunked_fitness_evaluation(sample_fitness_evaluator):
     key, population, sequence_type, sample_fitness_evaluator, chunk_size
   )
   
-  assert fitness_values.shape == (population.shape[0],)
-  assert fitness_components.shape == (population.shape[0], 1)  # One fitness function
-  assert jnp.all(jnp.isfinite(fitness_values))
+  chex.assert_shape(fitness_values, (population.shape[0],))
+  chex.assert_shape(fitness_components, (population.shape[0], 1))  # One fitness function
+  chex.assert_equal(jnp.all(jnp.isfinite(fitness_values)), True)
 
 
 def test_smc_step(sample_smc_config):
@@ -143,10 +145,9 @@ def test_smc_step(sample_smc_config):
   next_state, metrics = smc_step(state, sample_smc_config)
   
   # Check that state is properly updated
-  assert next_state.population.shape == state.population.shape
-  assert next_state.step == state.step + 1
-  assert jnp.isfinite(next_state.logZ_estimate)
-  
+  chex.assert_shape(next_state.population, state.population.shape)
+  chex.assert_equal(next_state.step, state.step + 1)
+  chex.assert_equal(jnp.isfinite(next_state.logZ_estimate), True)
   # Check that metrics are returned
   assert "mean_combined_fitness" in metrics
   assert "max_combined_fitness" in metrics
@@ -154,12 +155,11 @@ def test_smc_step(sample_smc_config):
   assert "ess" in metrics
   assert "entropy" in metrics
   assert "beta" in metrics
-  
   # Check metric shapes and values
   assert jnp.isfinite(metrics["mean_combined_fitness"]) or jnp.isnan(metrics["mean_combined_fitness"])
   assert jnp.isfinite(metrics["max_combined_fitness"]) or jnp.isnan(metrics["max_combined_fitness"])
-  assert metrics["fitness_components"].shape == (population.shape[0], 1)
-  assert 0 <= metrics["ess"] <= population.shape[0]
+  chex.assert_shape(metrics["fitness_components"], (population.shape[0], 1))
+  chex.assert_equal(0 <= metrics["ess"] <= population.shape[0], True)
 
 
 def test_smc_step_with_chunking(sample_smc_config):
@@ -197,8 +197,8 @@ def test_smc_step_with_chunking(sample_smc_config):
   
   next_state, metrics = smc_step(state, config_small_chunk)
   
-  assert next_state.population.shape == state.population.shape
-  assert jnp.isfinite(next_state.logZ_estimate)
+  chex.assert_shape(next_state.population, state.population.shape)
+  chex.assert_equal(jnp.isfinite(next_state.logZ_estimate), True)
   assert "mean_combined_fitness" in metrics
 
 
@@ -222,8 +222,8 @@ def test_chunked_processing_consistency():
   fitness2, components2 = chunked_fitness_evaluation(key, population, "protein", fitness_evaluator, chunk_size=4)
   
   # Results should be identical regardless of chunk size
-  assert jnp.allclose(fitness1, fitness2)
-  assert jnp.allclose(components1, components2)
+  chex.assert_trees_all_close(fitness1, fitness2)
+  chex.assert_trees_all_close(components1, components2)
 
 
 def test_memory_config_integration():
@@ -264,4 +264,4 @@ def test_memory_config_integration():
   
   # Should run without error regardless of chunking setting
   next_state, metrics = smc_step(state, config_no_chunk)
-  assert next_state.population.shape == state.population.shape
+  chex.assert_shape(next_state.population, state.population.shape)

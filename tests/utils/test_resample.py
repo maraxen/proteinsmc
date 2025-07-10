@@ -1,5 +1,7 @@
+
 import jax
 import jax.numpy as jnp
+import chex
 import pytest
 
 from proteinsmc.utils.resampling import resample
@@ -17,10 +19,10 @@ def test_resample_shapes(simple_particles):
 
   resampled_particles, ess, normalized_weights = resample(key, simple_particles, log_weights)
 
-  assert resampled_particles.shape == simple_particles.shape
+  chex.assert_shape(resampled_particles, simple_particles.shape)
   assert isinstance(ess, jax.Array)
-  assert ess.shape == ()
-  assert normalized_weights.shape == (n_particles,)
+  chex.assert_shape(ess, ())
+  chex.assert_shape(normalized_weights, (n_particles,))
 
 
 def test_resample_uniform_weights(simple_particles):
@@ -29,8 +31,8 @@ def test_resample_uniform_weights(simple_particles):
 
   resampled_particles, ess, normalized_weights = resample(key, simple_particles, log_weights)
 
-  assert jnp.allclose(ess, simple_particles.shape[0])
-  assert jnp.allclose(
+  chex.assert_trees_all_close(ess, simple_particles.shape[0])
+  chex.assert_trees_all_close(
     normalized_weights, jnp.full_like(log_weights, 1.0 / simple_particles.shape[0])
   )
 
@@ -41,10 +43,13 @@ def test_resample_skewed_weights(simple_particles):
 
   resampled_particles, ess, normalized_weights = resample(key, simple_particles, log_weights)
 
-  assert jnp.allclose(ess, 1.0)
+  chex.assert_trees_all_close(ess, 1.0)
   expected_weights = jnp.array([0.0, 0.0, 0.0, 1.0])
-  assert jnp.allclose(normalized_weights, expected_weights, atol=1e-7)
-  assert jnp.all(resampled_particles == simple_particles[-1])
+  chex.assert_trees_all_close(normalized_weights, expected_weights, atol=1e-7)
+  chex.assert_trees_all_equal(
+    resampled_particles,
+    jnp.tile(simple_particles[-1], (simple_particles.shape[0], 1)),
+  )
 
 
 def test_resample_inf_weights(simple_particles):
@@ -53,7 +58,7 @@ def test_resample_inf_weights(simple_particles):
 
   resampled_particles, ess, normalized_weights = resample(key, simple_particles, log_weights)
 
-  assert jnp.allclose(ess, simple_particles.shape[0])
-  assert jnp.allclose(
+  chex.assert_trees_all_close(ess, simple_particles.shape[0])
+  chex.assert_trees_all_close(
     normalized_weights, jnp.full_like(log_weights, 1.0 / simple_particles.shape[0])
   )

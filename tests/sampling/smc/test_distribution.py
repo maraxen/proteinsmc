@@ -1,7 +1,9 @@
 """Tests for device distribution strategies."""
 
+
 import jax
 import jax.numpy as jnp
+import chex
 import pytest
 
 from proteinsmc.sampling.smc.distribution import (
@@ -20,11 +22,10 @@ def test_device_strategy_creation():
     active_devices=4,
     chunk_size=64,
   )
-  
-  assert strategy.strategy == "direct"
-  assert strategy.islands_per_device == 1
-  assert strategy.active_devices == 4
-  assert strategy.chunk_size == 64
+  chex.assert_equal(strategy.strategy, "direct")
+  chex.assert_equal(strategy.islands_per_device, 1)
+  chex.assert_equal(strategy.active_devices, 4)
+  chex.assert_equal(strategy.chunk_size, 64)
 
 
 def test_get_island_distribution_strategy_direct():
@@ -37,10 +38,9 @@ def test_get_island_distribution_strategy_direct():
     population_size_per_island=100,
     sequence_length=50,
   )
-  
-  assert strategy.strategy == "direct"
-  assert strategy.islands_per_device == 1
-  assert strategy.active_devices == n_islands
+  chex.assert_equal(strategy.strategy, "direct")
+  chex.assert_equal(strategy.islands_per_device, 1)
+  chex.assert_equal(strategy.active_devices, n_islands)
   assert strategy.chunk_size > 0
 
 
@@ -54,10 +54,9 @@ def test_get_island_distribution_strategy_batched():
     population_size_per_island=50,
     sequence_length=25,
   )
-  
-  assert strategy.strategy == "batched"
+  chex.assert_equal(strategy.strategy, "batched")
   assert strategy.islands_per_device >= 1
-  assert strategy.active_devices == n_devices
+  chex.assert_equal(strategy.active_devices, n_devices)
   assert strategy.chunk_size > 0
 
 
@@ -68,18 +67,15 @@ def test_estimate_island_memory_usage():
     sequence_length=50,
     islands_per_device=2,
   )
-  
-  assert memory_mb > 0
+  chex.assert_equal(memory_mb > 0, True)
   assert isinstance(memory_mb, float)
-  
   # Test with different parameters
   memory_mb_larger = estimate_island_memory_usage(
     population_size_per_island=200,
     sequence_length=100,
     islands_per_device=2,
   )
-  
-  assert memory_mb_larger > memory_mb  # Larger populations should use more memory
+  chex.assert_equal(memory_mb_larger > memory_mb, True)  # Larger populations should use more memory
 
 
 def test_validate_island_distribution_feasible():
@@ -97,8 +93,7 @@ def test_validate_island_distribution_feasible():
     strategy=strategy,
     available_memory_mb=8 * 1024,  # 8GB
   )
-  
-  assert result["feasible"] is True
+  chex.assert_equal(result["feasible"], True)
   assert isinstance(result["estimated_memory_mb"], (int, float)) and result["estimated_memory_mb"] > 0
   assert isinstance(result["safe_limit_mb"], (int, float)) and result["safe_limit_mb"] > 0
   assert isinstance(result["recommendation"], str) and "Configuration is feasible" in result["recommendation"]
@@ -119,12 +114,11 @@ def test_validate_island_distribution_infeasible():
     strategy=strategy,
     available_memory_mb=100,  # Very limited memory (100MB)
   )
-  
-  assert result["feasible"] is False
+  chex.assert_equal(result["feasible"], False)
   estimated_mem = result["estimated_memory_mb"]
   safe_limit = result["safe_limit_mb"]
   assert isinstance(estimated_mem, (int, float)) and isinstance(safe_limit, (int, float))
-  assert estimated_mem > safe_limit
+  chex.assert_equal(estimated_mem > safe_limit, True)
   recommendation = result["recommendation"]
   assert isinstance(recommendation, str) and "Consider reducing population size" in recommendation
 
@@ -136,24 +130,21 @@ def test_memory_estimation_scaling():
     sequence_length=50,
     islands_per_device=1,
   )
-  
   # Double population size
   double_pop_memory = estimate_island_memory_usage(
     population_size_per_island=200,
     sequence_length=50,
     islands_per_device=1,
   )
-  
   # Double islands per device
   double_islands_memory = estimate_island_memory_usage(
     population_size_per_island=100,
     sequence_length=50,
     islands_per_device=2,
   )
-  
   # Both should approximately double the memory usage
-  assert abs(double_pop_memory - 2 * base_memory) / base_memory < 0.1
-  assert abs(double_islands_memory - 2 * base_memory) / base_memory < 0.1
+  chex.assert_equal(abs(double_pop_memory - 2 * base_memory) / base_memory < 0.1, True)
+  chex.assert_equal(abs(double_islands_memory - 2 * base_memory) / base_memory < 0.1, True)
 
 
 def test_strategy_memory_awareness():
@@ -165,7 +156,6 @@ def test_strategy_memory_awareness():
     sequence_length=500,
     available_memory_mb=1024,  # 1GB
   )
-  
   # Large memory scenario
   strategy_large = get_island_distribution_strategy(
     n_islands=8,
@@ -173,11 +163,8 @@ def test_strategy_memory_awareness():
     sequence_length=500,
     available_memory_mb=16 * 1024,  # 16GB
   )
-  
-  # With more memory, we might be able to fit more islands per device
-  # The exact behavior depends on the algorithm, but we test that it runs
-  assert strategy_small.islands_per_device >= 1
-  assert strategy_large.islands_per_device >= 1
+  chex.assert_equal(strategy_small.islands_per_device >= 1, True)
+  chex.assert_equal(strategy_large.islands_per_device >= 1, True)
 
 
 def test_chunk_size_selection():
@@ -187,19 +174,16 @@ def test_chunk_size_selection():
     population_size_per_island=100,
     sequence_length=50,
   )
-  
   # Chunk size should be reasonable (not too small, not larger than population)
-  assert 16 <= strategy.chunk_size <= 100
-  
+  chex.assert_equal(16 <= strategy.chunk_size <= 100, True)
   # Test with larger population
   strategy_large = get_island_distribution_strategy(
     n_islands=4,
     population_size_per_island=1000,
     sequence_length=50,
   )
-  
-  assert strategy_large.chunk_size > 0
-  assert strategy_large.chunk_size <= 1000
+  chex.assert_equal(strategy_large.chunk_size > 0, True)
+  chex.assert_equal(strategy_large.chunk_size <= 1000, True)
 
 
 def test_device_strategy_frozen():
@@ -210,7 +194,6 @@ def test_device_strategy_frozen():
     active_devices=2,
     chunk_size=32,
   )
-  
   # Should not be able to modify fields (frozen dataclass)
   with pytest.raises(AttributeError):
     strategy.chunk_size = 64  # type: ignore[misc]

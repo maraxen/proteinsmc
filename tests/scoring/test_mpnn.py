@@ -1,5 +1,7 @@
+
 import jax
 import jax.numpy as jnp
+import chex
 import pytest
 
 from proteinsmc.scoring.mpnn import make_mpnn_score
@@ -26,7 +28,7 @@ def test_mpnn_score(mock_model):
   score_func = make_mpnn_score(mock_model)
 
   expected_score = jnp.sum(protein_sequence)
-  assert score_func(key, protein_sequence) == expected_score
+  chex.assert_trees_all_equal(score_func(key, protein_sequence), expected_score)
 
 
 def test_mpnn_score_empty_sequence(mock_model):
@@ -37,4 +39,4 @@ def test_mpnn_score_empty_sequence(mock_model):
   score_func = make_mpnn_score(mock_model)
 
   expected_score = 0.0
-  assert score_func(key, protein_sequence) == expected_score
+  chex.assert_trees_all_equal(score_func(key, protein_sequence), expected_score)

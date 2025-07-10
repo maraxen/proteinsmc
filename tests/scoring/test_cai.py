@@ -1,4 +1,6 @@
+
 import jax.numpy as jnp
+import chex
 import pytest
 
 from proteinsmc.scoring.cai import cai_score
@@ -44,4 +46,4 @@ def test_cai_score(nuc_seq_str, aa_seq_str, expected_cai):
   nuc_seq = nuc_to_int(nuc_seq_str)
   aa_seq = aa_to_int(aa_seq_str)
   score = cai_score(nuc_seq, aa_seq)
-  assert jnp.allclose(score, expected_cai, atol=1e-5)
+  chex.assert_trees_all_close(score, expected_cai, atol=1e-5)

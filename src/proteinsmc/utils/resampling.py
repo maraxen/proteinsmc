@@ -9,9 +9,9 @@ import jax.numpy as jnp
 from jax import jit, random
 
 if TYPE_CHECKING:
-  from jaxtyping import PRNGKeyArray
+  from jaxtyping import Float, PRNGKeyArray
 
-  from proteinsmc.utils.types import PopulationSequenceFloats, PopulationSequences, ScalarFloat
+  from proteinsmc.utils.types import PopulationSequenceFloats, PopulationSequences
 
 
 @jit
@@ -19,7 +19,7 @@ def resample(
   key: PRNGKeyArray,
   population: PopulationSequences,
   log_weights: PopulationSequenceFloats,
-) -> tuple[PopulationSequences, ScalarFloat, PopulationSequenceFloats]:
+) -> tuple[PopulationSequences, Float, PopulationSequenceFloats]:
   """Perform systematic resampling on a population.
 
   Args:

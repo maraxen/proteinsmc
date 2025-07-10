@@ -1,7 +1,9 @@
 """Tests for SMC data structures and PyTree functionality."""
 
+
 import jax
 import jax.numpy as jnp
+import chex
 import pytest
 from jax import random
 
@@ -73,10 +75,10 @@ def test_memory_config_pytree():
   children, aux_data = config.tree_flatten()
   reconstructed = MemoryConfig.tree_unflatten(aux_data, children)
   
-  assert children == ()  # Should be empty since all fields are auxiliary
-  assert reconstructed.population_chunk_size == config.population_chunk_size
-  assert reconstructed.enable_chunked_vmap == config.enable_chunked_vmap
-  assert reconstructed.device_memory_fraction == config.device_memory_fraction
+  chex.assert_equal(children, ())  # Should be empty since all fields are auxiliary
+  chex.assert_equal(reconstructed.population_chunk_size, config.population_chunk_size)
+  chex.assert_equal(reconstructed.enable_chunked_vmap, config.enable_chunked_vmap)
+  chex.assert_trees_all_close(reconstructed.device_memory_fraction, config.device_memory_fraction)
 
 
 def test_smc_config_pytree(sample_smc_config):
@@ -85,10 +87,10 @@ def test_smc_config_pytree(sample_smc_config):
   children, aux_data = sample_smc_config.tree_flatten()
   reconstructed = SMCConfig.tree_unflatten(aux_data, children)
   
-  assert children == ()  # Should be empty since all fields are auxiliary
-  assert reconstructed.template_sequence == sample_smc_config.template_sequence
-  assert reconstructed.population_size == sample_smc_config.population_size
-  assert reconstructed.mutation_rate == sample_smc_config.mutation_rate
+  chex.assert_equal(children, ())  # Should be empty since all fields are auxiliary
+  chex.assert_equal(reconstructed.template_sequence, sample_smc_config.template_sequence)
+  chex.assert_equal(reconstructed.population_size, sample_smc_config.population_size)
+  chex.assert_trees_all_close(reconstructed.mutation_rate, sample_smc_config.mutation_rate)
 
 
 def test_smc_carry_state_pytree():
@@ -108,11 +110,11 @@ def test_smc_carry_state_pytree():
   children, aux_data = state.tree_flatten()
   reconstructed = SMCCarryState.tree_unflatten(aux_data, children)
   
-  assert len(children) == 5  # All fields are JAX arrays
-  assert aux_data == {}  # No auxiliary data
-  assert jnp.array_equal(reconstructed.population, population)
-  assert reconstructed.logZ_estimate == state.logZ_estimate
-  assert reconstructed.beta == state.beta
+  chex.assert_equal(len(children), 5)  # All fields are JAX arrays
+  chex.assert_equal(aux_data, {})  # No auxiliary data
+  chex.assert_trees_all_equal(reconstructed.population, population)
+  chex.assert_trees_all_close(reconstructed.logZ_estimate, state.logZ_estimate)
+  chex.assert_trees_all_close(reconstructed.beta, state.beta)
 
 
 def test_smc_output_pytree(sample_smc_config):
@@ -136,11 +138,11 @@ def test_smc_output_pytree(sample_smc_config):
   children, aux_data = output.tree_flatten()
   reconstructed = SMCOutput.tree_unflatten(aux_data, children)
   
-  assert len(children) == 7  # Number of JAX array fields
+  chex.assert_equal(len(children), 7)  # Number of JAX array fields
   assert "final_logZhat" in aux_data
   assert "final_amino_acid_entropy" in aux_data
-  assert jnp.array_equal(reconstructed.mean_combined_fitness_per_gen, output.mean_combined_fitness_per_gen)
-  assert reconstructed.final_logZhat == output.final_logZhat
+  chex.assert_trees_all_equal(reconstructed.mean_combined_fitness_per_gen, output.mean_combined_fitness_per_gen)
+  chex.assert_trees_all_close(reconstructed.final_logZhat, output.final_logZhat)
 
 
 def test_pytree_registration():
@@ -158,7 +160,7 @@ def test_pytree_registration():
   
   # This should work without errors if PyTree registration is correct
   leaves = jax.tree_util.tree_leaves(state)
-  assert len(leaves) == 5  # key, population, logZ_estimate, beta, step
+  chex.assert_equal(len(leaves), 5)  # key, population, logZ_estimate, beta, step
   
   # Test with JAX transformations
   def dummy_transform(state):
@@ -167,31 +169,31 @@ def test_pytree_registration():
   # Stack the fields to create a batched PyTree for vmap
   states = jax.tree_util.tree_map(lambda x: jnp.stack([x, x]), state)
   result = jax.vmap(dummy_transform)(states)
-  assert result.shape == (2,)
+  chex.assert_shape(result, (2,))
 
 
 def test_memory_config_defaults():
   """Test MemoryConfig default values."""
   config = MemoryConfig()
   
-  assert config.population_chunk_size == 64
-  assert config.enable_chunked_vmap is True
-  assert config.device_memory_fraction == 0.8
+  chex.assert_equal(config.population_chunk_size, 64)
+  chex.assert_equal(config.enable_chunked_vmap, True)
+  chex.assert_trees_all_close(config.device_memory_fraction, 0.8)
 
 
 def test_smc_config_validation_ready(sample_smc_config):
   """Test that SMCConfig contains all necessary fields for validation."""
   # Ensure all required fields are present
-  assert hasattr(sample_smc_config, 'template_sequence')
-  assert hasattr(sample_smc_config, 'population_size')
-  assert hasattr(sample_smc_config, 'mutation_rate')
-  assert hasattr(sample_smc_config, 'sequence_type')
-  assert hasattr(sample_smc_config, 'fitness_evaluator')
-  assert hasattr(sample_smc_config, 'memory_config')
+  chex.assert_equal(hasattr(sample_smc_config, 'template_sequence'), True)
+  chex.assert_equal(hasattr(sample_smc_config, 'population_size'), True)
+  chex.assert_equal(hasattr(sample_smc_config, 'mutation_rate'), True)
+  chex.assert_equal(hasattr(sample_smc_config, 'sequence_type'), True)
+  chex.assert_equal(hasattr(sample_smc_config, 'fitness_evaluator'), True)
+  chex.assert_equal(hasattr(sample_smc_config, 'memory_config'), True)
   
   # Test that values are reasonable
-  assert sample_smc_config.population_size > 0
-  assert 0 <= sample_smc_config.mutation_rate <= 1
+  chex.assert_equal(sample_smc_config.population_size > 0, True)
+  chex.assert_equal(0 <= sample_smc_config.mutation_rate <= 1, True)
   assert sample_smc_config.sequence_type in ["protein", "nucleotide"]
 
 
@@ -207,6 +209,6 @@ def test_smc_carry_state_default_step():
     beta=jnp.array(0.5),
   )
   
-  assert state.step == 0
+  chex.assert_equal(state.step, 0)
   assert isinstance(state.step, jax.Array)
-  assert state.step.dtype == jnp.int32
+  chex.assert_equal(state.step.dtype, jnp.int32)

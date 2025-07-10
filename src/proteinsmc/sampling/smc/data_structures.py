@@ -11,15 +11,13 @@ import jax.numpy as jnp
 from proteinsmc.utils import AutoTuningConfig
 
 if TYPE_CHECKING:
-  from jaxtyping import PRNGKeyArray
+  from jaxtyping import Float, Int, PRNGKeyArray
 
   from proteinsmc.utils import (
     AnnealingScheduleConfig,
     FitnessEvaluator,
     PerGenerationFloat,
     PopulationSequences,
-    ScalarFloat,
-    ScalarInt,
   )
 
 
@@ -144,9 +142,9 @@ class SMCCarryState:
 
   key: PRNGKeyArray
   population: PopulationSequences
-  logZ_estimate: ScalarFloat  # noqa: N815
-  beta: ScalarFloat
-  step: ScalarInt = field(default_factory=lambda: jnp.array(0, dtype=jnp.int32))
+  logZ_estimate: Float  # noqa: N815
+  beta: Float
+  step: Int = field(default_factory=lambda: jnp.array(0, dtype=jnp.int32))
 
   def tree_flatten(self: SMCCarryState) -> tuple[tuple, dict]:
     """Flatten the dataclass for JAX PyTree compatibility."""
@@ -181,8 +179,8 @@ class SMCOutput:
   beta_per_gen: PerGenerationFloat
   ess_per_gen: PerGenerationFloat
   fitness_components_per_gen: PerGenerationFloat
-  final_logZhat: ScalarFloat  # noqa: N815
-  final_amino_acid_entropy: ScalarFloat
+  final_logZhat: Float  # noqa: N815
+  final_amino_acid_entropy: Float
 
   def tree_flatten(self: SMCOutput) -> tuple[tuple, dict]:
     """Flatten the dataclass for JAX PyTree compatibility."""

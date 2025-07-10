@@ -13,20 +13,20 @@ from jax import jit, random
 if TYPE_CHECKING:
   from jaxtyping import Float, PRNGKeyArray
 
-  from proteinsmc.utils.types import EvoSequence, PopulationSequences, ScalarFloat
+  from proteinsmc.utils.types import EvoSequence, PopulationSequences
 
 
 @dataclass(frozen=True)
 class MCMCOutput:
   """Data structure to hold the output of the MCMC sampler."""
 
-  final_samples: PopulationSequences
+  samples: PopulationSequences
   final_state: EvoSequence
   final_fitness: Float
 
   def tree_flatten(self) -> tuple[tuple, dict]:
     """Flatten the dataclass for JAX PyTree compatibility."""
-    children = (self.final_samples, self.final_state, self.final_fitness)
+    children = (self.samples, self.final_state, self.final_fitness)
     aux_data = {}
     return (children, aux_data)
 
@@ -34,7 +34,7 @@ class MCMCOutput:
   def tree_unflatten(cls, _aux_data: dict, children: tuple) -> MCMCOutput:
     """Unflatten the dataclass for JAX PyTree compatibility."""
     return cls(
-      final_samples=children[0],
+      samples=children[0],
       final_state=children[1],
       final_fitness=children[2],
     )
@@ -72,7 +72,7 @@ def mcmc_sampler(
   key: PRNGKeyArray,
   initial_state: EvoSequence,
   num_samples: int,
-  log_prob_fn: Callable[[PRNGKeyArray, EvoSequence], ScalarFloat],
+  log_prob_fn: Callable[[PRNGKeyArray, EvoSequence], Float],
   proposal_fn: Callable[[PRNGKeyArray, EvoSequence], EvoSequence],
 ) -> MCMCOutput:
   """Run the Metropolis-Hastings MCMC sampler.
@@ -111,8 +111,8 @@ def mcmc_sampler(
 
     return next_state, samples, jnp.where(accept, proposed_log_prob, current_log_prob)
 
-  samples = jnp.zeros((num_samples, *initial_state.shape))
-  final_state, final_samples, final_fitness = jax.lax.fori_loop(
+  samples = jnp.zeros((num_samples, *initial_state.shape), dtype=initial_state.dtype)
+  final_state, samples, final_fitness = jax.lax.fori_loop(
     0,
     num_samples,
     body_fn,
@@ -120,7 +120,7 @@ def mcmc_sampler(
   )
 
   return MCMCOutput(
-    final_samples=final_samples,
+    samples=samples,
     final_state=final_state,
     final_fitness=final_fitness,
   )

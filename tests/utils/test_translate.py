@@ -1,4 +1,6 @@
+
 import jax.numpy as jnp
+import chex
 import pytest
 
 from proteinsmc.utils.constants import COLABDESIGN_X_INT
@@ -24,8 +26,8 @@ from proteinsmc.utils.translation import reverse_translate, translate
 )
 def test_translate(nuc_seq, expected_aa_seq, expected_validity):
   aa_seq, is_valid = translate(nuc_seq)
-  assert jnp.array_equal(aa_seq, expected_aa_seq)
-  assert is_valid == expected_validity
+  chex.assert_trees_all_equal(aa_seq, expected_aa_seq)
+  chex.assert_equal(is_valid, expected_validity)
 
 
 def test_translate_invalid_length():
@@ -38,12 +40,12 @@ def test_reverse_translate():
 
   aa_seq_valid = jnp.array([13, 11])
   nuc_seq_valid, is_valid_flag = reverse_translate(aa_seq_valid)
-  assert is_valid_flag
+  chex.assert_equal(is_valid_flag, True)
   retranslated_aa, _ = translate(nuc_seq_valid)
-  assert jnp.array_equal(retranslated_aa, aa_seq_valid)
+  chex.assert_trees_all_equal(retranslated_aa, aa_seq_valid)
   aa_seq_invalid = jnp.array([COLABDESIGN_X_INT])
   nuc_seq_invalid, is_valid_flag_invalid = reverse_translate(aa_seq_invalid)
-  assert not is_valid_flag_invalid
-  assert nuc_seq_invalid.shape == (3,)
+  chex.assert_equal(is_valid_flag_invalid, False)
+  chex.assert_shape(nuc_seq_invalid, (3,))
   retranslated_stop, _ = translate(nuc_seq_invalid)
-  assert retranslated_stop[0] == COLABDESIGN_X_INT
+  chex.assert_equal(retranslated_stop[0], COLABDESIGN_X_INT)

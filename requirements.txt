@@ -1,5 +1,6 @@
 jax
 jaxlib
 flax
+chex
 jaxtyping
 git+https://github.com/maraxen/ColabDesign.git

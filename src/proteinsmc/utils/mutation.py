@@ -11,7 +11,7 @@ from jax import jit, random, vmap
 if TYPE_CHECKING:
   from jaxtyping import PRNGKeyArray
 
-  from proteinsmc.utils.types import NucleotideSequence, PopulationSequences
+  from proteinsmc.utils.types import EvoSequence, NucleotideSequence, PopulationSequences
 
 from .constants import (
   CODON_INT_TO_RES_INT_JAX,
@@ -213,6 +213,42 @@ def mutate_single(
   proposed_mutations = (sequence + offsets) % n_states
   mutated_sequence = jnp.where(mutation_mask, proposed_mutations, sequence)
   return mutated_sequence.astype(jnp.int8)
+
+
+def chunked_mutation_step(
+  key: PRNGKeyArray,
+  population: PopulationSequences,
+  mutation_rate: float,
+  sequence_type: Literal["protein", "nucleotide"],
+  chunk_size: int,
+) -> PopulationSequences:
+  """Apply mutation to population using chunked processing.
+
+  Args:
+    key: PRNG key for mutation
+    population: Population to mutate
+    mutation_rate: Rate of mutation
+    sequence_type: Type of sequences ("protein" or "nucleotide")
+    chunk_size: Size of chunks for processing
+
+  Returns:
+    Mutated population
+
+  """
+  from proteinsmc.utils import chunked_vmap
+  from proteinsmc.utils.mutation import dispatch_mutation_single
+
+  def mutate_single(data_tuple: tuple[PRNGKeyArray, EvoSequence]) -> EvoSequence:
+    k, seq = data_tuple
+    result = dispatch_mutation_single(k, seq, mutation_rate, sequence_type)
+    return result.astype(jnp.int8)
+
+  mutation_keys = random.split(key, population.shape[0])
+  return chunked_vmap(
+    mutate_single,
+    (mutation_keys, population),
+    chunk_size,
+  )
 
 
 def dispatch_mutation_single(

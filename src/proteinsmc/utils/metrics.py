@@ -12,16 +12,52 @@ import jax.numpy as jnp
 from jax import jit, vmap
 
 if TYPE_CHECKING:
-  from proteinsmc.utils.types import PopulationSequenceFloats, PopulationSequences, ScalarFloat
+  from jaxtyping import Float
+
+  from proteinsmc.utils.types import PopulationSequenceFloats, PopulationSequences
+
+from jaxtyping import Array
 
 logger = getLogger(__name__)
+
+
+def safe_weighted_mean(
+  metric: Array,
+  weights: Array,
+  valid_mask: Array,
+  sum_valid_w: Float,
+) -> Array:
+  """Compute weighted mean safely, handling edge cases.
+
+  Args:
+    metric: Values to compute weighted mean of
+    weights: Weights for each value
+    valid_mask: Boolean mask for valid values
+    sum_valid_w: Sum of valid weights
+
+  Returns:
+    Weighted mean, or NaN if no valid values
+
+  """
+  eps = 1e-9
+  output = jnp.where(
+    sum_valid_w > eps,
+    jnp.sum(jnp.where(valid_mask, metric * weights, 0.0)) / sum_valid_w,
+    jnp.nan,
+  )
+
+  if not isinstance(output, Array):
+    msg = f"Expected output to be a JAX array, got {type(output)}"
+    raise TypeError(msg)
+
+  return output
 
 
 @jit
 def calculate_logZ_increment(  # noqa: N802
   log_weights: PopulationSequenceFloats,
   population_size: int,
-) -> ScalarFloat:
+) -> Float:
   """Calculate log evidence increment from log weights.
 
   Args:
@@ -50,7 +86,7 @@ def calculate_logZ_increment(  # noqa: N802
 
 
 @jit
-def calculate_position_entropy(pos_seqs: PopulationSequences) -> ScalarFloat:
+def calculate_position_entropy(pos_seqs: PopulationSequences) -> Float:
   """Calculate the Shannon entropy for a single position in sequences.
 
   Args:
@@ -66,7 +102,7 @@ def calculate_position_entropy(pos_seqs: PopulationSequences) -> ScalarFloat:
 
 
 @jit
-def shannon_entropy(seqs: PopulationSequences) -> ScalarFloat:
+def shannon_entropy(seqs: PopulationSequences) -> Float:
   """Calculate average per-position Shannon entropy of sequences.
 
   Args:

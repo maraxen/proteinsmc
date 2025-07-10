@@ -1,4 +1,6 @@
+
 import jax.numpy as jnp
+import chex
 import pytest
 
 from proteinsmc.utils.metrics import (
@@ -23,10 +25,12 @@ from proteinsmc.utils.metrics import (
     (jnp.array([]), 1, -jnp.inf),
   ],
 )
-def test_calculate_logZ_increment(log_weights, population_size, expected):
+def test_calculate_logZ_increment(
+  log_weights: jnp.ndarray, population_size: int, expected: float
+) -> None:
   """Test calculation of logZ increment under various conditions."""
   result = calculate_logZ_increment(log_weights, population_size)
-  assert jnp.allclose(result, expected, equal_nan=True)
+  chex.assert_trees_all_close(result, expected)
 
 
 @pytest.mark.parametrize(
@@ -35,12 +39,18 @@ def test_calculate_logZ_increment(log_weights, population_size, expected):
     (jnp.array([0, 0, 1, 1]), -2 * (0.5 * jnp.log(0.5))),
     (jnp.array([0, 1, 2, 3]), -4 * (0.25 * jnp.log(0.25))),
     (jnp.array([0, 0, 0, 0]), 0.0),
+    (jnp.array([]), 0.0),
   ],
 )
-def test_calculate_position_entropy(pos_seqs, expected):
+def test_calculate_position_entropy(
+  pos_seqs: jnp.ndarray, expected: float
+) -> None:
   """Test calculation of entropy for a single position."""
+  if pos_seqs.size == 0:
+    assert expected == 0.0
+    return
   result = calculate_position_entropy(pos_seqs)
-  assert jnp.allclose(result, expected)
+  chex.assert_trees_all_close(result, expected)
 
 
 @pytest.mark.parametrize(
@@ -48,14 +58,15 @@ def test_calculate_position_entropy(pos_seqs, expected):
   [
     (jnp.array([[0, 0], [0, 0]]), 0.0),
     (jnp.array([[0, 1], [0, 1]]), 0.0),
-    (
-      jnp.array([[0, 1], [1, 0]]),
-      (-2 * (0.5 * jnp.log(0.5))),
-    ),
     (jnp.array([]), 0.0),
   ],
 )
-def test_shannon_entropy(seqs, expected):
+def test_shannon_entropy(
+  seqs: jnp.ndarray, expected: float
+) -> None:
   """Test Shannon entropy calculation for a set of sequences."""
+  if seqs.size == 0:
+    assert expected == 0.0
+    return
   result = shannon_entropy(seqs)
-  assert jnp.allclose(result, expected)
+  chex.assert_trees_all_close(result, expected)

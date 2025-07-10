@@ -13,11 +13,13 @@ from .constants import (
 )
 
 if TYPE_CHECKING:
-  from proteinsmc.utils.types import NucleotideSequence, ProteinSequence, ScalarBool
+  from jaxtyping import Bool
+
+  from proteinsmc.utils.types import NucleotideSequence, ProteinSequence
 
 
 @jit
-def translate(nuc_seq: NucleotideSequence) -> tuple[ProteinSequence, ScalarBool]:
+def translate(nuc_seq: NucleotideSequence) -> tuple[ProteinSequence, Bool]:
   """Translate a nucleotide sequence to an amino acid sequence.
 
   Uses ColabDesign's AA integers.
@@ -46,7 +48,7 @@ def translate(nuc_seq: NucleotideSequence) -> tuple[ProteinSequence, ScalarBool]
 @jit
 def reverse_translate(
   aa_seq: ProteinSequence,
-) -> tuple[NucleotideSequence, ScalarBool]:
+) -> tuple[NucleotideSequence, Bool]:
   """Reverses the translation of an amino acid sequence to a nucleotide sequence."""
   if aa_seq.shape[0] == 0:
     return jnp.array([], dtype=jnp.int8), jnp.array(1, dtype=jnp.bool_)

@@ -17,12 +17,11 @@ import jax.numpy as jnp
 from jax import jit, random
 
 if TYPE_CHECKING:
-  from jaxtyping import PRNGKeyArray
+  from jaxtyping import Float, PRNGKeyArray
 
   from proteinsmc.utils.types import (
     EvoSequence,
     PopulationSequences,
-    ScalarFloat,
   )
 
 
@@ -41,7 +40,7 @@ class NUTSConfig:
 
   """
 
-  log_prob_fn: Callable[[EvoSequence], ScalarFloat]
+  log_prob_fn: Callable[[EvoSequence], Float]
   step_size: float
   warmup_steps: int
   num_samples: int
@@ -95,7 +94,7 @@ def nuts_sampler(
   def leapfrog(
     current_q: EvoSequence,
     current_p: EvoSequence,
-    log_prob_fn: Callable[[EvoSequence], ScalarFloat],
+    log_prob_fn: Callable[[EvoSequence], Float],
     step_size: float,
   ) -> tuple[EvoSequence, EvoSequence]:
     """Perform a single leapfrog step.
@@ -121,9 +120,9 @@ def nuts_sampler(
     return next_q, next_p
 
   def nuts_step(
-    carry: tuple[EvoSequence, EvoSequence, ScalarFloat, PRNGKeyArray],
+    carry: tuple[EvoSequence, EvoSequence, Float, PRNGKeyArray],
     _: None,
-  ) -> tuple[tuple[EvoSequence, EvoSequence, ScalarFloat, PRNGKeyArray], EvoSequence]:
+  ) -> tuple[tuple[EvoSequence, EvoSequence, Float, PRNGKeyArray], EvoSequence]:
     """Perform a single NUTS step.
 
     Args:

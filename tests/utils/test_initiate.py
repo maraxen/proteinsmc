@@ -5,6 +5,8 @@ import pytest
 from proteinsmc.utils.initiate import generate_template_population
 
 
+import chex
+
 def test_generate_template_population_protein_to_nucleotide():
   # 'MF' -> 'ATGTTT'
   pop = generate_template_population(
@@ -13,10 +15,9 @@ def test_generate_template_population_protein_to_nucleotide():
     input_sequence_type="protein",
     output_sequence_type="nucleotide",
   )
-  print(pop)
   expected = jnp.array([[0, 3, 2, 3, 3, 1]] * 3, dtype=jnp.int8)
-  assert pop.shape == (3, 6)
-  assert jnp.all(pop == expected)
+  chex.assert_shape(pop, (3, 6))
+  chex.assert_trees_all_equal(pop, expected)
 
 
 def test_generate_template_population_nucleotide_to_protein():
@@ -28,8 +29,8 @@ def test_generate_template_population_nucleotide_to_protein():
     output_sequence_type="protein",
   )
   expected = jnp.array([[12, 13]] * 2, dtype=jnp.int8)
-  assert pop.shape == (2, 2)
-  assert jnp.all(pop == expected)
+  chex.assert_shape(pop, (2, 2))
+  chex.assert_trees_all_equal(pop, expected)
 
 
 def test_invalid_sequence_type():

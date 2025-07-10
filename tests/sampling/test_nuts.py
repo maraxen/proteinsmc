@@ -1,4 +1,6 @@
+
 import jax.numpy as jnp
+import chex
 import pytest
 from jax import random
 
@@ -28,8 +30,7 @@ def test_nuts_sampler_output_shape(num_samples, warmup_steps, num_chains):
   )
 
   samples = nuts_sampler(key, initial_position, config)
-
-  assert samples.shape == (num_chains, num_samples, 2)
+  chex.assert_shape(samples, (num_chains, num_samples, 2))
 
 
 def test_nuts_sampler_convergence():
@@ -51,8 +52,8 @@ def test_nuts_sampler_convergence():
   )
 
   samples = nuts_sampler(key, initial_position, config)
-  assert jnp.allclose(jnp.mean(samples), 0.0, atol=0.1)
-  assert jnp.allclose(jnp.var(samples), 1.0, atol=0.5)
+  chex.assert_trees_all_close(jnp.mean(samples), 0.0, atol=0.1)
+  chex.assert_trees_all_close(jnp.var(samples), 1.0, atol=0.5)
 
 
 @pytest.mark.parametrize("step_size, adapt_step_size", [(0.1, False), (1.0, True)])
@@ -73,8 +74,7 @@ def test_nuts_sampler_options(step_size, adapt_step_size):
   )
 
   samples = nuts_sampler(key, initial_position, config)
-
-  assert samples.shape == (1, num_samples, 1)
+  chex.assert_shape(samples, (1, num_samples, 1))
 
 
 def test_nuts_sampler_high_dimension():
@@ -95,5 +95,4 @@ def test_nuts_sampler_high_dimension():
   )
 
   samples = nuts_sampler(key, initial_position, config)
-
-  assert samples.shape == (1, num_samples, dim)
+  chex.assert_shape(samples, (1, num_samples, dim))

@@ -1,5 +1,7 @@
+
 import jax
 import jax.numpy as jnp
+import chex
 import pytest
 
 from proteinsmc.sampling.gibbs import (
@@ -30,32 +32,31 @@ def test_make_sequence_log_prob_fn(fitness_evaluator):
 
   test_seq = jnp.ones((2, 10))
   log_prob = log_prob_fn(test_seq)
-  print(log_prob)
-  assert log_prob.shape == (2,)
-  assert jnp.all(log_prob == 5.0)
+  chex.assert_shape(log_prob, (2,))
+  chex.assert_trees_all_close(log_prob, 5.0)
 
   test_batch = jnp.ones((5, 10))
   log_probs = log_prob_fn(test_batch)
-  assert log_probs.shape == (5,)
-  assert jnp.all(log_probs == 5.0)
+  chex.assert_shape(log_probs, (5,))
+  chex.assert_trees_all_close(log_probs, 5.0)
 
 
 def test_make_gibbs_update_fns():
   """Test the creation of Gibbs update functions."""
   update_fns = make_gibbs_update_fns(sequence_length=5, n_states=4)
-  assert len(update_fns) == 5
+  chex.assert_equal(len(update_fns), 5)
 
   update_pos_0 = update_fns[0]
   key = jax.random.PRNGKey(0)
   seq = jnp.zeros((5,), dtype=jnp.int8)
 
-  def deterministic_log_prob(key, s):  # Updated signature
+  def deterministic_log_prob(key, s):
     return jnp.where(s[0] == 3, 100.0, 0.0)
 
   updated_seq = update_pos_0(key, seq, deterministic_log_prob)
-  assert updated_seq.shape == seq.shape
-  assert updated_seq[0] == 3
-  assert jnp.array_equal(updated_seq[1:], seq[1:])
+  chex.assert_shape(updated_seq, seq.shape)
+  chex.assert_equal(updated_seq[0], 3)
+  chex.assert_trees_all_equal(updated_seq[1:], seq[1:])
 
 
 def test_gibbs_sampler():
@@ -64,7 +65,7 @@ def test_gibbs_sampler():
   sequence_length = 2
   n_states = 4
 
-  def log_prob_fn(key, seq):  # Updated signature
+  def log_prob_fn(key, seq):
     return jnp.where(seq[0] == seq[1], 1.0, -100.0)
 
   update_fns = make_gibbs_update_fns(sequence_length=sequence_length, n_states=n_states)
@@ -74,7 +75,7 @@ def test_gibbs_sampler():
 
   samples = gibbs_sampler(key, initial_state, num_samples, log_prob_fn, update_fns)
 
-  assert samples.shape == (num_samples, sequence_length)
+  chex.assert_shape(samples, (num_samples, sequence_length))
 
   matches = jnp.sum(samples[-50:, 0] == samples[-50:, 1])
-  assert matches > 40
+  chex.assert_equal(matches > 40, True)

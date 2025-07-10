@@ -11,9 +11,9 @@ import jax.numpy as jnp
 from jax import jit, random
 
 if TYPE_CHECKING:
-  from jaxtyping import PRNGKeyArray
+  from jaxtyping import Float, PRNGKeyArray
 
-  from proteinsmc.utils.types import EvoSequence, PopulationSequences, ScalarFloat
+  from proteinsmc.utils.types import EvoSequence, PopulationSequences
 
 
 @dataclass(frozen=True)
@@ -23,7 +23,7 @@ class HMCSamplerConfig:
   step_size: float
   num_leapfrog_steps: int
   num_samples: int
-  log_prob_fn: Callable[[EvoSequence], ScalarFloat]
+  log_prob_fn: Callable[[EvoSequence], Float]
 
   def tree_flatten(self) -> tuple[tuple, dict]:
     """Flatten the dataclass for JAX PyTree compatibility."""
@@ -109,9 +109,9 @@ def hmc_sampler(
     return final_q, final_p
 
   def hmc_step(
-    carry: tuple[EvoSequence, ScalarFloat, PRNGKeyArray],
+    carry: tuple[EvoSequence, Float, PRNGKeyArray],
     _: None,
-  ) -> tuple[tuple[EvoSequence, ScalarFloat, PRNGKeyArray], EvoSequence]:
+  ) -> tuple[tuple[EvoSequence, Float, PRNGKeyArray], EvoSequence]:
     """Perform a single HMC step.
 
     Args:

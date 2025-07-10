@@ -1,4 +1,6 @@
+
 import jax.numpy as jnp
+import chex
 import pytest
 from jax import random
 
@@ -87,14 +89,8 @@ def test_run_parallel_replica_smc_output(setup_sampler):
   output = prsmc_sampler(key, config)
 
   assert output is not None
-  assert output.final_island_states.beta.shape == (config.n_islands,)
-  assert output.final_island_states.population.shape[0] == config.n_islands
-  assert output.swap_acceptance_rate.shape == ()
-  assert output.history_mean_fitness_per_island.shape == (
-    config.generations,
-    config.n_islands,
-  )
-  assert output.history_ess_per_island.shape == (
-    config.generations,
-    config.n_islands,
-  )
+  chex.assert_shape(output.final_island_states.beta, (config.n_islands,))
+  chex.assert_equal(output.final_island_states.population.shape[0], config.n_islands)
+  chex.assert_shape(output.swap_acceptance_rate, ())
+  chex.assert_shape(output.history_mean_fitness_per_island, (config.generations, config.n_islands))
+  chex.assert_shape(output.history_ess_per_island, (config.generations, config.n_islands))

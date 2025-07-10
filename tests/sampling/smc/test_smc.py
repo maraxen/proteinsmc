@@ -1,4 +1,6 @@
+
 import jax.numpy as jnp
+import chex
 import pytest
 from jax import random
 
@@ -110,9 +112,9 @@ def test_smc_output_shapes(setup_smc_protein):
     config=smc_config,
   )
 
-  assert output.mean_combined_fitness_per_gen.shape == (smc_config.generations,)
-  assert output.max_combined_fitness_per_gen.shape == (smc_config.generations,)
-  assert output.entropy_per_gen.shape == (smc_config.generations,)
+  chex.assert_shape(output.mean_combined_fitness_per_gen, (smc_config.generations,))
+  chex.assert_shape(output.max_combined_fitness_per_gen, (smc_config.generations,))
+  chex.assert_shape(output.entropy_per_gen, (smc_config.generations,))
 
 
 @pytest.mark.parametrize("fixture_name", ["setup_smc_protein", "setup_smc_nucleotide"])

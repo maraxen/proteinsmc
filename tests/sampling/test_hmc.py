@@ -1,5 +1,7 @@
+
 import jax
 import jax.numpy as jnp
+import chex
 import pytest
 
 from proteinsmc.sampling.hmc import HMCSamplerConfig, hmc_sampler
@@ -27,10 +29,8 @@ def sampler_params():
 def test_hmc_sampler_output_shape(sampler_params):
   """Test that the HMC sampler returns samples of the correct shape."""
   samples = hmc_sampler(**sampler_params)
-  assert samples.shape == (
-    sampler_params["config"].num_samples,
-    *sampler_params["initial_position"].shape,
-  )
+  expected_shape = (sampler_params["config"].num_samples, *sampler_params["initial_position"].shape)
+  chex.assert_shape(samples, expected_shape)
 
 
 def test_hmc_sampler_converges(sampler_params):
@@ -43,8 +43,8 @@ def test_hmc_sampler_converges(sampler_params):
   mean = jnp.mean(converged_samples, axis=0)
   std_dev = jnp.std(converged_samples, axis=0)
 
-  assert jnp.allclose(mean, 0.0, atol=0.2)
-  assert jnp.allclose(std_dev, 1.0, atol=0.2)
+  chex.assert_trees_all_close(mean, 0.0, atol=0.2)
+  chex.assert_trees_all_close(std_dev, 1.0, atol=0.2)
 
 
 def test_hmc_sampler_leapfrog_step():

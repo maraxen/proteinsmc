@@ -72,9 +72,6 @@ from .types import (
   PopulationSequenceFloats,
   PopulationSequences,
   ProteinSequence,
-  ScalarBool,
-  ScalarFloat,
-  ScalarInt,
 )
 from .vmap_utils import chunked_vmap
 
@@ -131,8 +128,8 @@ __all__ = [
   "PopulationSequences",
   "ProteinSequence",
   "ScalarBool",
-  "ScalarFloat",
-  "ScalarInt",
+  "Float",
+  "Int",
   "RES_TO_CODON_CHAR",
   "CODON_TO_RES_CHAR",
   "calculate_logZ_increment",

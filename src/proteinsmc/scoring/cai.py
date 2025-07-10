@@ -13,10 +13,12 @@ from proteinsmc.utils.constants import (
 )
 
 if TYPE_CHECKING:
-  from proteinsmc.utils.types import NucleotideSequence, ProteinSequence, ScalarFloat
+  from jaxtyping import Float
+
+  from proteinsmc.utils.types import NucleotideSequence, ProteinSequence
 
 
-def cai_score(nuc_seq: NucleotideSequence, aa_seq: ProteinSequence) -> ScalarFloat:
+def cai_score(nuc_seq: NucleotideSequence, aa_seq: ProteinSequence) -> Float:
   """Calculate Codon Adaptation Index (CAI).
 
   `aa_seq` uses ColabDesign's AA integers.

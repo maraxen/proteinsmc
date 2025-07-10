@@ -7,14 +7,14 @@ from typing import TYPE_CHECKING, Callable
 from jax import jit
 
 if TYPE_CHECKING:
-  from jaxtyping import PRNGKeyArray
+  from jaxtyping import Float, PRNGKeyArray
 
-  from proteinsmc.utils.types import MPNNModel, ProteinSequence, ScalarFloat
+  from proteinsmc.utils.types import MPNNModel, ProteinSequence
 
 
 def make_mpnn_score(
   mpnn_model: MPNNModel,
-) -> Callable[[PRNGKeyArray, ProteinSequence], ScalarFloat]:
+) -> Callable[[PRNGKeyArray, ProteinSequence], Float]:
   """Create a scoring function for the MPNN model.
 
   Args:
@@ -29,7 +29,7 @@ def make_mpnn_score(
   def mpnn_score(
     key: PRNGKeyArray,
     protein_sequence: ProteinSequence,
-  ) -> ScalarFloat:
+  ) -> Float:
     """Scores a protein sequence using the MPNN model."""
     return mpnn_model.score(seq_numeric=protein_sequence, key=key)
 

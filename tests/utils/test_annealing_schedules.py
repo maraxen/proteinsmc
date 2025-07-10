@@ -1,3 +1,5 @@
+import chex
+
 import jax.numpy as jnp
 
 from proteinsmc.utils.annealing_schedules import (
@@ -11,10 +13,19 @@ TOL = 1e-6
 
 
 def test_linear_schedule():
-  assert linear_schedule(p=jnp.array(1), n_steps=jnp.array(10), beta_max=jnp.array(1.0)) == 0.0
-  assert linear_schedule(p=jnp.array(10), n_steps=jnp.array(10), beta_max=jnp.array(1.0)) == 1.0
-  assert linear_schedule(p=jnp.array(11), n_steps=jnp.array(10), beta_max=jnp.array(1.0)) == 1.0
-  assert jnp.allclose(
+  chex.assert_trees_all_equal(
+    linear_schedule(p=jnp.array(1), n_steps=jnp.array(10), beta_max=jnp.array(1.0)),
+    0.0,
+  )
+  chex.assert_trees_all_equal(
+    linear_schedule(p=jnp.array(10), n_steps=jnp.array(10), beta_max=jnp.array(1.0)),
+    1.0,
+  )
+  chex.assert_trees_all_equal(
+    linear_schedule(p=jnp.array(11), n_steps=jnp.array(10), beta_max=jnp.array(1.0)),
+    1.0,
+  )
+  chex.assert_trees_all_close(
     linear_schedule(p=jnp.array(5), n_steps=jnp.array(10), beta_max=jnp.array(1.0)),
     4.0 / 9.0,
     atol=TOL,
@@ -22,29 +33,29 @@ def test_linear_schedule():
 
 
 def test_exponential_schedule():
-  assert (
+  chex.assert_trees_all_equal(
     exponential_schedule(
       p=jnp.array(1),
       n_steps=jnp.array(10),
       beta_max=jnp.array(1.0),
-    )
-    == 0.0
+    ),
+    0.0,
   )
-  assert (
+  chex.assert_trees_all_equal(
     exponential_schedule(
       p=jnp.array(10),
       n_steps=jnp.array(10),
       beta_max=jnp.array(1.0),
-    )
-    == 1.0
+    ),
+    1.0,
   )
-  assert (
+  chex.assert_trees_all_equal(
     exponential_schedule(
       p=jnp.array(11),
       n_steps=jnp.array(10),
       beta_max=jnp.array(1.0),
-    )
-    == 1.0
+    ),
+    1.0,
   )
   p = 5
   n_steps = 10
@@ -52,7 +63,7 @@ def test_exponential_schedule():
   rate = 5.0
   x = (p - 1) / (n_steps - 1)
   expected = beta_max * (jnp.exp(rate * x) - 1) / (jnp.exp(rate) - 1)
-  assert jnp.allclose(
+  chex.assert_trees_all_close(
     exponential_schedule(
       p=jnp.array(p),
       n_steps=jnp.array(n_steps),
@@ -65,10 +76,19 @@ def test_exponential_schedule():
 
 
 def test_cosine_schedule():
-  assert cosine_schedule(p=jnp.array(1), n_steps=jnp.array(10), beta_max=jnp.array(1.0)) == 0.0
-  assert cosine_schedule(p=jnp.array(10), n_steps=jnp.array(10), beta_max=jnp.array(1.0)) == 1.0
-  assert cosine_schedule(p=jnp.array(11), n_steps=jnp.array(10), beta_max=jnp.array(1.0)) == 1.0
-  assert jnp.allclose(
+  chex.assert_trees_all_equal(
+    cosine_schedule(p=jnp.array(1), n_steps=jnp.array(10), beta_max=jnp.array(1.0)),
+    0.0,
+  )
+  chex.assert_trees_all_equal(
+    cosine_schedule(p=jnp.array(10), n_steps=jnp.array(10), beta_max=jnp.array(1.0)),
+    1.0,
+  )
+  chex.assert_trees_all_equal(
+    cosine_schedule(p=jnp.array(11), n_steps=jnp.array(10), beta_max=jnp.array(1.0)),
+    1.0,
+  )
+  chex.assert_trees_all_close(
     cosine_schedule(p=jnp.array(5), n_steps=jnp.array(10), beta_max=jnp.array(1.0)),
     0.5 * (1.0 - jnp.cos(jnp.pi * 4.0 / 9.0)),
     atol=TOL,
@@ -76,5 +96,19 @@ def test_cosine_schedule():
 
 
 def test_static_schedule():
-  assert static_schedule(_p=jnp.array(1, dtype=jnp.int32), _n=jnp.array(10, dtype=jnp.int32), beta_max=jnp.array(0.5)) == 0.5
-  assert static_schedule(_p=jnp.array(1, dtype=jnp.int32), _n=jnp.array(10, dtype=jnp.int32), beta_max=jnp.array(1.0)) == 1.0
+  chex.assert_trees_all_equal(
+    static_schedule(
+      _p=jnp.array(1, dtype=jnp.int32),
+      _n=jnp.array(10, dtype=jnp.int32),
+      beta_max=jnp.array(0.5),
+    ),
+    0.5,
+  )
+  chex.assert_trees_all_equal(
+    static_schedule(
+      _p=jnp.array(1, dtype=jnp.int32),
+      _n=jnp.array(10, dtype=jnp.int32),
+      beta_max=jnp.array(1.0),
+    ),
+    1.0,
+  )

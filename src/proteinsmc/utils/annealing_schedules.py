@@ -9,10 +9,7 @@ import jax
 import jax.numpy as jnp
 
 if TYPE_CHECKING:
-  from proteinsmc.utils.types import (
-    ScalarFloat,
-    ScalarInt,
-  )
+  from jaxtyping import Float, Int
 
 
 @dataclass(frozen=True)
@@ -27,7 +24,7 @@ class AnnealingScheduleConfig:
 
   """
 
-  schedule_fn: Callable[[ScalarInt, ScalarInt, ScalarFloat], ScalarFloat]
+  schedule_fn: Callable[[Int, Int, Float], Float]
   beta_max: float
   annealing_len: int
   schedule_args: tuple = field(default_factory=tuple)
@@ -47,7 +44,7 @@ class AnnealingScheduleConfig:
 jax.tree_util.register_pytree_node_class(AnnealingScheduleConfig)
 
 
-def linear_schedule(p: ScalarInt, n_steps: ScalarInt, beta_max: ScalarFloat) -> ScalarFloat:
+def linear_schedule(p: Int, n_steps: Int, beta_max: Float) -> Float:
   """Linear annealing schedule for beta that is JAX-compatible."""
   step_val = (p - 1) / (n_steps - 1) * beta_max
   result = jnp.where(p >= n_steps, beta_max, step_val)
@@ -58,11 +55,11 @@ default_rate = jnp.array(5.0, dtype=jnp.float32)
 
 
 def exponential_schedule(
-  p: ScalarInt,
-  n_steps: ScalarInt,
-  beta_max: ScalarFloat,
-  rate: ScalarFloat = default_rate,
-) -> ScalarFloat:
+  p: Int,
+  n_steps: Int,
+  beta_max: Float,
+  rate: Float = default_rate,
+) -> Float:
   """Exponential annealing schedule for beta."""
   if p <= 1:
     return jnp.array(0.0, dtype=jnp.float32)
@@ -79,7 +76,7 @@ def exponential_schedule(
   return scale_factor * (exp_val - 1)
 
 
-def cosine_schedule(p: ScalarInt, n_steps: ScalarInt, beta_max: ScalarFloat) -> ScalarFloat:
+def cosine_schedule(p: Int, n_steps: Int, beta_max: Float) -> Float:
   """Cosine annealing schedule for beta."""
   if p <= 1:
     return jnp.array(0.0, dtype=jnp.float32)
@@ -89,6 +86,6 @@ def cosine_schedule(p: ScalarInt, n_steps: ScalarInt, beta_max: ScalarFloat) -> 
   return beta_max * 0.5 * (1.0 - jnp.cos(jnp.pi * x))
 
 
-def static_schedule(_p: ScalarInt, _n: ScalarInt, beta_max: ScalarFloat) -> ScalarFloat:
+def static_schedule(_p: Int, _n: Int, beta_max: Float) -> Float:
   """Run static annealing schedule (beta is constant)."""
   return jnp.array(beta_max, dtype=jnp.float32)

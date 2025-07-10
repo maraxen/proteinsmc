@@ -1,6 +1,9 @@
+
 import jax
 import jax.numpy as jnp
+import chex
 import pytest
+from proteinsmc.utils.fitness import chunked_calculate_population_fitness
 
 from proteinsmc.utils.fitness import (
   FitnessEvaluator,
@@ -55,7 +58,7 @@ def nucleotide_ff() -> FitnessFunction:
 
 def test_fitness_function_init(protein_ff):
   """Test FitnessFunction initialization."""
-  assert protein_ff.name == "mock_protein"
+  chex.assert_equal(protein_ff.name, "mock_protein")
 
 
 def test_fitness_function_invalid_func():
@@ -81,7 +84,7 @@ def test_fitness_function_invalid_input_type():
 def test_fitness_evaluator_init(protein_ff):
   """Test FitnessEvaluator initialization."""
   fe = FitnessEvaluator(fitness_functions=(protein_ff,))
-  assert len(fe.fitness_functions) == 1
+  chex.assert_equal(len(fe.fitness_functions), 1)
 
 
 def test_fitness_evaluator_no_functions():
@@ -95,10 +98,10 @@ def test_fitness_evaluator_get_functions_by_type(protein_ff, nucleotide_ff):
   fe = FitnessEvaluator(fitness_functions=(protein_ff, nucleotide_ff,))
   protein_funcs = fe.get_functions_by_type("protein")
   nucleotide_funcs = fe.get_functions_by_type("nucleotide")
-  assert len(protein_funcs) == 1
-  assert protein_funcs[0].name == "mock_protein"
-  assert len(nucleotide_funcs) == 1
-  assert nucleotide_funcs[0].name == "mock_nucleotide"
+  chex.assert_equal(len(protein_funcs), 1)
+  chex.assert_equal(protein_funcs[0].name, "mock_protein")
+  chex.assert_equal(len(nucleotide_funcs), 1)
+  chex.assert_equal(nucleotide_funcs[0].name, "mock_nucleotide")
 
 
 def test_calculate_population_fitness_nucleotide(protein_ff, nucleotide_ff):
@@ -112,7 +115,27 @@ def test_calculate_population_fitness_nucleotide(protein_ff, nucleotide_ff):
     key, population, "nucleotide", evaluator
   )
 
+  chex.assert_trees_all_close(components[0], jnp.array([2.0]))
+  chex.assert_trees_all_close(components[1], jnp.array([3.0]))
+  chex.assert_trees_all_close(combined_fitness, jnp.array([5.0]))
+  
+def test_chunked_calculate_population_fitness(protein_ff, nucleotide_ff):
+  """Test chunked_calculate_population_fitness for memory-efficient batch fitness."""
 
-  assert jnp.allclose(components[0], jnp.array([2.0]))
-  assert jnp.allclose(components[1], jnp.array([3.0]))
-  assert jnp.allclose(combined_fitness, jnp.array([5.0]))
+  key = jax.random.PRNGKey(42)
+  population = jnp.tile(jnp.array([[0, 1, 2, 3, 0, 1]]), (10, 1))
+
+  evaluator = FitnessEvaluator(fitness_functions=(protein_ff, nucleotide_ff,))
+
+  chunk_size = 4
+
+  combined_fitness, components = chunked_calculate_population_fitness(
+    key, population, evaluator, "nucleotide", chunk_size=chunk_size
+  )
+
+  assert combined_fitness.shape == (10,)
+  assert components.shape == (2, 10)
+
+  chex.assert_trees_all_close(components[0], jnp.full((10,), 2.0))
+  chex.assert_trees_all_close(components[1], jnp.full((10,), 3.0))
+  chex.assert_trees_all_close(combined_fitness, jnp.full((10,), 5.0))

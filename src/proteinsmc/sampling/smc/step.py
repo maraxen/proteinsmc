@@ -3,156 +3,12 @@
 from __future__ import annotations
 
 from functools import partial
-from typing import TYPE_CHECKING, Literal
 
 import jax.numpy as jnp
 from jax import Array, jit, random
 
 from proteinsmc.sampling.smc.data_structures import SMCCarryState, SMCConfig
-
-if TYPE_CHECKING:
-  from jaxtyping import PRNGKeyArray
-
-  from proteinsmc.utils import FitnessEvaluator, PopulationSequences, ScalarFloat
-  from proteinsmc.utils.types import EvoSequence
-
-
-def safe_weighted_mean(
-  metric: Array,
-  weights: Array,
-  valid_mask: Array,
-  sum_valid_w: ScalarFloat,
-) -> Array:
-  """Compute weighted mean safely, handling edge cases.
-
-  Args:
-    metric: Values to compute weighted mean of
-    weights: Weights for each value
-    valid_mask: Boolean mask for valid values
-    sum_valid_w: Sum of valid weights
-
-  Returns:
-    Weighted mean, or NaN if no valid values
-
-  """
-  if not isinstance(metric, Array):
-    msg = f"Expected metric to be a JAX array, got {type(metric)}"
-    raise TypeError(msg)
-  if not isinstance(weights, Array):
-    msg = f"Expected weights to be a JAX array, got {type(weights)}"
-    raise TypeError(msg)
-
-  eps = 1e-9
-  output = jnp.where(
-    sum_valid_w > eps,
-    jnp.sum(jnp.where(valid_mask, metric * weights, 0.0)) / sum_valid_w,
-    jnp.nan,
-  )
-
-  if not isinstance(output, Array):
-    msg = f"Expected output to be a JAX array, got {type(output)}"
-    raise TypeError(msg)
-
-  return output
-
-
-def chunked_mutation_step(
-  key: PRNGKeyArray,
-  population: PopulationSequences,
-  mutation_rate: float,
-  sequence_type: Literal["protein", "nucleotide"],
-  chunk_size: int,
-) -> PopulationSequences:
-  """Apply mutation to population using chunked processing.
-
-  Args:
-    key: PRNG key for mutation
-    population: Population to mutate
-    mutation_rate: Rate of mutation
-    sequence_type: Type of sequences ("protein" or "nucleotide")
-    chunk_size: Size of chunks for processing
-
-  Returns:
-    Mutated population
-
-  """
-  from proteinsmc.utils import chunked_vmap
-  from proteinsmc.utils.mutation import dispatch_mutation_single
-
-  def mutate_single(data_tuple: tuple[PRNGKeyArray, EvoSequence]) -> EvoSequence:
-    k, seq = data_tuple
-    result = dispatch_mutation_single(k, seq, mutation_rate, sequence_type)
-    return result.astype(jnp.int8)
-
-  mutation_keys = random.split(key, population.shape[0])
-  return chunked_vmap(
-    mutate_single,
-    (mutation_keys, population),
-    chunk_size,
-  )
-
-
-def chunked_fitness_evaluation(
-  key: PRNGKeyArray,
-  population: PopulationSequences,
-  sequence_type: Literal["protein", "nucleotide"],
-  fitness_evaluator: FitnessEvaluator,
-  chunk_size: int,
-) -> tuple[Array, Array]:
-  """Evaluate fitness for population using chunked processing.
-
-  Args:
-    key: PRNG key for fitness evaluation
-    population: Population to evaluate
-    sequence_type: Type of sequences
-    fitness_evaluator: Fitness evaluation function
-    chunk_size: Size of chunks for processing
-
-  Returns:
-    Tuple of (fitness_values, fitness_components)
-
-  """
-  from proteinsmc.utils import calculate_population_fitness
-
-  if population.shape[0] <= chunk_size:
-    return calculate_population_fitness(
-      key,
-      population,
-      sequence_type,
-      fitness_evaluator,
-    )
-
-  # Process population in chunks using the efficient chunk-based approach
-  population_size = population.shape[0]
-  num_chunks = (population_size + chunk_size - 1) // chunk_size
-  chunk_keys = random.split(key, num_chunks)
-
-  fitness_values_list = []
-  fitness_components_list = []
-
-  for i, chunk_key in enumerate(chunk_keys):
-    start_idx = i * chunk_size
-    end_idx = min((i + 1) * chunk_size, population_size)
-    chunk_population = population[start_idx:end_idx]
-
-    chunk_fitness_vals, chunk_fitness_comps = calculate_population_fitness(
-      chunk_key,
-      chunk_population,
-      sequence_type,
-      fitness_evaluator,
-    )
-
-    fitness_values_list.append(chunk_fitness_vals)
-    fitness_components_list.append(chunk_fitness_comps)
-
-  # Concatenate results properly
-  fitness_values = jnp.concatenate(fitness_values_list, axis=0)
-  
-  # fitness_components from each chunk: shape (n_fitness_functions, chunk_size)
-  # We want final shape: (n_fitness_functions, population_size)
-  fitness_components = jnp.concatenate(fitness_components_list, axis=1)
-
-  return fitness_values, fitness_components
+from proteinsmc.utils.fitness import chunked_calculate_population_fitness
 
 
 @partial(jit, static_argnames=("config",))
@@ -213,11 +69,11 @@ def smc_step(state: SMCCarryState, config: SMCConfig) -> tuple[SMCCarryState, di
     )
 
   if config.memory_config.enable_chunked_vmap and state.population.shape[0] > chunk_size:
-    fitness_values, fitness_components = chunked_fitness_evaluation(
+    fitness_values, fitness_components = chunked_calculate_population_fitness(
       key_fitness,
       mutated_population,
-      config.sequence_type,
       config.fitness_evaluator,
+      config.sequence_type,
       chunk_size,
     )
   else:
