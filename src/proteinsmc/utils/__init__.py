@@ -39,6 +39,7 @@ from .fitness import (
   FitnessEvaluator,
   FitnessFunction,
   calculate_population_fitness,
+  chunked_calculate_population_fitness,
   combine_fitness_scores,
   make_sequence_log_prob_fn,
 )
@@ -46,10 +47,12 @@ from .initiate import generate_template_population
 from .metrics import (
   calculate_logZ_increment,
   calculate_position_entropy,
+  safe_weighted_mean,
   shannon_entropy,
 )
 from .mutation import (
   _revert_x_codons_if_mutated,
+  chunked_mutation_step,
   dispatch_mutation,
   dispatch_mutation_single,
   diversify_initial_sequences,
@@ -127,9 +130,6 @@ __all__ = [
   "PopulationSequenceFloats",
   "PopulationSequences",
   "ProteinSequence",
-  "ScalarBool",
-  "Float",
-  "Int",
   "RES_TO_CODON_CHAR",
   "CODON_TO_RES_CHAR",
   "calculate_logZ_increment",
@@ -140,4 +140,7 @@ __all__ = [
   "distribute",
   "chunked_vmap",
   "PerGenerationFloat",
+  "safe_weighted_mean",
+  "chunked_mutation_step",
+  "chunked_calculate_population_fitness",
 ]

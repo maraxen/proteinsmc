@@ -8,7 +8,11 @@ import jax.numpy as jnp
 from jax import Array, jit, random
 
 from proteinsmc.sampling.smc.data_structures import SMCCarryState, SMCConfig
-from proteinsmc.utils.fitness import chunked_calculate_population_fitness
+from proteinsmc.utils import (
+  chunked_calculate_population_fitness,
+  chunked_mutation_step,
+  safe_weighted_mean,
+)
 
 
 @partial(jit, static_argnames=("config",))
@@ -55,7 +59,7 @@ def smc_step(state: SMCCarryState, config: SMCConfig) -> tuple[SMCCarryState, di
       key_mutate,
       state.population,
       config.mutation_rate,
-      config.sequence_type,
+      4 if config.sequence_type == "nucleotide" else 20,
       chunk_size,
     )
   else:

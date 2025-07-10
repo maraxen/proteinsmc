@@ -8,6 +8,7 @@ from proteinsmc.utils.mutation import (
   _revert_x_codons_if_mutated,
   diversify_initial_sequences,
   mutate,
+  chunked_mutation_step
 )
 from proteinsmc.utils.translation import translate
 
@@ -59,3 +60,8 @@ def test_diversify_initial_sequences(sample_sequences):
   aa_seqs, is_valid = jax.vmap(translate)(diversified)
   chex.assert_equal(jnp.all(is_valid), True)
   
+def test_chunked_mutation_step(sample_sequences):
+  key = jax.random.PRNGKey(0)
+  mutated = chunked_mutation_step(key, sample_sequences, n_states=4, mutation_rate=0.1, chunk_size=2)
+  chex.assert_shape(mutated, sample_sequences.shape)
+  chex.assert_equal(jnp.array_equal(mutated, sample_sequences), False)

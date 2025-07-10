@@ -39,6 +39,13 @@ def safe_weighted_mean(
     Weighted mean, or NaN if no valid values
 
   """
+  if not isinstance(metric, Array):
+    msg = f"Expected metric to be a JAX array, got {type(metric)}"
+    raise TypeError(msg)
+  if not isinstance(weights, Array):
+    msg = f"Expected weights to be a JAX array, got {type(weights)}"
+    raise TypeError(msg)
+
   eps = 1e-9
   output = jnp.where(
     sum_valid_w > eps,

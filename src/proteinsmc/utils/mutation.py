@@ -11,12 +11,13 @@ from jax import jit, random, vmap
 if TYPE_CHECKING:
   from jaxtyping import PRNGKeyArray
 
-  from proteinsmc.utils.types import EvoSequence, NucleotideSequence, PopulationSequences
+  from proteinsmc.utils.types import NucleotideSequence, PopulationSequences
 
 from .constants import (
   CODON_INT_TO_RES_INT_JAX,
   COLABDESIGN_X_INT,
 )
+from .vmap_utils import chunked_vmap
 
 
 @partial(jit, static_argnames=("n_states", "mutation_rate"))
@@ -219,36 +220,43 @@ def chunked_mutation_step(
   key: PRNGKeyArray,
   population: PopulationSequences,
   mutation_rate: float,
-  sequence_type: Literal["protein", "nucleotide"],
+  n_states: int,
   chunk_size: int,
 ) -> PopulationSequences:
-  """Apply mutation to population using chunked processing.
+  """Apply mutation to population using chunked vmap processing.
+
+  This function demonstrates how to use `chunked_vmap` with a function
+  that operates on a single item (`mutate_single`).
 
   Args:
-    key: PRNG key for mutation
-    population: Population to mutate
-    mutation_rate: Rate of mutation
-    sequence_type: Type of sequences ("protein" or "nucleotide")
-    chunk_size: Size of chunks for processing
+    key: PRNG key for mutation.
+    population: Population to mutate.
+    mutation_rate: Rate of mutation.
+    n_states: Number of states (e.g., 20 for amino acids).
+    chunk_size: Size of chunks for processing.
 
   Returns:
-    Mutated population
+    Mutated population.
 
   """
-  from proteinsmc.utils import chunked_vmap
-  from proteinsmc.utils.mutation import dispatch_mutation_single
 
-  def mutate_single(data_tuple: tuple[PRNGKeyArray, EvoSequence]) -> EvoSequence:
-    k, seq = data_tuple
-    result = dispatch_mutation_single(k, seq, mutation_rate, sequence_type)
-    return result.astype(jnp.int8)
+  def fn(
+    k: PRNGKeyArray,
+    seq: NucleotideSequence,
+  ) -> NucleotideSequence:
+    """Mutate a single sequence."""
+    return mutate_single(k, seq, mutation_rate, n_states)
 
   mutation_keys = random.split(key, population.shape[0])
-  return chunked_vmap(
-    mutate_single,
-    (mutation_keys, population),
-    chunk_size,
+
+  mutated_population = chunked_vmap(
+    func=fn,
+    data=(mutation_keys, population),
+    chunk_size=chunk_size,
+    in_axes=(0, 0),
+    static_args=None,
   )
+  return mutated_population.astype(jnp.int8)
 
 
 def dispatch_mutation_single(

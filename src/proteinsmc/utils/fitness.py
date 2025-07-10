@@ -23,6 +23,7 @@ if TYPE_CHECKING:
   )
 
 from .translation import reverse_translate, translate
+from .vmap_utils import chunked_vmap
 
 
 @dataclass(frozen=True)
@@ -309,44 +310,31 @@ def chunked_calculate_population_fitness(
   sequence_type: Literal["nucleotide", "protein"],
   chunk_size: int = 32,
 ) -> tuple[Array, Array]:
-  """Calculate population fitness in chunks for memory efficiency using lax.scan."""
-  population_size = population.shape[0]
-  num_chunks = (population_size + chunk_size - 1) // chunk_size
+  """Calculate population fitness in chunks using the general chunked_vmap utility."""
 
-  padded_size = num_chunks * chunk_size
-  pad_width = ((0, padded_size - population_size), (0, 0))
-  population_padded = jnp.pad(population, pad_width, mode="constant")
+  def calculate_single_fitness(
+    single_key: PRNGKeyArray,
+    single_sequence: EvoSequence,
+  ) -> tuple[Array, Array]:
+    """Make `calculate_population_fitness` work on a single item."""
+    pop_batch = jnp.expand_dims(single_sequence, axis=0)
 
-  population_chunked = population_padded.reshape(
-    (num_chunks, chunk_size, population.shape[-1]),
-  )
-
-  keys = jax.random.split(key, num_chunks)
-
-  def scan_body(
-    carry: None,
-    chunk_data: tuple[PRNGKeyArray, PopulationSequences],
-  ) -> tuple[None, tuple[Array, Array]]:
-    """Process each chunk of the population to calculate fitness."""
-    chunk_key, chunk_pop = chunk_data
-    fitness_vals, fitness_comps = calculate_population_fitness(
-      chunk_key,
-      chunk_pop,
+    fitness_batch, components_batch = calculate_population_fitness(
+      single_key,
+      pop_batch,
       sequence_type,
       fitness_evaluator,
     )
-    return carry, (fitness_vals, fitness_comps)
 
-  _, (fitness_chunked, components_chunked) = jax.lax.scan(
-    scan_body,
-    None,
-    (keys, population_chunked),
+    return fitness_batch[0], components_batch[:, 0]
+
+  keys = jax.random.split(key, population.shape[0])
+
+  fitness_values, components = chunked_vmap(
+    func=calculate_single_fitness,
+    data=(keys, population),
+    chunk_size=chunk_size,
+    in_axes=(0, 0),
   )
 
-  flat_fitness = fitness_chunked.flatten()
-
-  num_funcs = components_chunked.shape[1]
-  transposed_components = components_chunked.transpose((1, 0, 2))
-  flat_components = transposed_components.reshape((num_funcs, padded_size))
-
-  return flat_fitness[:population_size], flat_components[:, :population_size]
+  return fitness_values, components.T

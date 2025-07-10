@@ -31,14 +31,13 @@ def test_chunked_vmap_with_static_args():
 
   data = jnp.arange(8)
   static = 5
-  out = chunked_vmap(add_static, data, chunk_size=2, static_args=static)
+  out = chunked_vmap(add_static, data, chunk_size=2, static_args={"static": static})
   expected = data + static
   chex.assert_trees_all_close(out, expected)
 
 
 def test_chunked_vmap_pytree():
-  def add_tuple(x):
-    a, b = x
+  def add_tuple(a, b):
     return a + 1, b * 2
 
   data = (jnp.arange(6), jnp.arange(6, 12))

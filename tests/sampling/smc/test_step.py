@@ -8,8 +8,8 @@ import pytest
 from jax import random
 
 from proteinsmc.sampling.smc.data_structures import MemoryConfig, SMCCarryState, SMCConfig
-from proteinsmc.sampling.smc.step import chunked_fitness_evaluation, chunked_mutation_step, safe_weighted_mean, smc_step
-from proteinsmc.utils import AnnealingScheduleConfig, FitnessEvaluator, FitnessFunction, linear_schedule
+from proteinsmc.sampling.smc.step import smc_step
+from proteinsmc.utils import AnnealingScheduleConfig, FitnessEvaluator, FitnessFunction, linear_schedule, safe_weighted_mean, chunked_mutation_step, chunked_calculate_population_fitness
 
 
 def mock_fitness_fn(key, sequence, **kwargs):
@@ -92,31 +92,31 @@ def test_safe_weighted_mean_type_validation():
 def test_chunked_mutation_step():
   """Test chunked mutation step function."""
   key = random.PRNGKey(42)
-  population = jnp.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]], dtype=jnp.int32)
+  population = jnp.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]], dtype=jnp.int8)
   mutation_rate = 0.1
-  sequence_type = "protein"
+  n_states = 20
   chunk_size = 2
-  
-  mutated = chunked_mutation_step(key, population, mutation_rate, sequence_type, chunk_size)
-  
+
+  mutated = chunked_mutation_step(key, population, mutation_rate, n_states, chunk_size)
+
   chex.assert_shape(mutated, population.shape)
   chex.assert_equal(mutated.dtype, population.dtype)
 
 
 
-def test_chunked_fitness_evaluation(sample_fitness_evaluator):
+def test_chunked_calculate_population_fitness(sample_fitness_evaluator):
   """Test chunked fitness evaluation function."""
   key = random.PRNGKey(42)
-  population = jnp.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]], dtype=jnp.int32)
+  population = jnp.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]], dtype=jnp.int8)
   sequence_type = "protein"
   chunk_size = 2
   
-  fitness_values, fitness_components = chunked_fitness_evaluation(
-    key, population, sequence_type, sample_fitness_evaluator, chunk_size
+  fitness_values, fitness_components = chunked_calculate_population_fitness(
+    key, population, sample_fitness_evaluator, sequence_type, chunk_size
   )
   
   chex.assert_shape(fitness_values, (population.shape[0],))
-  chex.assert_shape(fitness_components, (population.shape[0], 1))  # One fitness function
+  chex.assert_shape(fitness_components, (1, population.shape[0]))  # One fitness function
   chex.assert_equal(jnp.all(jnp.isfinite(fitness_values)), True)
 
 
@@ -131,7 +131,7 @@ def test_smc_step(sample_smc_config):
     (population_size, sequence_length), 
     minval=0, 
     maxval=sample_smc_config.n_states,
-    dtype=jnp.int32
+    dtype=jnp.int8
   )
   
   state = SMCCarryState(
@@ -158,7 +158,7 @@ def test_smc_step(sample_smc_config):
   # Check metric shapes and values
   assert jnp.isfinite(metrics["mean_combined_fitness"]) or jnp.isnan(metrics["mean_combined_fitness"])
   assert jnp.isfinite(metrics["max_combined_fitness"]) or jnp.isnan(metrics["max_combined_fitness"])
-  chex.assert_shape(metrics["fitness_components"], (population.shape[0], 1))
+  chex.assert_shape(metrics["fitness_components"], (1, population.shape[0]))
   chex.assert_equal(0 <= metrics["ess"] <= population.shape[0], True)
 
 
@@ -171,7 +171,7 @@ def test_smc_step_with_chunking(sample_smc_config):
     [9, 10, 11, 12],
     [13, 14, 15, 16],
     [17, 18, 19, 20],
-  ], dtype=jnp.int32)
+  ], dtype=jnp.int8)
   
   state = SMCCarryState(
     key=key,
@@ -205,7 +205,7 @@ def test_smc_step_with_chunking(sample_smc_config):
 def test_chunked_processing_consistency():
   """Test that chunked processing gives consistent results."""
   key = random.PRNGKey(123)
-  population = jnp.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]], dtype=jnp.int32)
+  population = jnp.array([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]], dtype=jnp.int8)
   
   fitness_evaluator = FitnessEvaluator(
     fitness_functions=(
@@ -218,9 +218,9 @@ def test_chunked_processing_consistency():
   )
   
   # Test with different chunk sizes
-  fitness1, components1 = chunked_fitness_evaluation(key, population, "protein", fitness_evaluator, chunk_size=2)
-  fitness2, components2 = chunked_fitness_evaluation(key, population, "protein", fitness_evaluator, chunk_size=4)
-  
+  fitness1, components1 = chunked_calculate_population_fitness(key, population, fitness_evaluator,  "protein", chunk_size=2)
+  fitness2, components2 = chunked_calculate_population_fitness(key, population, fitness_evaluator,  "protein", chunk_size=4)
+
   # Results should be identical regardless of chunk size
   chex.assert_trees_all_close(fitness1, fitness2)
   chex.assert_trees_all_close(components1, components2)
@@ -229,7 +229,7 @@ def test_chunked_processing_consistency():
 def test_memory_config_integration():
   """Test that memory config settings are properly used."""
   key = random.PRNGKey(42)
-  population = jnp.array([[1, 2, 3], [4, 5, 6]], dtype=jnp.int32)
+  population = jnp.array([[1, 2, 3], [4, 5, 6]], dtype=jnp.int8)
   
   fitness_evaluator = FitnessEvaluator(
     fitness_functions=(
@@ -263,5 +263,5 @@ def test_memory_config_integration():
   )
   
   # Should run without error regardless of chunking setting
-  next_state, metrics = smc_step(state, config_no_chunk)
+  next_state, _ = smc_step(state, config_no_chunk)
   chex.assert_shape(next_state.population, state.population.shape)
