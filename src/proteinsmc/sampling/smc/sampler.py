@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 import jax.numpy as jnp
 from jax import lax, random
 
-from proteinsmc.sampling.smc.data_structures import SMCCarryState, SMCConfig, SMCOutput
 from proteinsmc.sampling.smc.step import smc_step
 from proteinsmc.sampling.smc.validation import validate_smc_config
 from proteinsmc.utils import (
@@ -16,6 +15,7 @@ from proteinsmc.utils import (
   generate_template_population,
   shannon_entropy,
 )
+from proteinsmc.utils.data_structures import SMCCarryState, SMCConfig, SMCOutput
 
 if TYPE_CHECKING:
   from jaxtyping import PRNGKeyArray
@@ -28,7 +28,7 @@ def smc_sampler(key: PRNGKeyArray, config: SMCConfig) -> SMCOutput:
   """Run a Sequential Monte Carlo simulation for sequence design."""
   validate_smc_config(config)
   initial_population = generate_template_population(
-    initial_sequence=config.template_sequence,
+    initial_sequence=config.seed_sequence,
     population_size=config.population_size,
     input_sequence_type=config.sequence_type,
     output_sequence_type=config.sequence_type,
@@ -45,7 +45,7 @@ def smc_sampler(key: PRNGKeyArray, config: SMCConfig) -> SMCOutput:
   key, subkey = random.split(key)
   initial_population = diversify_initial_sequences(
     key=subkey,
-    template_sequences=initial_population,
+    seed_sequences=initial_population,
     mutation_rate=config.diversification_ratio,
     sequence_type=config.sequence_type,
   )

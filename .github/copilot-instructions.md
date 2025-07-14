@@ -72,3 +72,27 @@ The current primary development focus is on **utilities to improve memory effici
 * **If automated fixes for linting or type errors fail repeatedly (more than 5 times for the same issue), report to the user for manual review.**
 * Refer to `GEMINI.md` for detailed project context and goals.
 * Refer to `README.md` for project setup and general overview.
+
+## 5. Example Function Documentation
+"""
+Instructions:
+- Use Google style docstrings for documenting Python functions.
+- Google style docstrings include sections such as Args, Returns, Raises, and Examples.
+- Each parameter should be documented under the Args section with its type and description.
+- The Returns section should describe the return value and its type.
+- The Raises section should list possible exceptions raised by the function, if any.
+- Optionally, include an Examples section to demonstrate usage.
+
+Args:
+  selection (type): Description of the selection parameter.
+
+Returns:
+  type: Description of the return value.
+
+Raises:
+  ExceptionType: Description of the exception raised (if applicable).
+
+Example:
+  >>> result = function_name(selection)
+  >>> print(result)
+"""

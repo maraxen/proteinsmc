@@ -1,6 +1,6 @@
 """Sequential Monte Carlo (SMC) sampling for protein sequence design."""
 
-from .data_structures import (
+from ...utils.data_structures import (
   AutoTuningConfig,
   MemoryConfig,
   SMCCarryState,

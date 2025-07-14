@@ -7,7 +7,7 @@ import chex
 import pytest
 from jax import random
 
-from proteinsmc.sampling.smc.data_structures import (
+from proteinsmc.utils.data_structures import (
   MemoryConfig,
   SMCCarryState,
   SMCConfig,
@@ -51,14 +51,14 @@ def sample_smc_config(sample_fitness_evaluator):
   )
   
   return SMCConfig(
-    template_sequence="MKYN",
+    seed_sequence="MKYN",
     population_size=100,
     n_states=20,
     generations=50,
     mutation_rate=0.1,
     diversification_ratio=0.2,
     sequence_type="protein",
-    annealing_schedule_config=annealing_schedule_config,
+    annealing_schedule=annealing_schedule_config,
     fitness_evaluator=sample_fitness_evaluator,
     memory_config=memory_config,
   )
@@ -88,7 +88,7 @@ def test_smc_config_pytree(sample_smc_config):
   reconstructed = SMCConfig.tree_unflatten(aux_data, children)
   
   chex.assert_equal(children, ())  # Should be empty since all fields are auxiliary
-  chex.assert_equal(reconstructed.template_sequence, sample_smc_config.template_sequence)
+  chex.assert_equal(reconstructed.seed_sequence, sample_smc_config.seed_sequence)
   chex.assert_equal(reconstructed.population_size, sample_smc_config.population_size)
   chex.assert_trees_all_close(reconstructed.mutation_rate, sample_smc_config.mutation_rate)
 
@@ -138,9 +138,8 @@ def test_smc_output_pytree(sample_smc_config):
   children, aux_data = output.tree_flatten()
   reconstructed = SMCOutput.tree_unflatten(aux_data, children)
   
-  chex.assert_equal(len(children), 7)  # Number of JAX array fields
-  assert "final_logZhat" in aux_data
-  assert "final_amino_acid_entropy" in aux_data
+  chex.assert_equal(len(children), 9)
+  chex.assert_equal(children[0], sample_smc_config)
   chex.assert_trees_all_equal(reconstructed.mean_combined_fitness_per_gen, output.mean_combined_fitness_per_gen)
   chex.assert_trees_all_close(reconstructed.final_logZhat, output.final_logZhat)
 
@@ -184,7 +183,7 @@ def test_memory_config_defaults():
 def test_smc_config_validation_ready(sample_smc_config):
   """Test that SMCConfig contains all necessary fields for validation."""
   # Ensure all required fields are present
-  chex.assert_equal(hasattr(sample_smc_config, 'template_sequence'), True)
+  chex.assert_equal(hasattr(sample_smc_config, 'seed_sequence'), True)
   chex.assert_equal(hasattr(sample_smc_config, 'population_size'), True)
   chex.assert_equal(hasattr(sample_smc_config, 'mutation_rate'), True)
   chex.assert_equal(hasattr(sample_smc_config, 'sequence_type'), True)

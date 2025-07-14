@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from functools import partial
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 import jax
 import jax.numpy as jnp
@@ -13,12 +12,6 @@ from jax import jit, lax, vmap
 if TYPE_CHECKING:
   from jaxtyping import Float, Int, PRNGKeyArray
 
-  from proteinsmc.utils import (
-    AnnealingScheduleConfig,
-    FitnessEvaluator,
-    IslandFloats,
-    PopulationSequences,
-  )
 
 from proteinsmc.utils import (
   calculate_logZ_increment,
@@ -28,205 +21,14 @@ from proteinsmc.utils import (
   generate_template_population,
   resample,
 )
-
-
-@dataclass(frozen=True)
-class ExchangeConfig:
-  """Configuration for parallel replica exchange."""
-
-  population_size_per_island: int
-  n_islands: int
-  n_exchange_attempts: int
-  fitness_evaluator: FitnessEvaluator
-  exchange_frequency: float
-  sequence_type: Literal["protein", "nucleotide"]
-  n_exchange_attempts_per_cycle: int
-  ess_threshold_fraction: float
-
-  def tree_flatten(self: ExchangeConfig) -> tuple[tuple, dict]:
-    """Flatten the dataclass for JAX PyTree compatibility."""
-    children: tuple = ()
-    aux_data: dict = self.__dict__
-    return (children, aux_data)
-
-  @classmethod
-  def tree_unflatten(
-    cls: type[ExchangeConfig],
-    aux_data: dict,
-    _children: tuple,
-  ) -> ExchangeConfig:
-    """Unflatten the dataclass for JAX PyTree compatibility."""
-    return cls(**aux_data)
-
-
-@dataclass(frozen=True)
-class PRSMCStepConfig:
-  """Configuration for a single step in the PRSMC algorithm."""
-
-  population_size_per_island: int
-  mutation_rate: float
-  fitness_evaluator: FitnessEvaluator
-  sequence_type: Literal["protein", "nucleotide"]
-  ess_threshold_frac: float
-  meta_beta_annealing_schedule: AnnealingScheduleConfig
-  exchange_config: ExchangeConfig
-
-  def tree_flatten(self: PRSMCStepConfig) -> tuple[tuple, dict]:
-    """Flatten the dataclass for JAX PyTree compatibility."""
-    children: tuple = ()
-    aux_data: dict = self.__dict__
-    return (children, aux_data)
-
-  @classmethod
-  def tree_unflatten(
-    cls: type[PRSMCStepConfig],
-    aux_data: dict,
-    _children: tuple,
-  ) -> PRSMCStepConfig:
-    """Unflatten the dataclass for JAX PyTree compatibility."""
-    return cls(**aux_data)
-
-
-@dataclass(frozen=True)
-class ParallelReplicaConfig:
-  """Configuration for parallel replica SMC simulation."""
-
-  template_sequence: str
-  population_size_per_island: int
-  n_islands: int
-  n_states: int
-  generations: int
-  island_betas: list[float]
-  initial_diversity: float
-  fitness_evaluator: FitnessEvaluator
-  step_config: PRSMCStepConfig
-
-  def tree_flatten(self: ParallelReplicaConfig) -> tuple[tuple, dict]:
-    """Flatten the dataclass for JAX PyTree compatibility."""
-    _children: tuple = ()
-    aux_data: dict = self.__dict__
-    return (_children, aux_data)
-
-  @classmethod
-  def tree_unflatten(
-    cls: type[ParallelReplicaConfig],
-    aux_data: dict,
-    _children: tuple,
-  ) -> ParallelReplicaConfig:
-    """Unflatten the dataclass for JAX PyTree compatibility."""
-    return cls(**aux_data)
-
-
-@dataclass
-class IslandState:
-  """State of a single island in the PRSMC algorithm."""
-
-  key: PRNGKeyArray
-  population: PopulationSequences
-  beta: Float
-  logZ_estimate: Float  # noqa: N815
-  ess: Float
-  mean_fitness: Float
-  step: Int = field(default_factory=lambda: jnp.array(0, dtype=jnp.int32))
-
-  def tree_flatten(self: IslandState) -> tuple[tuple, dict]:
-    """Flatten the dataclass for JAX PyTree compatibility."""
-    children: tuple = (
-      self.key,
-      self.population,
-      self.beta,
-      self.logZ_estimate,
-      self.ess,
-      self.mean_fitness,
-      self.step,
-    )
-    aux_data: dict = {}
-    return children, aux_data
-
-  @classmethod
-  def tree_unflatten(cls: type[IslandState], _aux_data: dict, children: tuple) -> IslandState:
-    """Unflatten the dataclass for JAX PyTree compatibility."""
-    return cls(*children)
-
-
-@dataclass
-class PRSMCCarryState:
-  """Carry state for the PRSMC algorithm, containing overall state and PRNG key."""
-
-  current_overall_state: IslandState
-  prng_key: PRNGKeyArray
-  total_swaps_attempted: Int = field(default_factory=lambda: jnp.array(0, dtype=jnp.int32))
-  total_swaps_accepted: Int = field(default_factory=lambda: jnp.array(0, dtype=jnp.int32))
-
-  def tree_flatten(self: PRSMCCarryState) -> tuple[tuple, dict]:
-    """Flatten the dataclass for JAX PyTree compatibility."""
-    children: tuple = (
-      self.current_overall_state,
-      self.prng_key,
-      self.total_swaps_attempted,
-      self.total_swaps_accepted,
-    )
-    aux_data: dict = {}
-    return children, aux_data
-
-  @classmethod
-  def tree_unflatten(
-    cls: type[PRSMCCarryState],
-    _aux_data: dict,
-    children: tuple,
-  ) -> PRSMCCarryState:
-    """Unflatten the dataclass for JAX PyTree compatibility."""
-    return cls(*children)
-
-
-@dataclass
-class ParallelReplicaSMCOutput:
-  """Output of the Parallel Replica SMC algorithm."""
-
-  input_config: ParallelReplicaConfig
-  final_island_states: IslandState
-  swap_acceptance_rate: IslandFloats
-  history_mean_fitness_per_island: IslandFloats
-  history_max_fitness_per_island: IslandFloats
-  history_ess_per_island: IslandFloats
-  history_logZ_increment_per_island: IslandFloats  # noqa: N815
-  history_meta_beta: IslandFloats
-  history_num_accepted_swaps: IslandFloats
-  history_num_attempted_swaps: IslandFloats
-
-  def tree_flatten(self: ParallelReplicaSMCOutput) -> tuple[tuple, dict]:
-    """Flatten the dataclass for JAX PyTree compatibility."""
-    children: tuple = (
-      self.input_config,
-      self.final_island_states,
-      self.swap_acceptance_rate,
-      self.history_mean_fitness_per_island,
-      self.history_max_fitness_per_island,
-      self.history_ess_per_island,
-      self.history_logZ_increment_per_island,
-      self.history_meta_beta,
-      self.history_num_accepted_swaps,
-      self.history_num_attempted_swaps,
-    )
-    aux_data: dict = {}
-    return children, aux_data
-
-  @classmethod
-  def tree_unflatten(
-    cls: type[ParallelReplicaSMCOutput],
-    _aux_data: dict,
-    children: tuple,
-  ) -> ParallelReplicaSMCOutput:
-    """Unflatten the dataclass for JAX PyTree compatibility."""
-    return cls(*children)
-
-
-jax.tree_util.register_pytree_node_class(ExchangeConfig)
-jax.tree_util.register_pytree_node_class(PRSMCStepConfig)
-jax.tree_util.register_pytree_node_class(ParallelReplicaConfig)
-jax.tree_util.register_pytree_node_class(IslandState)
-jax.tree_util.register_pytree_node_class(PRSMCCarryState)
-jax.tree_util.register_pytree_node_class(ParallelReplicaSMCOutput)
+from proteinsmc.utils.data_structures import (
+  ExchangeConfig,
+  IslandState,
+  ParallelReplicaConfig,
+  ParallelReplicaSMCOutput,
+  PRSMCCarryState,
+  PRSMCStepConfig,
+)
 
 
 @partial(jit, static_argnames=("config",))
@@ -524,15 +326,15 @@ def prsmc_sampler(
   """Run Parallel Replica inspired SMC with the new fitness evaluation system."""
   key_init_islands, key_smc_loop = jax.random.split(key)
   initial_population = generate_template_population(
-    initial_sequence=config.template_sequence,
-    population_size=config.population_size_per_island * config.n_islands,
+    initial_sequence=config.seed_sequence,
+    population_size=config.step_config.population_size_per_island * config.n_islands,
     input_sequence_type=config.step_config.sequence_type,
     output_sequence_type=config.step_config.sequence_type,
   )
   initial_population = diversify_initial_sequences(
     key=key_init_islands,
-    template_sequences=initial_population,
-    mutation_rate=config.initial_diversity,
+    seed_sequences=initial_population,
+    mutation_rate=config.diversification_ratio,
     sequence_type=config.step_config.sequence_type,
   )
   initial_populations = jnp.split(

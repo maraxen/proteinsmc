@@ -21,7 +21,7 @@ def generate_template_population(
 ) -> PopulationSequences:
   """Create a JAX array representing a population from a single string sequence.
 
-  This is a utility to easily create the `template_sequences` needed for `SMCConfig`.
+  This is a utility to easily create the `seed_sequences` needed for `SMCConfig`.
 
   Args:
       initial_sequence: The sequence as a string.

@@ -26,7 +26,7 @@ def mock_fitness_fn(key, sequence, **kwargs) -> jnp.ndarray:
 def setup_sampler():
   """Provide a standard setup for the Parallel Replica SMC sampler test."""
   key = random.PRNGKey(0)
-  template_sequence = "MKY"
+  seed_sequence = "MKY"
   n_islands = 4
   population_size_per_island = 8
 
@@ -68,7 +68,7 @@ def setup_sampler():
   )
 
   config = ParallelReplicaConfig(
-    template_sequence=template_sequence,
+    seed_sequence=seed_sequence,
     population_size_per_island=population_size_per_island,
     n_islands=n_islands,
     n_states=20,

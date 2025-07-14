@@ -7,7 +7,7 @@ from functools import partial
 import jax.numpy as jnp
 from jax import Array, jit, random
 
-from proteinsmc.sampling.smc.data_structures import SMCCarryState, SMCConfig
+from proteinsmc.utils.data_structures import SMCCarryState, SMCConfig
 from proteinsmc.utils import (
   chunked_calculate_population_fitness,
   chunked_mutation_step,

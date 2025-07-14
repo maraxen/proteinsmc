@@ -89,7 +89,7 @@ def _revert_x_codons_if_mutated(
 @partial(jit, static_argnames=("n_states",))
 def diversify_initial_nucleotide_sequences(
   key: PRNGKeyArray,
-  template_sequences: PopulationSequences,
+  seed_sequences: PopulationSequences,
   mutation_rate: float,
   n_states: int,
 ) -> PopulationSequences:
@@ -99,7 +99,7 @@ def diversify_initial_nucleotide_sequences(
 
   Args:
       key: JAX PRNG key.
-      template_sequences: JAX array of sequences
+      seed_sequences: JAX array of sequences
                                 (shape: (population_size, sequence_length)).
       mutation_rate: Mutation rate for nucleotides.
       n_states: Number of states (e.g., 4 for A, C, G, T in nucleotides).
@@ -110,19 +110,19 @@ def diversify_initial_nucleotide_sequences(
 
   """
   key_mask, key_offsets = random.split(key)
-  mutation_mask_attempt = random.uniform(key_mask, shape=template_sequences.shape) < mutation_rate
+  mutation_mask_attempt = random.uniform(key_mask, shape=seed_sequences.shape) < mutation_rate
 
-  offsets = random.randint(key_offsets, shape=template_sequences.shape, minval=1, maxval=n_states)
-  proposed_nucleotides = (template_sequences + offsets) % n_states
+  offsets = random.randint(key_offsets, shape=seed_sequences.shape, minval=1, maxval=n_states)
+  proposed_nucleotides = (seed_sequences + offsets) % n_states
 
   particles_with_all_proposed_mutations = jnp.where(
     mutation_mask_attempt,
     proposed_nucleotides,
-    template_sequences,
+    seed_sequences,
   )
 
   final_population = vmap(_revert_x_codons_if_mutated)(
-    template_sequences,
+    seed_sequences,
     particles_with_all_proposed_mutations,
   )
   final_population = final_population.astype(jnp.int8)
@@ -133,7 +133,7 @@ def diversify_initial_nucleotide_sequences(
 @partial(jit, static_argnames=("n_states",))
 def diversify_initial_protein_sequences(
   key: PRNGKeyArray,
-  template_sequences: PopulationSequences,
+  seed_sequences: PopulationSequences,
   mutation_rate: float,
   n_states: int,
 ) -> PopulationSequences:
@@ -141,7 +141,7 @@ def diversify_initial_protein_sequences(
 
   Args:
       key: JAX PRNG key.
-      template_sequences: JAX array of sequences
+      seed_sequences: JAX array of sequences
                                 (shape: (population_size, sequence_length)).
       mutation_rate: Mutation rate for proteins.
       n_states: Number of states (e.g., 20 for amino acids).
@@ -151,15 +151,15 @@ def diversify_initial_protein_sequences(
 
   """
   key_mask, key_offsets = random.split(key)
-  mutation_mask_attempt = random.uniform(key_mask, shape=template_sequences.shape) < mutation_rate
+  mutation_mask_attempt = random.uniform(key_mask, shape=seed_sequences.shape) < mutation_rate
 
-  offsets = random.randint(key_offsets, shape=template_sequences.shape, minval=1, maxval=n_states)
-  proposed_amino_acids = (template_sequences + offsets) % n_states
+  offsets = random.randint(key_offsets, shape=seed_sequences.shape, minval=1, maxval=n_states)
+  proposed_amino_acids = (seed_sequences + offsets) % n_states
 
   final_population = jnp.where(
     mutation_mask_attempt,
     proposed_amino_acids,
-    template_sequences,
+    seed_sequences,
   )
 
   return final_population.astype(jnp.int8)
@@ -167,7 +167,7 @@ def diversify_initial_protein_sequences(
 
 def diversify_initial_sequences(
   key: PRNGKeyArray,
-  template_sequences: PopulationSequences,
+  seed_sequences: PopulationSequences,
   mutation_rate: float,
   sequence_type: Literal["nucleotide", "protein"],
 ) -> PopulationSequences:
@@ -175,14 +175,14 @@ def diversify_initial_sequences(
   if sequence_type == "nucleotide":
     return diversify_initial_nucleotide_sequences(
       key,
-      template_sequences,
+      seed_sequences,
       mutation_rate,
       n_states=4,
     )
   if sequence_type == "protein":
     return diversify_initial_protein_sequences(
       key,
-      template_sequences,
+      seed_sequences,
       mutation_rate,
       n_states=20,
     )

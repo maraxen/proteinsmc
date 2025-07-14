@@ -7,7 +7,7 @@ import chex
 import pytest
 from jax import random
 
-from proteinsmc.sampling.smc.data_structures import MemoryConfig, SMCCarryState, SMCConfig
+from proteinsmc.utils.data_structures import MemoryConfig, SMCCarryState, SMCConfig
 from proteinsmc.sampling.smc.step import smc_step
 from proteinsmc.utils import AnnealingScheduleConfig, FitnessEvaluator, FitnessFunction, linear_schedule, safe_weighted_mean, chunked_mutation_step, chunked_calculate_population_fitness
 
@@ -41,7 +41,7 @@ def sample_smc_config(sample_fitness_evaluator):
   )
   
   return SMCConfig(
-    template_sequence="MKYN",
+    seed_sequence="MKYN",
     population_size=100,
     n_states=20,
     generations=50,
@@ -125,7 +125,7 @@ def test_smc_step(sample_smc_config):
   key = random.PRNGKey(42)
   # Create population with correct shape: (population_size, sequence_length)
   population_size = 10  # Use smaller size for test efficiency
-  sequence_length = len(sample_smc_config.template_sequence)
+  sequence_length = len(sample_smc_config.seed_sequence)
   population = random.randint(
     key, 
     (population_size, sequence_length), 
@@ -183,7 +183,7 @@ def test_smc_step_with_chunking(sample_smc_config):
   
   # Test with small chunk size
   config_small_chunk = SMCConfig(
-    template_sequence=sample_smc_config.template_sequence,
+    seed_sequence=sample_smc_config.seed_sequence,
     population_size=sample_smc_config.population_size,
     n_states=sample_smc_config.n_states,
     generations=sample_smc_config.generations,
@@ -243,7 +243,7 @@ def test_memory_config_integration():
   
   # Create config with chunking disabled
   config_no_chunk = SMCConfig(
-    template_sequence="MKY",
+    seed_sequence="MKY",
     population_size=10,
     n_states=20,
     generations=10,

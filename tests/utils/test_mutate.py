@@ -51,7 +51,7 @@ def test_diversify_initial_sequences(sample_sequences):
   key = jax.random.PRNGKey(0)
   diversified = diversify_initial_sequences(
     key,
-    template_sequences=sample_sequences,
+    seed_sequences=sample_sequences,
     mutation_rate=1.0,
     sequence_type="nucleotide",
   )

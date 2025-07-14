@@ -4,7 +4,7 @@ import dataclasses
 
 import pytest
 
-from proteinsmc.sampling.smc.data_structures import MemoryConfig, SMCConfig
+from proteinsmc.utils.data_structures import MemoryConfig, SMCConfig
 from proteinsmc.sampling.smc.validation import validate_smc_config
 from proteinsmc.utils import AnnealingScheduleConfig, FitnessEvaluator, FitnessFunction, linear_schedule
 
@@ -43,7 +43,7 @@ def valid_annealing_config():
 def valid_smc_config(valid_fitness_evaluator, valid_annealing_config):
   """Create a valid SMC config for testing."""
   return SMCConfig(
-    template_sequence="MKYN",
+    seed_sequence="MKYN",
     population_size=100,
     n_states=20,
     generations=50,
@@ -66,9 +66,9 @@ def test_validate_smc_config_invalid_type():
   """Test validation with wrong config type."""
   with pytest.raises(TypeError, match="Expected config to be an instance of SMCConfig"):
     validate_smc_config("not_a_config")  # type: ignore[arg-type]
-def test_validate_smc_config_empty_template_sequence(valid_smc_config):
+def test_validate_smc_config_empty_seed_sequence(valid_smc_config):
   """Test validation with empty template sequence."""
-  invalid_config = dataclasses.replace(valid_smc_config, template_sequence="")
+  invalid_config = dataclasses.replace(valid_smc_config, seed_sequence="")
 
   with pytest.raises(ValueError, match="Template sequence must be provided and cannot be empty"):
     validate_smc_config(invalid_config)

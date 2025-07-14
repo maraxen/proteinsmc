@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-  from proteinsmc.sampling.smc.data_structures import SMCConfig
+  from proteinsmc.utils.data_structures import SMCConfig
 
 
 def validate_smc_config(config: SMCConfig) -> None:
@@ -34,7 +34,7 @@ def _validate_config_type(config: SMCConfig) -> None:
 
 def _validate_sequence_fields(config: SMCConfig) -> None:
   """Validate sequence-related fields."""
-  if config.template_sequence is None or config.template_sequence == "":
+  if config.seed_sequence is None or config.seed_sequence == "":
     msg = "Template sequence must be provided and cannot be empty."
     raise ValueError(msg)
 

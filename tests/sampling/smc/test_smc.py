@@ -26,7 +26,7 @@ def mock_nucleotide_fitness_fn(_key, seq, **kwargs):
 def setup_smc_protein():
   """Provides a standard setup for a protein-based SMC sampler test."""
   key = random.PRNGKey(0)
-  template_sequence = "MKY"
+  seed_sequence = "MKY"
 
   fitness_evaluator = FitnessEvaluator(
     fitness_functions=(
@@ -42,7 +42,7 @@ def setup_smc_protein():
   )
 
   smc_config = SMCConfig(
-    template_sequence=template_sequence,
+    seed_sequence=seed_sequence,
     population_size=10,
     n_states=20,
     generations=5,
@@ -66,7 +66,7 @@ def setup_smc_protein():
 def setup_smc_nucleotide():
   """Provides a standard setup for a nucleotide-based SMC sampler test."""
   key = random.PRNGKey(0)
-  template_sequence = "ATGAAATAC"
+  seed_sequence = "ATGAAATAC"
 
   fitness_evaluator = FitnessEvaluator(
     fitness_functions=(
@@ -86,7 +86,7 @@ def setup_smc_nucleotide():
   )
 
   smc_config = SMCConfig(
-    template_sequence=template_sequence,
+    seed_sequence=seed_sequence,
     population_size=10,
     n_states=4,
     generations=5,
