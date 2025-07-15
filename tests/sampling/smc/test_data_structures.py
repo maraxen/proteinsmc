@@ -75,7 +75,7 @@ def test_memory_config_pytree():
   children, aux_data = config.tree_flatten()
   reconstructed = MemoryConfig.tree_unflatten(aux_data, children)
   
-  chex.assert_equal(children, ())  # Should be empty since all fields are auxiliary
+  chex.assert_equal(children, ())
   chex.assert_equal(reconstructed.population_chunk_size, config.population_chunk_size)
   chex.assert_equal(reconstructed.enable_chunked_vmap, config.enable_chunked_vmap)
   chex.assert_trees_all_close(reconstructed.device_memory_fraction, config.device_memory_fraction)

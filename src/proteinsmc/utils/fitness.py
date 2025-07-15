@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING, Any, Callable, Literal
 
@@ -22,86 +21,13 @@ if TYPE_CHECKING:
     StackedPopulationSequenceFloats,
   )
 
+  from .data_structures import (
+    FitnessEvaluator,
+    FitnessFunction,
+  )
+
 from .translation import reverse_translate, translate
 from .vmap_utils import chunked_vmap
-
-
-@dataclass(frozen=True)
-class FitnessFunction:
-  """Data structure for managing fitness function metadata."""
-
-  func: Callable[[PRNGKeyArray, EvoSequence], PopulationSequenceFloats]
-  input_type: Literal["nucleotide", "protein"]
-  name: str
-
-  def __post_init__(self) -> None:
-    """Validate the fitness function metadata."""
-    if not callable(self.func):
-      msg = f"Fitness function {self.func} is not callable."
-      raise TypeError(msg)
-    if self.input_type not in ["nucleotide", "protein"]:
-      msg = f"Invalid input_type '{self.input_type}'. Expected 'nucleotide' or 'protein'."
-      raise ValueError(
-        msg,
-      )
-    if not isinstance(self.name, str):
-      msg = "name must be a string."
-      raise TypeError(msg)
-
-  def __hash__(self) -> int:
-    """Hash the fitness function based on its properties."""
-    return hash((self.func, self.input_type, frozenset(self.name)))
-
-  def tree_flatten(self) -> tuple[tuple, dict]:
-    """Flatten the dataclass for JAX PyTree compatibility."""
-    children = ()
-    aux_data = self.__dict__
-    return (children, aux_data)
-
-  @classmethod
-  def tree_unflatten(cls, aux_data: dict, _children: tuple) -> FitnessFunction:
-    """Unflatten the dataclass for JAX PyTree compatibility."""
-    return cls(**aux_data)
-
-
-@dataclass(frozen=True)
-class FitnessEvaluator:
-  """Manager for collection of fitness functions."""
-
-  fitness_functions: tuple[FitnessFunction, ...]
-  combine_func: Callable[[StackedPopulationSequenceFloats], PopulationSequenceFloats] | None = None
-
-  def __post_init__(self) -> None:
-    """Validate the fitness evaluator configuration."""
-    if not self.fitness_functions:
-      msg = "At least one fitness function must be provided."
-      raise ValueError(msg)
-
-  def get_functions_by_type(
-    self,
-    input_type: Literal["nucleotide", "protein"],
-  ) -> list[FitnessFunction]:
-    """Get active fitness functions that accept the specified input type."""
-    return [f for f in self.fitness_functions if f.input_type == input_type]
-
-  def __hash__(self) -> int:
-    """Hash the fitness evaluator based on its properties."""
-    return hash(tuple(sorted(self.fitness_functions, key=lambda f: f.name)))
-
-  def tree_flatten(self) -> tuple[tuple, dict]:
-    """Flatten the dataclass for JAX PyTree compatibility."""
-    children = ()
-    aux_data = self.__dict__
-    return (children, aux_data)
-
-  @classmethod
-  def tree_unflatten(cls, aux_data: dict, _children: tuple) -> FitnessEvaluator:
-    """Unflatten the dataclass for JAX PyTree compatibility."""
-    return cls(**aux_data)
-
-
-jax.tree_util.register_pytree_node_class(FitnessEvaluator)
-jax.tree_util.register_pytree_node_class(FitnessFunction)
 
 
 def make_fitness_function(

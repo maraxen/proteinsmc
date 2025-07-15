@@ -5,11 +5,17 @@ import pytest
 from jax import random
 
 from proteinsmc.sampling.smc import (
-  SMCConfig,
   smc_sampler,
 )
-from proteinsmc.utils.annealing_schedules import AnnealingScheduleConfig, linear_schedule
-from proteinsmc.utils.fitness import FitnessEvaluator, FitnessFunction
+from proteinsmc.utils.data_structures import (
+  AnnealingScheduleConfig,
+  FitnessEvaluator,
+  FitnessFunction,
+  SMCConfig,
+  MemoryConfig,
+)
+from proteinsmc.utils.annealing_schedules import linear_schedule
+
 
 
 def mock_protein_fitness_fn(_key, seq, **kwargs):
@@ -48,9 +54,10 @@ def setup_smc_protein():
     generations=5,
     mutation_rate=0.1,
     sequence_type="protein",
-    annealing_schedule_config=annealing_config,
+    annealing_schedule=annealing_config,
     fitness_evaluator=fitness_evaluator,
     diversification_ratio=0.2,
+    memory_config=MemoryConfig(),
   )
 
   annealing_config = AnnealingScheduleConfig(
@@ -92,9 +99,10 @@ def setup_smc_nucleotide():
     generations=5,
     mutation_rate=0.1,
     sequence_type="nucleotide",
-    annealing_schedule_config=annealing_config,
+    annealing_schedule=annealing_config,
     fitness_evaluator=fitness_evaluator,
     diversification_ratio=0.2,
+    memory_config=MemoryConfig(),
   )
 
   return key, smc_config

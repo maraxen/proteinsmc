@@ -12,16 +12,7 @@ import jax.numpy as jnp
 if TYPE_CHECKING:
   from jaxtyping import Array, PRNGKeyArray, PyTree
 
-
-@dataclass(frozen=True)
-class AutoTuningConfig:
-  """Configuration for auto-tuning behavior."""
-
-  enable_auto_tuning: bool = True
-  probe_chunk_sizes: tuple[int, ...] = (16, 32, 64, 128, 256)
-  max_probe_iterations: int = 3
-  memory_safety_factor: float = 0.8
-  performance_tolerance: float = 0.1
+  from .data_structures import AutoTuningConfig
 
 
 @dataclass

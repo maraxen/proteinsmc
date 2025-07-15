@@ -8,7 +8,11 @@ from proteinsmc.sampling.gibbs import (
   gibbs_sampler,
   make_gibbs_update_fns,
 )
-from proteinsmc.utils.fitness import FitnessEvaluator, FitnessFunction, make_sequence_log_prob_fn
+from proteinsmc.utils.data_structures import (
+  FitnessEvaluator,
+  FitnessFunction,
+)
+from proteinsmc.utils.fitness import make_sequence_log_prob_fn
 
 
 @pytest.fixture

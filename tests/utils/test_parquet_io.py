@@ -16,10 +16,11 @@ from proteinsmc.utils.data_structures import (
     SMCConfig,
     SMCOutput,
     MemoryConfig,
+    AnnealingScheduleConfig,
+    FitnessEvaluator,
+    FitnessFunction,
 )
 
-from proteinsmc.utils.fitness import FitnessEvaluator, FitnessFunction
-from proteinsmc.utils.annealing_schedules import AnnealingScheduleConfig
 
 BASE_SMC_CONFIG = SMCConfig(
     seed_sequence="base", # This will be replaced per-run
@@ -29,7 +30,6 @@ BASE_SMC_CONFIG = SMCConfig(
     mutation_rate=0.1,
     diversification_ratio=0.5,
     sequence_type="protein",
-    # CORRECTED: Changed 'annealing_schedule_config' to 'annealing_schedule'
     annealing_schedule=AnnealingScheduleConfig(
         schedule_fn=lambda _, _a, x: x, beta_max=1.0, annealing_len=10
     ),

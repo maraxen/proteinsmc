@@ -5,17 +5,20 @@ import pytest
 from jax import random
 
 from proteinsmc.sampling.smc.parallel_replica import (
-  ExchangeConfig,
-  ParallelReplicaConfig,
-  PRSMCStepConfig,
   prsmc_sampler,
 )
 from proteinsmc.utils.annealing_schedules import (
-  AnnealingScheduleConfig,
   linear_schedule,
 )
-from proteinsmc.utils.fitness import FitnessEvaluator, FitnessFunction
-
+from proteinsmc.utils.data_structures import (
+  AnnealingScheduleConfig,
+  ExchangeConfig,
+  FitnessEvaluator,
+  FitnessFunction,
+  ParallelReplicaConfig,
+  PRSMCStepConfig,
+  MemoryConfig,
+)
 
 def mock_fitness_fn(key, sequence, **kwargs) -> jnp.ndarray:
   """Mock fitness function that returns a single score per sequence."""
@@ -74,9 +77,12 @@ def setup_sampler():
     n_states=20,
     generations=100,
     island_betas=[0.1] * n_islands,
-    initial_diversity=0.1,
     fitness_evaluator=fitness_evaluator,
     step_config=step_config,
+    mutation_rate=step_config.mutation_rate,
+    sequence_type=step_config.sequence_type,
+    diversification_ratio=0.2,
+    memory_config=MemoryConfig()
   )
 
   return key, config

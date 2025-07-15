@@ -37,7 +37,7 @@ def smc_sampler(key: PRNGKeyArray, config: SMCConfig) -> SMCOutput:
   logger.info(
     "Running SMC (JAX) | Shape=%s | Schedule=%s | PopulationSize=%d | Steps=%d",
     initial_population.shape,
-    config.annealing_schedule_config.schedule_fn.__name__,
+    config.annealing_schedule.schedule_fn.__name__,
     population_size,
     config.generations,
   )
@@ -50,12 +50,12 @@ def smc_sampler(key: PRNGKeyArray, config: SMCConfig) -> SMCOutput:
     sequence_type=config.sequence_type,
   )
 
-  annealing_len = jnp.array(config.annealing_schedule_config.annealing_len, dtype=jnp.int32)
-  beta_max = jnp.array(config.annealing_schedule_config.beta_max, dtype=jnp.float32)
+  annealing_len = jnp.array(config.annealing_schedule.annealing_len, dtype=jnp.int32)
+  beta_max = jnp.array(config.annealing_schedule.beta_max, dtype=jnp.float32)
 
   beta_schedule = jnp.array(
     [
-      config.annealing_schedule_config.schedule_fn(
+      config.annealing_schedule.schedule_fn(
         i + 1,
         annealing_len,
         beta_max,

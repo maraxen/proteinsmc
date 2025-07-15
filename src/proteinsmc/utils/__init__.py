@@ -1,14 +1,12 @@
 """Utility functions for protein sequence modeling and sampling."""
 
 from .annealing_schedules import (
-  AnnealingScheduleConfig,
   cosine_schedule,
   exponential_schedule,
   linear_schedule,
   static_schedule,
 )
 from .auto_tuning import (
-  AutoTuningConfig,
   BenchmarkResult,
   auto_tune_chunk_size,
   create_test_population,
@@ -35,9 +33,24 @@ from .constants import (
   UNKNOWN_AA_INT,
   ECOLI_MAX_FREQS_JAX_list,
 )
-from .fitness import (
+from .data_structures import (
+  AnnealingScheduleConfig,
+  AutoTuningConfig,
+  BaseSamplerConfig,
+  ExchangeConfig,
   FitnessEvaluator,
   FitnessFunction,
+  MemoryConfig,
+  ParallelReplicaConfig,
+  ParallelReplicaSMCOutput,
+  PRSMCCarryState,
+  PRSMCStepConfig,
+  SamplerOutputProtocol,
+  SMCCarryState,
+  SMCConfig,
+  SMCOutput,
+)
+from .fitness import (
   calculate_population_fitness,
   chunked_calculate_population_fitness,
   combine_fitness_scores,
@@ -143,4 +156,15 @@ __all__ = [
   "safe_weighted_mean",
   "chunked_mutation_step",
   "chunked_calculate_population_fitness",
+  "BaseSamplerConfig",
+  "ParallelReplicaConfig",
+  "ParallelReplicaSMCOutput",
+  "PRSMCCarryState",
+  "PRSMCStepConfig",
+  "SamplerOutputProtocol",
+  "SMCCarryState",
+  "SMCConfig",
+  "SMCOutput",
+  "MemoryConfig",
+  "ExchangeConfig",
 ]

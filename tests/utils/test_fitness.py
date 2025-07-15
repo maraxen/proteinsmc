@@ -5,10 +5,10 @@ import chex
 import pytest
 from proteinsmc.utils.fitness import chunked_calculate_population_fitness
 
-from proteinsmc.utils.fitness import (
+from proteinsmc.utils import (
+  calculate_population_fitness,
   FitnessEvaluator,
   FitnessFunction,
-  calculate_population_fitness,
 )
 
 def make_mock_fitness_function(mock_func, **kwargs):

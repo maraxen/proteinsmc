@@ -1,5 +1,6 @@
 jax
 jaxlib
+dill
 flax
 chex
 jaxtyping

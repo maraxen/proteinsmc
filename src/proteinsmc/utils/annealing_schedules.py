@@ -2,46 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
-import jax
 import jax.numpy as jnp
 
 if TYPE_CHECKING:
   from jaxtyping import Float, Int
-
-
-@dataclass(frozen=True)
-class AnnealingScheduleConfig:
-  """Configuration for an annealing schedule.
-
-  Attributes:
-      schedule_fn: Callable function that defines the annealing schedule.
-      beta_max: Maximum value for beta.
-      annealing_len: Number of steps over which to anneal.
-      schedule_args: Additional arguments for the schedule function.
-
-  """
-
-  schedule_fn: Callable[[Int, Int, Float], Float]
-  beta_max: float
-  annealing_len: int
-  schedule_args: tuple = field(default_factory=tuple)
-
-  def tree_flatten(self) -> tuple[tuple, dict]:
-    """Flatten the dataclass for JAX PyTree compatibility."""
-    children = ()
-    aux_data = {k: v for k, v in self.__dict__.items() if k not in children}
-    return (children, aux_data)
-
-  @classmethod
-  def tree_unflatten(cls, aux_data: dict, _children: tuple) -> AnnealingScheduleConfig:
-    """Unflatten the dataclass for JAX PyTree compatibility."""
-    return cls(**aux_data)
-
-
-jax.tree_util.register_pytree_node_class(AnnealingScheduleConfig)
 
 
 def linear_schedule(p: Int, n_steps: Int, beta_max: Float) -> Float:
@@ -89,3 +55,11 @@ def cosine_schedule(p: Int, n_steps: Int, beta_max: Float) -> Float:
 def static_schedule(_p: Int, _n: Int, beta_max: Float) -> Float:
   """Run static annealing schedule (beta is constant)."""
   return jnp.array(beta_max, dtype=jnp.float32)
+
+
+ANNEALING_SCHEDULES = {
+  "linear": linear_schedule,
+  "exponential": exponential_schedule,
+  "cosine": cosine_schedule,
+  "static": static_schedule,
+}

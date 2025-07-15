@@ -23,6 +23,7 @@ from typing import (
   get_origin,
 )
 
+import dill
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -34,17 +35,16 @@ from flax.serialization import (
   to_bytes,
 )
 
-from proteinsmc.sampling.smc.parallel_replica import (
-  ParallelReplicaSMCOutput,
-)
-from proteinsmc.utils.annealing_schedules import AnnealingScheduleConfig
 from proteinsmc.utils.data_structures import (
+  AnnealingScheduleConfig,
+  FitnessEvaluator,
+  FitnessFunction,
   MemoryConfig,
+  ParallelReplicaSMCOutput,
   SMCCarryState,
   SMCConfig,
   SMCOutput,
 )
-from proteinsmc.utils.fitness import FitnessEvaluator, FitnessFunction
 
 logger = logging.getLogger(__name__)
 
@@ -52,50 +52,37 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T", SMCOutput, ParallelReplicaSMCOutput)
 
 
-def get_fqn(obj: Any) -> str | None:
-  """Get the fully qualified name of a callable object."""
-  if not callable(obj):
-    return None
-  if hasattr(obj, "__module__") and hasattr(obj, "__qualname__") and obj.__module__ is not None:
-    if obj.__module__ == "<lambda>" or "<locals>" in obj.__qualname__:
-      return None
-    return f"{obj.__module__}.{obj.__qualname__}"
-  return None
-
-
-def _import_by_fqn(fqn: str) -> Callable:
-  """Dynamically imports a callable by its fully qualified name."""
-  module_name, obj_name = fqn.rsplit(".", 1)
+def _dill_callable_to_bytes(func: Callable) -> bytes:
+  """Serialize a callable to bytes using dill."""
   try:
-    module = __import__(module_name, fromlist=[obj_name])
-    return getattr(module, obj_name)
-  except (ImportError, AttributeError) as e:
-    logger.exception("Failed to import callable by FQN '%s'", fqn)
-    msg = f"Failed to load function by FQN: {fqn}"
-    raise RuntimeError(msg) from e
+    return dill.dumps(func)
+  except Exception:
+    logger.exception("Failed to dill callable %r", func)
+    raise
+
+
+def _dill_bytes_to_callable(data: bytes) -> Callable:
+  """Deserialize bytes back to a callable using dill."""
+  try:
+    return dill.loads(data)  # noqa: S301
+  except Exception:
+    logger.exception("Failed to load callable from bytes")
+    raise
 
 
 def _convert_dataclass_to_serializable_dict(obj: Any) -> Any:
   """Recursively convert dataclass instances into serializable dictionaries.
 
-  Handle callable attributes by storing their FQN.
-  JAX arrays and numpy arrays are implicitly handled by Flax's default
-  serialization mechanisms when they are leaves in the PyTree.
+  Handles callable attributes by dill-serializing them to bytes.
   """
   output = None
   if isinstance(obj, (jax.Array, np.ndarray)):
     output = obj
+  elif callable(obj) and not isinstance(obj, (type,)):
+    output = _dill_callable_to_bytes(obj)
 
   if output is None:
-    if callable(obj):
-      fqn = get_fqn(obj)
-      if fqn:
-        output = f"__callable_fqn__{fqn}"
-      if not output:
-        logger.warning("Could not get FQN for callable %s. Storing hash instead.", obj)
-        output = f"__callable_hash__{hash(obj)}"
-
-    elif is_dataclass(obj) and not isinstance(obj, type):
+    if is_dataclass(obj) and not isinstance(obj, type):
       d = asdict(obj)
       processed_dict = {}
       for k, v in d.items():
@@ -111,113 +98,78 @@ def _convert_dataclass_to_serializable_dict(obj: Any) -> Any:
   return output
 
 
-def _handle_callable_deserialization(
-  field_name: str,
-  field_value: str,
-) -> Any:
-  """Handle deserialization of callable fields.
-
-  Args:
-      field_name (str): The name of the field.
-      field_value (str): The serialized string value (FQN or hash).
-      field_type (Any): The type hint of the field.
-      cls (type): The class containing the field.
-
-  Returns:
-      Any: The deserialized callable or None/placeholder.
-
-  """
-  if field_value.startswith("__callable_fqn__"):
-    fqn = field_value[len("__callable_fqn__") :]
-    try:
-      return _import_by_fqn(fqn)
-    except RuntimeError:
-      logger.warning(
-        "Could not reconstruct function for FQN '%s'. Setting to None.",
-        fqn,
-      )
-      return None
-  if field_value.startswith("__callable_hash__"):
-    logger.warning(
-      "Found function hash during deserialization for field '%s'. "
-      "Cannot reconstruct original function.",
-      field_name,
-    )
-  return None
-
-
-def _deserialize_field_value(_cls: type, field_info: Any, field_value: Any) -> Any:
-  """Recursively deserialize a field's value based on its type.
-
-  Args:
-      cls (type): The class being deserialized.
-      field_info (Any): The field metadata from dataclasses.fields.
-      field_value (Any): The value retrieved from the serialized state.
-
-  Returns:
-      Any: The deserialized value for the field.
-
-  """
-  field_name = field_info.name
-  field_type = field_info.type
-
-  # Handle Callable values
-  if isinstance(field_value, str) and (
-    field_value.startswith(("__callable_fqn__", "__callable_hash__"))
-  ):
-    return _handle_callable_deserialization(
-      field_name,
-      field_value,
-    )
-
-  # Handle nested dataclass instances
-  if is_dataclass(field_type) and isinstance(field_value, dict):
-    return _from_serializable_dict_recursive(type(field_type), field_value)
-
-  # Handle lists/tuples of dataclasses
-  if get_origin(field_type) in (list, tuple) and isinstance(
-    field_value,
-    (list, tuple),
-  ):
-    inner_type_args = get_args(field_type)
-    if (
-      inner_type_args and is_dataclass(inner_type_args[0]) and field_value  # ensure not empty
-    ):
-      return type(field_value)(
-        _from_serializable_dict_recursive(type(inner_type_args[0]), item) for item in field_value
-      )
-
-  return field_value
-
-
-def _from_serializable_dict_recursive(cls: type, state: dict[str, Any]) -> Any:
+def _from_serializable_dict_recursive(cls: type, state: dict[str, Any]) -> Any:  # noqa: C901
   """Recursively convert a serializable dictionary state back to a dataclass instance.
 
-  This function must inverse _convert_dataclass_to_serializable_dict.
-
-  Args:
-      cls (type): The dataclass type to reconstruct.
-      state (dict[str, Any]): The serializable dictionary state.
-
-  Returns:
-      Any: The reconstructed dataclass instance.
-
+  Handles dill-deserializing bytes back to callables.
   """
+
+  def _handle_callable(field_type: Any, field_value: Any) -> Any:
+    if (
+      get_origin(field_type) is Callable
+      or getattr(field_type, "__origin__", None) is Callable
+      or (hasattr(field_type, "__args__") and Callable in get_args(field_type))
+    ) and isinstance(field_value, bytes):
+      return _dill_bytes_to_callable(field_value)
+    return None
+
+  def _handle_dataclass(field_type: Any, field_value: Any) -> Any:
+    if is_dataclass(field_type) and isinstance(field_value, dict):
+      return _from_serializable_dict_recursive(type(field_type), field_value)
+    return None
+
+  def _handle_sequence(field_type: Any, field_value: Any) -> Any:
+    if get_origin(field_type) in (list, tuple) and isinstance(field_value, (list, tuple)):
+      inner_type_args = get_args(field_type)
+      if inner_type_args:
+        if is_dataclass(inner_type_args[0]) and field_value:
+          return type(field_value)(
+            _from_serializable_dict_recursive(type(inner_type_args[0]), item)
+            for item in field_value
+          )
+        if (
+          get_origin(inner_type_args[0]) is Callable or Callable in get_args(inner_type_args[0])
+        ) and all(isinstance(item, bytes) for item in field_value):
+          return type(field_value)(_dill_bytes_to_callable(item) for item in field_value)
+        return field_value
+      return field_value
+    return None
+
   if not is_dataclass(cls):
+    if isinstance(state, bytes):
+      try:
+        return _dill_bytes_to_callable(state)
+      except Exception:  # noqa: BLE001
+        return state
     return state
 
   processed_state = {}
   for field_info in fields(cls):
     field_name = field_info.name
     field_value = state.get(field_name)
-    processed_state[field_name] = _deserialize_field_value(
-      cls,
-      field_info,
-      field_value,
-    )
+    field_type = field_info.type
 
-  if cls is SMCOutput and "input_config" in processed_state:
-    config_value = processed_state["input_config"]
+    # Try each handler in order, assign if handled
+    value = _handle_callable(field_type, field_value)
+    if value is not None:
+      processed_state[field_name] = value
+      continue
+
+    value = _handle_dataclass(field_type, field_value)
+    if value is not None:
+      processed_state[field_name] = value
+      continue
+
+    value = _handle_sequence(field_type, field_value)
+    if value is not None:
+      processed_state[field_name] = value
+      continue
+
+    processed_state[field_name] = field_value
+
+  # Special handling for SMCOutput's input_config, as it will be a list of dicts if stacked
+  if cls is SMCOutput and "input_config" in state:
+    config_value = state["input_config"]
     if isinstance(config_value, list):
       processed_state["input_config"] = [
         _from_serializable_dict_recursive(SMCConfig, cfg_dict) for cfg_dict in config_value
@@ -228,7 +180,15 @@ def _from_serializable_dict_recursive(cls: type, state: dict[str, Any]) -> Any:
         config_value,
       )
 
-  return cls(**processed_state)
+  try:
+    return cls(**processed_state)
+  except TypeError:
+    logger.exception(
+      "Failed to unflatten %s with state %r",
+      cls.__name__,
+      processed_state,
+    )
+    raise
 
 
 def _register_flax_serialization_for_all_types() -> None:
@@ -256,9 +216,6 @@ def _register_flax_serialization_for_all_types() -> None:
 
 
 _register_flax_serialization_for_all_types()
-
-
-# --- Main Logic for Stacking/Saving/Loading ---
 
 
 def stack_outputs(outputs: list[T]) -> T:

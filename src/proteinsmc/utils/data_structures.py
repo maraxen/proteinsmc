@@ -3,19 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal, Protocol  # Added Any, Callable for clarity
+from typing import (  # Added Any, Callable for clarity
+  TYPE_CHECKING,
+  Any,
+  Callable,
+  Literal,
+  Protocol,
+)
 
 import jax
 import jax.numpy as jnp
 
-from proteinsmc.utils import AnnealingScheduleConfig, AutoTuningConfig, FitnessEvaluator
-
 if TYPE_CHECKING:
   from jaxtyping import Float, Int, PRNGKeyArray
-
-  from proteinsmc.utils import (
-    PopulationSequences,
-  )
 
 
 @dataclass(frozen=True)
@@ -53,15 +53,198 @@ class MemoryConfig:
       raise ValueError(msg)
 
   def tree_flatten(self) -> tuple[tuple, dict]:
-    """Flatten the dataclass for JAX PyTree compatibility."""
-    children: tuple = ()
-    aux_data: dict = dict(self.__dict__.items())
-    return (children, aux_data)
+    """Flatten the dataclass for JAX PyTree compatibility.
+
+    All fields are treated as children as they can vary across instances.
+    """
+    children = (
+      self.population_chunk_size,
+      self.enable_chunked_vmap,
+      self.device_memory_fraction,
+      self.auto_tuning_config,
+    )
+    aux_data = {}  # aux_data is empty as all varying fields are children
+    return children, aux_data
 
   @classmethod
-  def tree_unflatten(cls, aux_data: dict, _: tuple) -> MemoryConfig:
+  def tree_unflatten(cls, aux_data: dict, children: tuple) -> MemoryConfig:
     """Unflatten the dataclass for JAX PyTree compatibility."""
-    return cls(**aux_data)
+    return cls(
+      population_chunk_size=children[0],
+      enable_chunked_vmap=children[1],
+      device_memory_fraction=children[2],
+      auto_tuning_config=children[3],
+      **aux_data,
+    )
+
+
+@dataclass(frozen=True)
+class AutoTuningConfig:
+  """Configuration for automatic chunk size tuning."""
+
+  enable_auto_tuning: bool = True
+  probe_chunk_sizes: tuple[int, ...] = (16, 32, 64, 128, 256)
+  max_probe_iterations: int = 3
+  memory_safety_factor: float = 0.8
+  performance_tolerance: float = 0.1
+
+  def tree_flatten(self) -> tuple[tuple, dict]:
+    """Flatten the dataclass for JAX PyTree compatibility.
+
+    All fields are treated as children as they can vary across instances.
+    """
+    children = (
+      self.enable_auto_tuning,
+      self.probe_chunk_sizes,
+      self.max_probe_iterations,
+      self.memory_safety_factor,
+      self.performance_tolerance,
+    )
+    aux_data = {}
+    return children, aux_data
+
+  @classmethod
+  def tree_unflatten(cls, aux_data: dict, children: tuple) -> AutoTuningConfig:
+    """Unflatten the dataclass for JAX PyTree compatibility."""
+    return cls(
+      enable_auto_tuning=children[0],
+      probe_chunk_sizes=children[1],
+      max_probe_iterations=children[2],
+      memory_safety_factor=children[3],
+      performance_tolerance=children[4],
+      **aux_data,
+    )
+
+
+@dataclass(frozen=True)
+class AnnealingScheduleConfig:
+  """Configuration for an annealing schedule.
+
+  Attributes:
+      schedule_fn: Callable function that defines the annealing schedule.
+      beta_max: Maximum value for beta.
+      annealing_len: Number of steps over which to anneal.
+      schedule_args: Additional arguments for the schedule function.
+
+  """
+
+  schedule_fn: Callable[[Int, Int, Float], Float]
+  beta_max: float
+  annealing_len: int
+  schedule_args: tuple = field(default_factory=tuple)
+
+  def tree_flatten(self) -> tuple[tuple, dict]:
+    """Flatten the dataclass for JAX PyTree compatibility.
+
+    All fields are treated as children as they can vary across instances.
+    """
+    children = (
+      self.beta_max,
+      self.annealing_len,
+      self.schedule_args,
+    )
+    aux_data = {"schedule_fn": self.schedule_fn}
+    return children, aux_data
+
+  @classmethod
+  def tree_unflatten(cls, aux_data: dict, children: tuple) -> AnnealingScheduleConfig:
+    """Unflatten the dataclass for JAX PyTree compatibility."""
+    return cls(
+      schedule_fn=aux_data["schedule_fn"],
+      beta_max=children[0],
+      annealing_len=children[1],
+      schedule_args=children[2],
+    )
+
+
+@dataclass(frozen=True)
+class FitnessFunction:
+  """Represents a single fitness function."""
+
+  func: Callable[[PRNGKeyArray, Int], Float]
+  input_type: Literal["protein", "nucleotide"]
+  name: str = "unnamed_fitness_function"
+
+  def __post_init__(self) -> None:
+    """Validate the fitness function metadata."""
+    if not callable(self.func):
+      msg = f"Fitness function {self.func} is not callable."
+      raise TypeError(msg)
+    if self.input_type not in ["nucleotide", "protein"]:
+      msg = f"Invalid input_type '{self.input_type}'. Expected 'nucleotide' or 'protein'."
+      raise ValueError(
+        msg,
+      )
+    if not isinstance(self.name, str):
+      msg = "name must be a string."
+      raise TypeError(msg)
+
+  def __hash__(self) -> int:
+    """Hash the fitness function based on its properties."""
+    return hash((self.func, self.input_type, frozenset(self.name)))
+
+  def tree_flatten(self) -> tuple[tuple, dict]:
+    """Flatten the dataclass for JAX PyTree compatibility.
+
+    All fields are treated as children as they can vary across instances.
+    """
+    children = (
+      self.input_type,
+      self.name,
+    )
+    aux_data = {"func": self.func}
+    return children, aux_data
+
+  @classmethod
+  def tree_unflatten(cls, aux_data: dict, children: tuple) -> FitnessFunction:
+    """Unflatten the dataclass for JAX PyTree compatibility."""
+    return cls(
+      func=aux_data["func"],
+      input_type=children[0],
+      name=children[1],
+    )
+
+
+@dataclass(frozen=True)
+class FitnessEvaluator:
+  """Manages multiple fitness functions and their combination."""
+
+  fitness_functions: tuple[FitnessFunction, ...]
+  combine_func: Callable[[Float], Float] | None = None
+
+  def __post_init__(self) -> None:
+    """Validate the fitness evaluator configuration."""
+    if not self.fitness_functions:
+      msg = "At least one fitness function must be provided."
+      raise ValueError(msg)
+
+  def get_functions_by_type(
+    self,
+    input_type: Literal["nucleotide", "protein"],
+  ) -> list[FitnessFunction]:
+    """Get active fitness functions that accept the specified input type."""
+    return [f for f in self.fitness_functions if f.input_type == input_type]
+
+  def __hash__(self) -> int:
+    """Hash the fitness evaluator based on its properties."""
+    return hash(tuple(sorted(self.fitness_functions, key=lambda f: f.name)))
+
+  def tree_flatten(self) -> tuple[tuple, dict]:
+    """Flatten the dataclass for JAX PyTree compatibility.
+
+    All fields are treated as children as they can vary across instances.
+    """
+    children = (self.fitness_functions,)
+    aux_data = {"combine_func": self.combine_func}
+    return children, aux_data
+
+  @classmethod
+  def tree_unflatten(cls, aux_data: dict, children: tuple) -> FitnessEvaluator:
+    """Unflatten the dataclass for JAX PyTree compatibility."""
+    return cls(
+      fitness_functions=children[0],
+      combine_func=aux_data["combine_func"],
+    )
 
 
 @dataclass(frozen=True)
@@ -123,15 +306,37 @@ class BaseSamplerConfig:
       raise ValueError(msg)
 
   def tree_flatten(self) -> tuple[tuple, dict]:
-    """Flatten the dataclass for JAX PyTree compatibility."""
-    children: tuple = ()
-    aux_data: dict = dict(self.__dict__.items())
-    return (children, aux_data)
+    """Flatten the dataclass for JAX PyTree compatibility.
+
+    All fields are treated as children as they can vary across instances.
+    """
+    children = (
+      self.seed_sequence,
+      self.generations,
+      self.n_states,
+      self.mutation_rate,
+      self.diversification_ratio,
+      self.sequence_type,
+      self.fitness_evaluator,
+      self.memory_config,
+    )
+    aux_data = {}  # aux_data is empty as all varying fields are children
+    return children, aux_data
 
   @classmethod
-  def tree_unflatten(cls, aux_data: dict, _: tuple) -> BaseSamplerConfig:
+  def tree_unflatten(cls, aux_data: dict, children: tuple) -> BaseSamplerConfig:
     """Unflatten the dataclass for JAX PyTree compatibility."""
-    return cls(**aux_data)
+    return cls(
+      seed_sequence=children[0],
+      generations=children[1],
+      n_states=children[2],
+      mutation_rate=children[3],
+      diversification_ratio=children[4],
+      sequence_type=children[5],
+      fitness_evaluator=children[6],
+      memory_config=children[7],
+      **aux_data,
+    )
 
   @property
   def additional_config_fields(self) -> dict[str, str]:
@@ -192,15 +397,41 @@ class SMCConfig(BaseSamplerConfig):
     super().__post_init__()
 
   def tree_flatten(self) -> tuple[tuple, dict]:
-    """Flatten the dataclass for JAX PyTree compatibility."""
-    children: tuple = ()
-    aux_data: dict = dict(self.__dict__.items())
-    return (children, aux_data)
+    """Flatten the dataclass for JAX PyTree compatibility.
+
+    All fields are treated as children as they can vary across instances.
+    """
+    children = (
+      self.seed_sequence,
+      self.generations,
+      self.n_states,
+      self.mutation_rate,
+      self.diversification_ratio,
+      self.sequence_type,
+      self.fitness_evaluator,
+      self.memory_config,
+      self.population_size,
+      self.annealing_schedule,
+    )
+    aux_data = {}  # aux_data is empty as all varying fields are children
+    return children, aux_data
 
   @classmethod
-  def tree_unflatten(cls, aux_data: dict, _: tuple) -> SMCConfig:
+  def tree_unflatten(cls, aux_data: dict, children: tuple) -> SMCConfig:
     """Unflatten the dataclass for JAX PyTree compatibility."""
-    return cls(**aux_data)
+    return cls(
+      seed_sequence=children[0],
+      generations=children[1],
+      n_states=children[2],
+      mutation_rate=children[3],
+      diversification_ratio=children[4],
+      sequence_type=children[5],
+      fitness_evaluator=children[6],
+      memory_config=children[7],
+      population_size=children[8],
+      annealing_schedule=children[9],
+      **aux_data,
+    )
 
   @property
   def additional_config_fields(self) -> dict[str, str]:
@@ -216,7 +447,7 @@ class SMCCarryState:
   """State of the SMC sampler at a single step. Designed to be a JAX PyTree."""
 
   key: PRNGKeyArray
-  population: PopulationSequences
+  population: Any  # Changed from PopulationSequences to Any for broader compatibility
   logZ_estimate: Float  # noqa: N815
   beta: Float
   step: Int = field(default_factory=lambda: jnp.array(0, dtype=jnp.int32))
@@ -244,7 +475,7 @@ class SMCCarryState:
 
 
 @dataclass
-class SMCOutput(SamplerOutputProtocol):  # Implements the output protocol
+class SMCOutput(SamplerOutputProtocol):
   """Output of the SMC sampler."""
 
   input_config: SMCConfig
@@ -383,19 +614,41 @@ class ExchangeConfig:
       raise ValueError(msg)
 
   def tree_flatten(self: ExchangeConfig) -> tuple[tuple, dict]:
-    """Flatten the dataclass for JAX PyTree compatibility."""
-    children: tuple = ()
-    aux_data: dict = self.__dict__
-    return (children, aux_data)
+    """Flatten the dataclass for JAX PyTree compatibility.
+
+    All fields are treated as children as they can vary across instances.
+    """
+    children = (
+      self.population_size_per_island,
+      self.n_islands,
+      self.n_exchange_attempts,
+      self.fitness_evaluator,
+      self.exchange_frequency,
+      self.sequence_type,
+      self.n_exchange_attempts_per_cycle,
+      self.ess_threshold_fraction,
+    )
+    aux_data = {}
+    return children, aux_data
 
   @classmethod
   def tree_unflatten(
     cls: type[ExchangeConfig],
     aux_data: dict,
-    _children: tuple,
+    children: tuple,
   ) -> ExchangeConfig:
     """Unflatten the dataclass for JAX PyTree compatibility."""
-    return cls(**aux_data)
+    return cls(
+      population_size_per_island=children[0],
+      n_islands=children[1],
+      n_exchange_attempts=children[2],
+      fitness_evaluator=children[3],
+      exchange_frequency=children[4],
+      sequence_type=children[5],
+      n_exchange_attempts_per_cycle=children[6],
+      ess_threshold_fraction=children[7],
+      **aux_data,
+    )
 
 
 @dataclass(frozen=True)
@@ -451,25 +704,46 @@ class PRSMCStepConfig:
       raise ValueError(msg)
 
   def tree_flatten(self: PRSMCStepConfig) -> tuple[tuple, dict]:
-    """Flatten the dataclass for JAX PyTree compatibility."""
-    children: tuple = ()
-    aux_data: dict = self.__dict__
-    return (children, aux_data)
+    """Flatten the dataclass for JAX PyTree compatibility.
+
+    All fields are treated as children as they can vary across instances.
+    """
+    children = (
+      self.population_size_per_island,
+      self.mutation_rate,
+      self.fitness_evaluator,
+      self.sequence_type,
+      self.ess_threshold_frac,
+      self.meta_beta_annealing_schedule,
+      self.exchange_config,
+    )
+    aux_data = {}
+    return children, aux_data
 
   @classmethod
   def tree_unflatten(
     cls: type[PRSMCStepConfig],
     aux_data: dict,
-    _children: tuple,
+    children: tuple,
   ) -> PRSMCStepConfig:
     """Unflatten the dataclass for JAX PyTree compatibility."""
-    return cls(**aux_data)
+    return cls(
+      population_size_per_island=children[0],
+      mutation_rate=children[1],
+      fitness_evaluator=children[2],
+      sequence_type=children[3],
+      ess_threshold_frac=children[4],
+      meta_beta_annealing_schedule=children[5],
+      exchange_config=children[6],
+      **aux_data,
+    )
 
 
 @dataclass(frozen=True)
 class ParallelReplicaConfig(BaseSamplerConfig):
   """Configuration for parallel replica SMC simulation."""
 
+  population_size_per_island: int
   n_islands: int
   island_betas: list[float]
   step_config: PRSMCStepConfig
@@ -498,7 +772,10 @@ class ParallelReplicaConfig(BaseSamplerConfig):
       msg = "n_islands must be positive."
       raise ValueError(msg)
     if len(self.island_betas) != self.n_islands:
-      msg = f"Length of island_betas ({len(self.island_betas)}) must match n_islands ({self.n_islands})."
+      msg = (
+        f"Length of island_betas ({len(self.island_betas)}) must match "
+        f"n_islands ({self.n_islands})."
+      )
       raise ValueError(msg)
     if not all(0.0 <= beta <= 1.0 for beta in self.island_betas):
       msg = "All island_betas must be in [0.0, 1.0]."
@@ -508,15 +785,43 @@ class ParallelReplicaConfig(BaseSamplerConfig):
       raise TypeError(msg)
 
   def tree_flatten(self) -> tuple[tuple, dict]:
-    """Flatten the dataclass for JAX PyTree compatibility."""
-    children: tuple = ()
-    aux_data: dict = dict(self.__dict__.items())
-    return (children, aux_data)
+    """Flatten the dataclass for JAX PyTree compatibility.
+
+    All fields are treated as children as they can vary across instances.
+    """
+    children = (
+      self.seed_sequence,
+      self.generations,
+      self.n_states,
+      self.mutation_rate,
+      self.diversification_ratio,
+      self.sequence_type,
+      self.fitness_evaluator,
+      self.memory_config,
+      self.n_islands,
+      self.island_betas,
+      self.step_config,
+    )
+    aux_data = {}
+    return children, aux_data
 
   @classmethod
-  def tree_unflatten(cls, aux_data: dict, _: tuple) -> ParallelReplicaConfig:
+  def tree_unflatten(cls, aux_data: dict, children: tuple) -> ParallelReplicaConfig:
     """Unflatten the dataclass for JAX PyTree compatibility."""
-    return cls(**aux_data)
+    return cls(
+      seed_sequence=children[0],
+      generations=children[1],
+      n_states=children[2],
+      mutation_rate=children[3],
+      diversification_ratio=children[4],
+      sequence_type=children[5],
+      fitness_evaluator=children[6],
+      memory_config=children[7],
+      n_islands=children[8],
+      island_betas=list(children[9]),  # Convert tuple back to list
+      step_config=children[10],
+      **aux_data,
+    )
 
   @property
   def additional_config_fields(self) -> dict[str, str]:
@@ -533,7 +838,7 @@ class IslandState:
   """State of a single island in the PRSMC algorithm."""
 
   key: PRNGKeyArray
-  population: PopulationSequences
+  population: Int
   beta: Float
   logZ_estimate: Float  # noqa: N815
   ess: Float
@@ -629,7 +934,18 @@ class ParallelReplicaSMCOutput(SamplerOutputProtocol):
     children: tuple,
   ) -> ParallelReplicaSMCOutput:
     """Unflatten the dataclass for JAX PyTree compatibility."""
-    return cls(*children)
+    return cls(
+      input_config=children[0],
+      final_island_states=children[1],
+      swap_acceptance_rate=children[2],
+      history_mean_fitness_per_island=children[3],
+      history_max_fitness_per_island=children[4],
+      history_ess_per_island=children[5],
+      history_logZ_increment_per_island=children[6],
+      history_meta_beta=children[7],
+      history_num_accepted_swaps=children[8],
+      history_num_attempted_swaps=children[9],
+    )
 
   @property
   def input_configs(self) -> ParallelReplicaConfig:
@@ -663,13 +979,18 @@ class ParallelReplicaSMCOutput(SamplerOutputProtocol):
     return "ParallelReplicaSMC"
 
 
+jax.tree_util.register_pytree_node_class(MemoryConfig)
+jax.tree_util.register_pytree_node_class(AutoTuningConfig)
+jax.tree_util.register_pytree_node_class(AnnealingScheduleConfig)
+jax.tree_util.register_pytree_node_class(FitnessFunction)
+jax.tree_util.register_pytree_node_class(FitnessEvaluator)
+jax.tree_util.register_pytree_node_class(BaseSamplerConfig)
+jax.tree_util.register_pytree_node_class(SMCConfig)
+jax.tree_util.register_pytree_node_class(SMCCarryState)
+jax.tree_util.register_pytree_node_class(SMCOutput)
 jax.tree_util.register_pytree_node_class(ExchangeConfig)
 jax.tree_util.register_pytree_node_class(PRSMCStepConfig)
 jax.tree_util.register_pytree_node_class(ParallelReplicaConfig)
 jax.tree_util.register_pytree_node_class(IslandState)
 jax.tree_util.register_pytree_node_class(PRSMCCarryState)
 jax.tree_util.register_pytree_node_class(ParallelReplicaSMCOutput)
-jax.tree_util.register_pytree_node_class(MemoryConfig)
-jax.tree_util.register_pytree_node_class(SMCConfig)
-jax.tree_util.register_pytree_node_class(SMCCarryState)
-jax.tree_util.register_pytree_node_class(SMCOutput)
