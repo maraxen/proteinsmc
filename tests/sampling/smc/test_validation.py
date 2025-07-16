@@ -35,7 +35,7 @@ def valid_annealing_config():
   return AnnealingScheduleConfig(
     schedule_fn=linear_schedule,
     beta_max=1.0,
-    annealing_len=50,
+    n_steps=50,
   )
 
 

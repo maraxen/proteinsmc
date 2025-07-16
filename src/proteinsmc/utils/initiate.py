@@ -10,7 +10,7 @@ from .constants import AA_CHAR_TO_INT_MAP, NUCLEOTIDES_INT_MAP
 from .translation import reverse_translate, translate
 
 if TYPE_CHECKING:
-  from .types import PopulationSequences
+  from proteinsmc.models.types import EvoSequence
 
 
 def generate_template_population(
@@ -18,7 +18,7 @@ def generate_template_population(
   population_size: int,
   input_sequence_type: Literal["protein", "nucleotide"],
   output_sequence_type: Literal["protein", "nucleotide"] = "nucleotide",
-) -> PopulationSequences:
+) -> EvoSequence:
   """Create a JAX array representing a population from a single string sequence.
 
   This is a utility to easily create the `seed_sequences` needed for `SMCConfig`.

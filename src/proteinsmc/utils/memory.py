@@ -12,7 +12,7 @@ import jax.numpy as jnp
 if TYPE_CHECKING:
   from jaxtyping import Array, PRNGKeyArray, PyTree
 
-  from .data_structures import AutoTuningConfig
+  from proteinsmc.models.memory import AutoTuningConfig
 
 
 @dataclass

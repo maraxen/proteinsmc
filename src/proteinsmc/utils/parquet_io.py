@@ -35,7 +35,7 @@ from flax.serialization import (
   to_bytes,
 )
 
-from proteinsmc.utils.data_structures import (
+from proteinsmc.models import (
   AnnealingScheduleConfig,
   FitnessEvaluator,
   FitnessFunction,

@@ -2,7 +2,7 @@ import chex
 
 import jax.numpy as jnp
 
-from proteinsmc.utils.annealing_schedules import (
+from proteinsmc.utils.annealing import (
   cosine_schedule,
   exponential_schedule,
   linear_schedule,
@@ -77,19 +77,19 @@ def test_exponential_schedule():
 
 def test_cosine_schedule():
   chex.assert_trees_all_equal(
-    cosine_schedule(p=jnp.array(1), n_steps=jnp.array(10), beta_max=jnp.array(1.0)),
+    cosine_schedule(current_step=jnp.array(1), n_steps=jnp.array(10), beta_max=jnp.array(1.0)),
     0.0,
   )
   chex.assert_trees_all_equal(
-    cosine_schedule(p=jnp.array(10), n_steps=jnp.array(10), beta_max=jnp.array(1.0)),
+    cosine_schedule(current_step=jnp.array(10), n_steps=jnp.array(10), beta_max=jnp.array(1.0)),
     1.0,
   )
   chex.assert_trees_all_equal(
-    cosine_schedule(p=jnp.array(11), n_steps=jnp.array(10), beta_max=jnp.array(1.0)),
+    cosine_schedule(current_step=jnp.array(11), n_steps=jnp.array(10), beta_max=jnp.array(1.0)),
     1.0,
   )
   chex.assert_trees_all_close(
-    cosine_schedule(p=jnp.array(5), n_steps=jnp.array(10), beta_max=jnp.array(1.0)),
+    cosine_schedule(current_step=jnp.array(5), n_steps=jnp.array(10), beta_max=jnp.array(1.0)),
     0.5 * (1.0 - jnp.cos(jnp.pi * 4.0 / 9.0)),
     atol=TOL,
   )

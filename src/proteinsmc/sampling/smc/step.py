@@ -7,7 +7,7 @@ from functools import partial
 import jax.numpy as jnp
 from jax import Array, jit, random
 
-from proteinsmc.utils.data_structures import SMCCarryState, SMCConfig
+from proteinsmc.models.smc import SMCCarryState, SMCConfig
 from proteinsmc.utils import (
   chunked_calculate_population_fitness,
   chunked_mutation_step,
@@ -74,23 +74,22 @@ def smc_step(state: SMCCarryState, config: SMCConfig) -> tuple[SMCCarryState, di
 
   if config.memory_config.enable_chunked_vmap and state.population.shape[0] > chunk_size:
     fitness_values, fitness_components = chunked_calculate_population_fitness(
-      key_fitness,
-      mutated_population,
-      config.fitness_evaluator,
-      config.sequence_type,
-      chunk_size,
+      key=key_fitness,
+      population=mutated_population,
+      fitness_evaluator=config.fitness_evaluator,
+      sequence_type=config.sequence_type,
+      chunk_size=chunk_size,
     )
   else:
-    from proteinsmc.utils import calculate_population_fitness
+    from proteinsmc.utils.fitness import calculate_fitness
 
-    fitness_values, fitness_components = calculate_population_fitness(
+    fitness_values, fitness_components = calculate_fitness(
       key_fitness,
       mutated_population,
       config.sequence_type,
       config.fitness_evaluator,
     )
 
-  # Continue with standard SMC logic
   log_weights = jnp.where(jnp.isneginf(fitness_values), -jnp.inf, state.beta * fitness_values)
 
   logZ_increment = calculate_logZ_increment(log_weights, state.population.shape[0])  # noqa: N806

@@ -1,18 +1,11 @@
 """Utility functions for protein sequence modeling and sampling."""
 
-from .annealing_schedules import (
+from .annealing import (
+  ANNEALING_REGISTRY,
   cosine_schedule,
   exponential_schedule,
   linear_schedule,
   static_schedule,
-)
-from .auto_tuning import (
-  BenchmarkResult,
-  auto_tune_chunk_size,
-  create_test_population,
-  estimate_memory_usage,
-  get_device_memory_mb,
-  suggest_chunk_size_heuristic,
 )
 from .constants import (
   AA_CHAR_TO_INT_MAP,
@@ -33,30 +26,22 @@ from .constants import (
   UNKNOWN_AA_INT,
   ECOLI_MAX_FREQS_JAX_list,
 )
-from .data_structures import (
-  AnnealingScheduleConfig,
-  AutoTuningConfig,
-  BaseSamplerConfig,
-  ExchangeConfig,
-  FitnessEvaluator,
-  FitnessFunction,
-  MemoryConfig,
-  ParallelReplicaConfig,
-  ParallelReplicaSMCOutput,
-  PRSMCCarryState,
-  PRSMCStepConfig,
-  SamplerOutputProtocol,
-  SMCCarryState,
-  SMCConfig,
-  SMCOutput,
-)
 from .fitness import (
-  calculate_population_fitness,
+  FITNESS_REGISTRY,
+  calculate_fitness,
   chunked_calculate_population_fitness,
-  combine_fitness_scores,
+  dispatch_fitness_function,
   make_sequence_log_prob_fn,
 )
 from .initiate import generate_template_population
+from .memory import (
+  BenchmarkResult,
+  auto_tune_chunk_size,
+  create_test_population,
+  estimate_memory_usage,
+  get_device_memory_mb,
+  suggest_chunk_size_heuristic,
+)
 from .metrics import (
   calculate_logZ_increment,
   calculate_position_entropy,
@@ -73,22 +58,8 @@ from .mutation import (
   mutate_single,
 )
 from .pmap_utils import distribute
-from .resampling import resample
+from ..sampling.smc.resampling import resample
 from .translation import reverse_translate, translate
-from .types import (
-  EvoSequence,
-  FitnessWeights,
-  IslandFloats,
-  MPNNModel,
-  NucleotideSequence,
-  PerGenerationFloat,
-  PopulationNucleotideSequences,
-  PopulationProteinSequences,
-  PopulationSequenceBools,
-  PopulationSequenceFloats,
-  PopulationSequences,
-  ProteinSequence,
-)
 from .vmap_utils import chunked_vmap
 
 __all__ = [
@@ -111,17 +82,12 @@ __all__ = [
   "exponential_schedule",
   "linear_schedule",
   "static_schedule",
-  "AutoTuningConfig",
   "BenchmarkResult",
   "auto_tune_chunk_size",
   "create_test_population",
   "estimate_memory_usage",
   "get_device_memory_mb",
   "suggest_chunk_size_heuristic",
-  "FitnessEvaluator",
-  "FitnessFunction",
-  "calculate_population_fitness",
-  "combine_fitness_scores",
   "calculate_position_entropy",
   "shannon_entropy",
   "_revert_x_codons_if_mutated",
@@ -133,38 +99,18 @@ __all__ = [
   "resample",
   "translate",
   "reverse_translate",
-  "EvoSequence",
-  "FitnessWeights",
-  "MPNNModel",
-  "NucleotideSequence",
-  "PopulationNucleotideSequences",
-  "PopulationProteinSequences",
-  "PopulationSequenceBools",
-  "PopulationSequenceFloats",
-  "PopulationSequences",
-  "ProteinSequence",
   "RES_TO_CODON_CHAR",
   "CODON_TO_RES_CHAR",
   "calculate_logZ_increment",
-  "AnnealingScheduleConfig",
   "make_sequence_log_prob_fn",
   "generate_template_population",
-  "IslandFloats",
   "distribute",
   "chunked_vmap",
-  "PerGenerationFloat",
   "safe_weighted_mean",
   "chunked_mutation_step",
   "chunked_calculate_population_fitness",
-  "BaseSamplerConfig",
-  "ParallelReplicaConfig",
-  "ParallelReplicaSMCOutput",
-  "PRSMCCarryState",
-  "PRSMCStepConfig",
-  "SamplerOutputProtocol",
-  "SMCCarryState",
-  "SMCConfig",
-  "SMCOutput",
-  "MemoryConfig",
-  "ExchangeConfig",
+  "dispatch_fitness_function",
+  "calculate_fitness",
+  "FITNESS_REGISTRY",
+  "ANNEALING_REGISTRY",
 ]

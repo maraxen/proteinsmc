@@ -13,7 +13,7 @@ from jax import jit, random
 if TYPE_CHECKING:
   from jaxtyping import Float, PRNGKeyArray
 
-  from proteinsmc.utils.types import EvoSequence, PopulationSequences
+  from proteinsmc.models.types import EvoSequence
 
 
 @dataclass(frozen=True)
@@ -52,7 +52,7 @@ def hmc_sampler(
   key: PRNGKeyArray,
   initial_position: EvoSequence,
   config: HMCSamplerConfig,
-) -> PopulationSequences:
+) -> EvoSequence:
   """Run the Hamiltonian Monte Carlo (HMC) sampler.
 
   Args:

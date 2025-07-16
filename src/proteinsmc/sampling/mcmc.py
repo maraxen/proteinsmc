@@ -13,14 +13,14 @@ from jax import jit, random
 if TYPE_CHECKING:
   from jaxtyping import Float, PRNGKeyArray
 
-  from proteinsmc.utils.types import EvoSequence, PopulationSequences
+  from proteinsmc.models.types import EvoSequence
 
 
 @dataclass(frozen=True)
 class MCMCOutput:
   """Data structure to hold the output of the MCMC sampler."""
 
-  samples: PopulationSequences
+  samples: EvoSequence
   final_state: EvoSequence
   final_fitness: Float
 
@@ -91,8 +91,8 @@ def mcmc_sampler(
 
   def body_fn(
     i: int,
-    state_and_samples: tuple[EvoSequence, PopulationSequences, Float],
-  ) -> tuple[EvoSequence, PopulationSequences, Float]:
+    state_and_samples: tuple[EvoSequence, EvoSequence, Float],
+  ) -> tuple[EvoSequence, EvoSequence, Float]:
     current_state, samples, _ = state_and_samples
 
     key_proposal, key_accept, key_log_prob = random.split(random.fold_in(key, i), 3)

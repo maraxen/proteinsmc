@@ -14,7 +14,7 @@ from proteinsmc.utils.data_structures import (
   SMCConfig,
   MemoryConfig,
 )
-from proteinsmc.utils.annealing_schedules import linear_schedule
+from proteinsmc.utils.annealing import linear_schedule
 
 
 
@@ -44,7 +44,7 @@ def setup_smc_protein():
   annealing_config = AnnealingScheduleConfig(
     schedule_fn=linear_schedule,
     beta_max=1.0,
-    annealing_len=5,
+    n_steps=5,
   )
 
   smc_config = SMCConfig(
@@ -63,7 +63,7 @@ def setup_smc_protein():
   annealing_config = AnnealingScheduleConfig(
     schedule_fn=linear_schedule,
     beta_max=1.0,
-    annealing_len=5,
+    n_steps=5,
   )
 
   return key, smc_config
@@ -89,7 +89,7 @@ def setup_smc_nucleotide():
   annealing_config = AnnealingScheduleConfig(
     schedule_fn=linear_schedule,
     beta_max=1.0,
-    annealing_len=5,
+    n_steps=5,
   )
 
   smc_config = SMCConfig(

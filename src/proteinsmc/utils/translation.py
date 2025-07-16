@@ -15,7 +15,7 @@ from .constants import (
 if TYPE_CHECKING:
   from jaxtyping import Bool
 
-  from proteinsmc.utils.types import NucleotideSequence, ProteinSequence
+  from proteinsmc.models.types import NucleotideSequence, ProteinSequence
 
 
 @jit

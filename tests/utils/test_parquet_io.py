@@ -31,7 +31,7 @@ BASE_SMC_CONFIG = SMCConfig(
     diversification_ratio=0.5,
     sequence_type="protein",
     annealing_schedule=AnnealingScheduleConfig(
-        schedule_fn=lambda _, _a, x: x, beta_max=1.0, annealing_len=10
+        schedule_fn=lambda _, _a, x: x, beta_max=1.0, n_steps=10
     ),
     fitness_evaluator=FitnessEvaluator(
         fitness_functions=(

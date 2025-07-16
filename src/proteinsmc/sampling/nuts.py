@@ -19,9 +19,8 @@ from jax import jit, random
 if TYPE_CHECKING:
   from jaxtyping import Float, PRNGKeyArray
 
-  from proteinsmc.utils.types import (
+  from proteinsmc.models.types import (
     EvoSequence,
-    PopulationSequences,
   )
 
 
@@ -75,7 +74,7 @@ def nuts_sampler(
   key: PRNGKeyArray,
   initial_position: EvoSequence,
   config: NUTSConfig,
-) -> PopulationSequences:
+) -> EvoSequence:
   """Run a simplified conceptual NUTS sampler (placeholder).
 
   This function demonstrates the basic idea of NUTS but lacks the full

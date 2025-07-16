@@ -13,21 +13,22 @@ if TYPE_CHECKING:
   from jaxtyping import Float, Int, PRNGKeyArray
 
 
-from proteinsmc.utils import (
-  calculate_logZ_increment,
-  calculate_population_fitness,
-  dispatch_mutation,
-  diversify_initial_sequences,
-  generate_template_population,
-  resample,
-)
-from proteinsmc.utils.data_structures import (
+from proteinsmc.models.parallel_replica import (
   ExchangeConfig,
   IslandState,
   ParallelReplicaConfig,
   ParallelReplicaSMCOutput,
   PRSMCCarryState,
   PRSMCStepConfig,
+)
+from proteinsmc.utils import (
+  ANNEALING_REGISTRY,
+  calculate_fitness,
+  calculate_logZ_increment,
+  dispatch_mutation,
+  diversify_initial_sequences,
+  generate_template_population,
+  resample,
 )
 
 
@@ -62,7 +63,7 @@ def island_smc_step(
     current_population,
   )
 
-  fitness_values, fitness_components = calculate_population_fitness(
+  fitness_values, fitness_components = calculate_fitness(
     key_fitness,
     mutated_population,
     config.sequence_type,
@@ -162,7 +163,7 @@ def island_smc_step_with_metrics(
 
   """
   updated_island_state = island_smc_step(island_state, config)
-  fitness_values, _ = calculate_population_fitness(
+  fitness_values, _ = calculate_fitness(
     updated_island_state.key,
     updated_island_state.population,
     config.sequence_type,
@@ -262,13 +263,13 @@ def migrate(
     config_a = island_a_population[sequence_idx_a]
     config_b = island_b_population[sequence_idx_b]
 
-    fitness_a, _ = calculate_population_fitness(
+    fitness_a, _ = calculate_fitness(
       key_acceptance,
       jnp.expand_dims(config_a, 0),
       config.sequence_type,
       config.fitness_evaluator,
     )
-    fitness_b, _ = calculate_population_fitness(
+    fitness_b, _ = calculate_fitness(
       key_acceptance,
       jnp.expand_dims(config_b, 0),
       config.sequence_type,
@@ -377,17 +378,16 @@ def prsmc_sampler(
     ess_p, mean_fit_p, max_fit_p, logZ_inc_p = island_metrics  # noqa: N806
 
     meta_annealing_schedule = step_config.meta_beta_annealing_schedule
-    annealing_len = jnp.array(meta_annealing_schedule.annealing_len, dtype=jnp.int32)
+    n_steps = jnp.array(meta_annealing_schedule.n_steps, dtype=jnp.int32)
     beta_max = jnp.array(meta_annealing_schedule.beta_max, dtype=jnp.float32)
     current_meta_beta = lax.cond(
-      step_idx >= meta_annealing_schedule.annealing_len,
+      step_idx >= meta_annealing_schedule.n_steps,
       lambda: jnp.array(meta_annealing_schedule.beta_max, dtype=jnp.float32),
-      lambda: meta_annealing_schedule.schedule_fn(
-        step_idx + 1,
-        annealing_len,
-        beta_max,
-        *meta_annealing_schedule.schedule_args,
-      ).astype(jnp.float32),
+      lambda: meta_annealing_schedule(registry=ANNEALING_REGISTRY)(
+        current_step=step_idx + 1,  # type: ignore[arg-type]
+        n_steps=n_steps,
+        beta_max=beta_max,
+      ),
     )
 
     exchange_config = step_config.exchange_config

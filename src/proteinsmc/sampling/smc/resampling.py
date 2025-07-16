@@ -11,15 +11,15 @@ from jax import jit, random
 if TYPE_CHECKING:
   from jaxtyping import Float, PRNGKeyArray
 
-  from proteinsmc.utils.types import PopulationSequenceFloats, PopulationSequences
+  from proteinsmc.models.smc import PopulationSequences
 
 
 @jit
 def resample(
   key: PRNGKeyArray,
   population: PopulationSequences,
-  log_weights: PopulationSequenceFloats,
-) -> tuple[PopulationSequences, Float, PopulationSequenceFloats]:
+  log_weights: Float,
+) -> tuple[PopulationSequences, Float, Float]:
   """Perform systematic resampling on a population.
 
   Args:
@@ -35,6 +35,9 @@ def resample(
   """
   n_population = population.shape[0]
   log_weights_safe = jnp.where(jnp.isneginf(log_weights), -1e9, log_weights)
+  if not isinstance(log_weights_safe, jax.Array):
+    msg = "log_weights must be a JAX array."
+    raise TypeError(msg)
   normalized_weights = jax.nn.softmax(log_weights_safe)
   ess = 1.0 / jnp.sum(jnp.square(normalized_weights))
   u = random.uniform(key, (n_population,))

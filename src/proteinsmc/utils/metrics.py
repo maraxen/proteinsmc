@@ -14,7 +14,8 @@ from jax import jit, vmap
 if TYPE_CHECKING:
   from jaxtyping import Float
 
-  from proteinsmc.utils.types import PopulationSequenceFloats, PopulationSequences
+  from proteinsmc.models.types import EvoSequence
+
 
 from jaxtyping import Array
 
@@ -62,7 +63,7 @@ def safe_weighted_mean(
 
 @jit
 def calculate_logZ_increment(  # noqa: N802
-  log_weights: PopulationSequenceFloats,
+  log_weights: Float,
   population_size: int,
 ) -> Float:
   """Calculate log evidence increment from log weights.
@@ -79,6 +80,9 @@ def calculate_logZ_increment(  # noqa: N802
     return jnp.array(-jnp.inf)
 
   valid_log_weights = jnp.where(jnp.isneginf(log_weights), -jnp.inf, log_weights)
+  if not isinstance(valid_log_weights, Array):
+    msg = f"Expected valid_log_weights to be a JAX array, got {type(valid_log_weights)}"
+    raise TypeError(msg)
   max_l_w = jnp.max(valid_log_weights)
   safe_max_l_w = jnp.where(jnp.isneginf(max_l_w), 0.0, max_l_w)
   log_sum_exp_weights = safe_max_l_w + jnp.log(jnp.sum(jnp.exp(valid_log_weights - safe_max_l_w)))
@@ -93,23 +97,23 @@ def calculate_logZ_increment(  # noqa: N802
 
 
 @jit
-def calculate_position_entropy(pos_seqs: PopulationSequences) -> Float:
+def calculate_position_entropy(seqs: EvoSequence) -> Float:
   """Calculate the Shannon entropy for a single position in sequences.
 
   Args:
-      pos_seqs: JAX array of sequences for a single position (integer encoded).
+      seqs: JAX array of sequences for a single position (integer encoded).
 
   Returns:
     Scalar representing the Shannon entropy for the position.
 
   """
-  _, counts = jnp.unique(pos_seqs, return_counts=True, size=pos_seqs.shape[0])
+  _, counts = jnp.unique(seqs, return_counts=True, size=seqs.shape[0])
   probs = counts / counts.sum()
   return -jnp.sum(probs * jnp.log(probs + 1e-9))
 
 
 @jit
-def shannon_entropy(seqs: PopulationSequences) -> Float:
+def shannon_entropy(seqs: EvoSequence) -> Float:
   """Calculate average per-position Shannon entropy of sequences.
 
   Args:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-  from proteinsmc.utils.data_structures import SMCConfig
+  from proteinsmc.models.smc import SMCConfig
 
 
 def validate_smc_config(config: SMCConfig) -> None:
@@ -64,8 +64,8 @@ def _validate_numeric_fields(config: SMCConfig) -> None:
 
 def _validate_component_fields(config: SMCConfig) -> None:
   """Validate component fields (fitness evaluator, annealing schedule)."""
-  from proteinsmc.utils.annealing_schedules import AnnealingScheduleConfig
-  from proteinsmc.utils.fitness import FitnessEvaluator
+  from proteinsmc.models.annealing import AnnealingScheduleConfig
+  from proteinsmc.models.fitness import FitnessEvaluator
 
   if not isinstance(config.fitness_evaluator, FitnessEvaluator):
     msg = (
@@ -74,10 +74,10 @@ def _validate_component_fields(config: SMCConfig) -> None:
     )
     raise TypeError(msg)
 
-  if not isinstance(config.annealing_schedule_config, AnnealingScheduleConfig):
+  if not isinstance(config.annealing_schedule, AnnealingScheduleConfig):
     msg = (
-      f"Expected annealing_schedule_config to be an instance of "
-      f"AnnealingScheduleConfig, got {type(config.annealing_schedule_config)}"
+      f"Expected annealing_schedule to be an instance of "
+      f"AnnealingScheduleConfig, got {type(config.annealing_schedule)}"
     )
     raise TypeError(msg)
 

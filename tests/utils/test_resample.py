@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import chex
 import pytest
 
-from proteinsmc.utils.resampling import resample
+from proteinsmc.sampling.smc.resampling import resample
 
 
 @pytest.fixture

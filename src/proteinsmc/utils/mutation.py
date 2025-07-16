@@ -11,7 +11,7 @@ from jax import jit, random, vmap
 if TYPE_CHECKING:
   from jaxtyping import PRNGKeyArray
 
-  from proteinsmc.utils.types import NucleotideSequence, PopulationSequences
+  from proteinsmc.models.types import EvoSequence, NucleotideSequence
 
 from .constants import (
   CODON_INT_TO_RES_INT_JAX,
@@ -23,15 +23,15 @@ from .vmap_utils import chunked_vmap
 @partial(jit, static_argnames=("n_states", "mutation_rate"))
 def mutate(
   key: PRNGKeyArray,
-  sequences: PopulationSequences,
+  sequence: EvoSequence,
   mutation_rate: float,
   n_states: int,
-) -> PopulationSequences:
+) -> EvoSequence:
   """Apply random mutations to a population of nucleotide sequences.
 
   Args:
       key: JAX PRNG key.
-      sequences: JAX array of nucleotide sequences
+      sequence: JAX array of nucleotide sequences
                   (shape: (n, nuc_len)).
       mutation_rate: Mutation rate for nucleotides.
       n_states: Number of states. e.g., nucleotide types (4 for A, C, G, T).
@@ -40,10 +40,10 @@ def mutate(
 
   """
   key_mutate, key_offsets = random.split(key)
-  mutation_mask = random.uniform(key_mutate, shape=sequences.shape) < mutation_rate
-  offsets = random.randint(key_offsets, shape=sequences.shape, minval=1, maxval=n_states)
-  proposed_mutations = (sequences + offsets) % n_states
-  mutated_sequences = jnp.where(mutation_mask, proposed_mutations, sequences)
+  mutation_mask = random.uniform(key_mutate, shape=sequence.shape) < mutation_rate
+  offsets = random.randint(key_offsets, shape=sequence.shape, minval=1, maxval=n_states)
+  proposed_mutations = (sequence + offsets) % n_states
+  mutated_sequences = jnp.where(mutation_mask, proposed_mutations, sequence)
   return mutated_sequences.astype(jnp.int8)
 
 
@@ -89,10 +89,10 @@ def _revert_x_codons_if_mutated(
 @partial(jit, static_argnames=("n_states",))
 def diversify_initial_nucleotide_sequences(
   key: PRNGKeyArray,
-  seed_sequences: PopulationSequences,
+  seed_sequences: EvoSequence,
   mutation_rate: float,
   n_states: int,
-) -> PopulationSequences:
+) -> EvoSequence:
   """Apply random nucleotide mutations to template sequences, ensuring no 'X' codons are introduced.
 
   If a mutation would cause an 'X', that codon is reverted to its state in the template.
@@ -133,10 +133,10 @@ def diversify_initial_nucleotide_sequences(
 @partial(jit, static_argnames=("n_states",))
 def diversify_initial_protein_sequences(
   key: PRNGKeyArray,
-  seed_sequences: PopulationSequences,
+  seed_sequences: EvoSequence,
   mutation_rate: float,
   n_states: int,
-) -> PopulationSequences:
+) -> EvoSequence:
   """Apply random protein mutations to template sequences.
 
   Args:
@@ -167,10 +167,10 @@ def diversify_initial_protein_sequences(
 
 def diversify_initial_sequences(
   key: PRNGKeyArray,
-  seed_sequences: PopulationSequences,
+  seed_sequences: EvoSequence,
   mutation_rate: float,
   sequence_type: Literal["nucleotide", "protein"],
-) -> PopulationSequences:
+) -> EvoSequence:
   """Diversify initial sequences based on the sequence type."""
   if sequence_type == "nucleotide":
     return diversify_initial_nucleotide_sequences(
@@ -218,11 +218,11 @@ def mutate_single(
 
 def chunked_mutation_step(
   key: PRNGKeyArray,
-  population: PopulationSequences,
+  population: EvoSequence,
   mutation_rate: float,
   n_states: int,
   chunk_size: int,
-) -> PopulationSequences:
+) -> EvoSequence:
   """Apply mutation to population using chunked vmap processing.
 
   This function demonstrates how to use `chunked_vmap` with a function
@@ -278,10 +278,10 @@ def dispatch_mutation_single(
 
 def dispatch_mutation(
   key: PRNGKeyArray,
-  sequences: PopulationSequences,
+  sequences: EvoSequence,
   mutation_rate: float,
   sequence_type: Literal["nucleotide", "protein"],
-) -> PopulationSequences:
+) -> EvoSequence:
   """Dispatches the appropriate sequence processing function based on the sequence type."""
   if sequence_type == "nucleotide":
     n_states = 4

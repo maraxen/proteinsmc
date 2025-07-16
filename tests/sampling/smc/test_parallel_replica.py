@@ -7,7 +7,7 @@ from jax import random
 from proteinsmc.sampling.smc.parallel_replica import (
   prsmc_sampler,
 )
-from proteinsmc.utils.annealing_schedules import (
+from proteinsmc.utils.annealing import (
   linear_schedule,
 )
 from proteinsmc.utils.data_structures import (
@@ -57,7 +57,7 @@ def setup_sampler():
   meta_beta_schedule_config = AnnealingScheduleConfig(
     schedule_fn=linear_schedule,
     beta_max=1.0,
-    annealing_len=100,
+    n_steps=100,
   )
 
   step_config = PRSMCStepConfig(

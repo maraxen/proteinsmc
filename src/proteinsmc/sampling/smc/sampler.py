@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import jax.numpy as jnp
 from jax import lax, random
 
+from proteinsmc.models.smc import SMCCarryState, SMCConfig, SMCOutput
 from proteinsmc.sampling.smc.step import smc_step
 from proteinsmc.sampling.smc.validation import validate_smc_config
 from proteinsmc.utils import (
@@ -15,10 +16,11 @@ from proteinsmc.utils import (
   generate_template_population,
   shannon_entropy,
 )
-from proteinsmc.utils.data_structures import SMCCarryState, SMCConfig, SMCOutput
+from proteinsmc.utils.annealing import ANNEALING_REGISTRY
 
 if TYPE_CHECKING:
   from jaxtyping import PRNGKeyArray
+
 
 logger = getLogger(__name__)
 logger.setLevel("INFO")
@@ -37,7 +39,7 @@ def smc_sampler(key: PRNGKeyArray, config: SMCConfig) -> SMCOutput:
   logger.info(
     "Running SMC (JAX) | Shape=%s | Schedule=%s | PopulationSize=%d | Steps=%d",
     initial_population.shape,
-    config.annealing_schedule.schedule_fn.__name__,
+    config.annealing_schedule.schedule_fn,
     population_size,
     config.generations,
   )
@@ -50,19 +52,14 @@ def smc_sampler(key: PRNGKeyArray, config: SMCConfig) -> SMCOutput:
     sequence_type=config.sequence_type,
   )
 
-  annealing_len = jnp.array(config.annealing_schedule.annealing_len, dtype=jnp.int32)
+  n_steps = jnp.array(config.annealing_schedule.n_steps, dtype=jnp.int32)
   beta_max = jnp.array(config.annealing_schedule.beta_max, dtype=jnp.float32)
 
-  beta_schedule = jnp.array(
-    [
-      config.annealing_schedule.schedule_fn(
-        i + 1,
-        annealing_len,
-        beta_max,
-      )
-      for i in jnp.arange(config.generations)
-    ],
-    dtype=jnp.float32,
+  beta_schedule = lax.fori_loop(
+    lower=0,
+    upper=config.generations,
+    body_fun=ANNEALING_REGISTRY[config.annealing_schedule.schedule_fn],
+    init_val=(n_steps, beta_max),
   )
 
   key, subkey = random.split(key)

@@ -13,7 +13,7 @@ from jax import jit, random
 if TYPE_CHECKING:
   from jaxtyping import Float, PRNGKeyArray
 
-  from proteinsmc.utils.types import EvoSequence, PopulationSequences
+  from proteinsmc.models.types import EvoSequence
 
 
 @dataclass(frozen=True)
@@ -26,14 +26,14 @@ class GibbsSamplerOutput:
 
   """
 
-  samples: PopulationSequences
+  samples: EvoSequence
   final_fitness: Float
 
   def tree_flatten(self) -> tuple[tuple, dict]:
     """Flatten the dataclass for JAX PyTree compatibility."""
     children = (self.samples, self.final_fitness)
     aux_data = {}
-    return (children, aux_data)
+    return children, aux_data
 
   @classmethod
   def tree_unflatten(cls, _aux_data: dict, children: tuple) -> GibbsSamplerOutput:
@@ -140,8 +140,8 @@ def gibbs_sampler(
 
   def body_fn(
     i: int,
-    state_and_samples: tuple[EvoSequence, PopulationSequences, Float],
-  ) -> tuple[EvoSequence, PopulationSequences, Float]:
+    state_and_samples: tuple[EvoSequence, EvoSequence, Float],
+  ) -> tuple[EvoSequence, EvoSequence, Float]:
     current_state, samples, fitness = state_and_samples
 
     new_state = current_state

@@ -37,7 +37,7 @@ def sample_smc_config(sample_fitness_evaluator):
   annealing_schedule_config = AnnealingScheduleConfig(
     schedule_fn=linear_schedule,
     beta_max=1.0,
-    annealing_len=50,
+    n_steps=50,
   )
   
   return SMCConfig(

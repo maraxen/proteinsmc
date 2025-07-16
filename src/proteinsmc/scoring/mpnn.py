@@ -2,19 +2,22 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 from jax import jit
 
 if TYPE_CHECKING:
-  from jaxtyping import Float, PRNGKeyArray
+  from jaxtyping import Array, Float, PRNGKeyArray
 
-  from proteinsmc.utils.types import MPNNModel, ProteinSequence
+  from proteinsmc.models.fitness import FitnessFuncSignature
+  from proteinsmc.models.types import MPNNModel, ProteinSequence
+
+from proteinsmc.models.fitness import FitnessRegistryItem
 
 
 def make_mpnn_score(
   mpnn_model: MPNNModel,
-) -> Callable[[PRNGKeyArray, ProteinSequence], Float]:
+) -> FitnessFuncSignature:
   """Create a scoring function for the MPNN model.
 
   Args:
@@ -27,10 +30,18 @@ def make_mpnn_score(
 
   @jit
   def mpnn_score(
-    key: PRNGKeyArray,
+    _key: PRNGKeyArray,
     protein_sequence: ProteinSequence,
+    _context: Array | None = None,
   ) -> Float:
     """Scores a protein sequence using the MPNN model."""
-    return mpnn_model.score(seq_numeric=protein_sequence, key=key)
+    return mpnn_model.score(seq_numeric=protein_sequence, key=_key)
 
   return mpnn_score
+
+
+MPNN_FITNESS = FitnessRegistryItem(
+  name="mpnn_score",
+  method_factory=make_mpnn_score,
+  input_type="protein",
+)
