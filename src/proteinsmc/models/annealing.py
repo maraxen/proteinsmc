@@ -14,7 +14,7 @@ from typing import (  # Added Any, Callable for clarity
 import jax
 from jaxtyping import Array, Float, Int
 
-from .base import RegisteredFunction, Registry, RegistryItem
+from .registry_base import RegisteredFunction, Registry, RegistryItem
 
 P = ParamSpec("P")
 CurrentStepInt = Int[jax.Array, "current_step"]
@@ -84,7 +84,7 @@ class AnnealingScheduleConfig:
   """
 
   schedule_fn: str
-  beta_max: float
+  beta_max: float  # TODO: maybe use this directly?
   n_steps: int
   schedule_args: dict[str, Any] = field(default_factory=dict)
 
@@ -94,22 +94,20 @@ class AnnealingScheduleConfig:
     All fields are treated as children as they can vary across instances.
     """
     children = (
-      self.schedule_fn,
       self.beta_max,
       self.n_steps,
-      self.schedule_args,
     )
-    aux_data = {}
+    aux_data = {"schedule_fn": self.schedule_fn, "schedule_args": self.schedule_args}
     return children, aux_data
 
   @classmethod
   def tree_unflatten(cls, _aux_data: dict, children: tuple) -> AnnealingScheduleConfig:
     """Unflatten the dataclass for JAX PyTree compatibility."""
     return cls(
-      schedule_fn=children[0],
-      beta_max=children[1],
-      n_steps=children[2],
-      schedule_args=children[3],
+      beta_max=children[0],
+      n_steps=children[1],
+      schedule_fn=_aux_data["schedule_fn"],
+      schedule_args=_aux_data["schedule_args"],
     )
 
   def __call__(
@@ -121,7 +119,9 @@ class AnnealingScheduleConfig:
       msg = f"Annealing schedule '{self.schedule_fn}' is not registered."
       raise ValueError(msg)
 
-    return registry.get(self.schedule_fn)(**self.schedule_args)
+    return registry.get(self.schedule_fn)(
+      **self.schedule_args,
+    )
 
 
 jax.tree_util.register_pytree_node_class(AnnealingScheduleConfig)

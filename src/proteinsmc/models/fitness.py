@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 from jaxtyping import Array, Float
 
-from .base import RegisteredFunction, Registry, RegistryItem
+from .registry_base import RegisteredFunction, Registry, RegistryItem
 
 FitnessScores = Float[jax.Array, "fitness_functions"]
 

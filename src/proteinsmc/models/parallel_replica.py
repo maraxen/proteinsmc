@@ -13,8 +13,8 @@ import jax.numpy as jnp
 from jaxtyping import Array, Float
 
 from .annealing import AnnealingScheduleConfig
-from .base import BaseSamplerConfig, SamplerOutputProtocol
 from .fitness import FitnessEvaluator
+from .sampler_base import BaseSamplerConfig, SamplerOutputProtocol
 
 if TYPE_CHECKING:
   from jaxtyping import Int, PRNGKeyArray

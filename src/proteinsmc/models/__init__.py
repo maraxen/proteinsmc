@@ -10,13 +10,6 @@ from .annealing import (
   MaxBetaFloat,
   RegisteredAnnealingFunction,
 )
-from .base import (
-  BaseSamplerConfig,
-  RegisteredFunction,
-  Registry,
-  RegistryItem,
-  SamplerOutputProtocol,
-)
 from .fitness import (
   CombineFuncSignature,
   CombineFunction,
@@ -39,6 +32,15 @@ from .parallel_replica import (
   PerIslandPerGenerationMetrics,
   PRSMCCarryState,
   PRSMCStepConfig,
+)
+from .registry_base import (
+  RegisteredFunction,
+  Registry,
+  RegistryItem,
+)
+from .sampler_base import (
+  BaseSamplerConfig,
+  SamplerOutputProtocol,
 )
 from .smc import (
   PopulationBools,

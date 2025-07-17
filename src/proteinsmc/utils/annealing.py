@@ -95,16 +95,16 @@ def static_schedule(
 
 ANNEALING_REGISTRY = AnnealingScheduleRegistry(
   items={
-    "linear": AnnealingRegistryItem(lambda _args, _kwargs: linear_schedule, name="linear"),
+    "linear": AnnealingRegistryItem(lambda: linear_schedule, name="linear"),
     "exponential": AnnealingRegistryItem(
-      lambda _args, _kwargs: exponential_schedule,
+      lambda: exponential_schedule,
     ),
     "cosine": AnnealingRegistryItem(
-      lambda _args, _kwargs: cosine_schedule,
+      lambda: cosine_schedule,
       name="cosine",
     ),
     "static": AnnealingRegistryItem(
-      lambda _args, _kwargs: static_schedule,
+      lambda: static_schedule,
       name="static",
     ),
   },

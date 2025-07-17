@@ -16,7 +16,7 @@ if TYPE_CHECKING:
   from jaxtyping import PRNGKeyArray
 
 from .annealing import AnnealingScheduleConfig
-from .base import BaseSamplerConfig, SamplerOutputProtocol
+from .sampler_base import BaseSamplerConfig, SamplerOutputProtocol
 
 PopulationNucleotideSequences = Int[Array, "population_size nucleotide_sequence_length"]
 PopulationProteinSequences = Int[Array, "population_size protein_sequence_length"]

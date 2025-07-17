@@ -5,9 +5,6 @@ from .hmc import hmc_sampler
 from .mcmc import make_random_mutation_proposal_fn, mcmc_sampler
 from .nuts import nuts_sampler
 from .smc import (
-  SMCCarryState,
-  SMCConfig,
-  SMCOutput,
   smc_sampler,
 )
 from .smc.parallel_replica import (
@@ -27,9 +24,6 @@ __all__ = [
   "ParallelReplicaConfig",
   "ParallelReplicaSMCOutput",
   "prsmc_sampler",
-  "SMCCarryState",
-  "SMCConfig",
-  "SMCOutput",
   "smc_sampler",
   "ExchangeConfig",
   "PRSMCStepConfig",
