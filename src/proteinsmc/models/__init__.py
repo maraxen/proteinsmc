@@ -1,30 +1,8 @@
 """Models for evaluation in ProteinSMC."""
 
-from .annealing import (
-  AnnealingFuncSignature,
-  AnnealingRegistryItem,
-  AnnealingScheduleConfig,
-  AnnealingScheduleRegistry,
-  CurrentBetaFloat,
-  CurrentStepInt,
-  MaxBetaFloat,
-  RegisteredAnnealingFunction,
-)
-from .fitness import (
-  CombineFuncSignature,
-  CombineFunction,
-  CombineRegistry,
-  CombineRegistryItem,
-  FitnessEvaluator,
-  FitnessFuncSignature,
-  FitnessFunction,
-  FitnessRegistry,
-  FitnessRegistryItem,
-)
-from .memory import (
-  AutoTuningConfig,
-  MemoryConfig,
-)
+from .annealing import AnnealingConfig
+from .fitness import CombineFunction, FitnessEvaluator, FitnessFunction
+from .memory import AutoTuningConfig, MemoryConfig
 from .parallel_replica import (
   ParallelReplicaConfig,
   ParallelReplicaSMCOutput,
@@ -33,15 +11,7 @@ from .parallel_replica import (
   PRSMCCarryState,
   PRSMCStepConfig,
 )
-from .registry_base import (
-  RegisteredFunction,
-  Registry,
-  RegistryItem,
-)
-from .sampler_base import (
-  BaseSamplerConfig,
-  SamplerOutputProtocol,
-)
+from .sampler_base import BaseSamplerConfig, SamplerOutputProtocol
 from .smc import (
   PopulationBools,
   PopulationMetrics,
@@ -61,28 +31,12 @@ from .types import (
 )
 
 __all__ = [
-  "AnnealingScheduleConfig",
-  "AnnealingScheduleRegistry",
-  "RegisteredAnnealingFunction",
-  "AnnealingRegistryItem",
-  "AnnealingFuncSignature",
-  "CurrentBetaFloat",
-  "CurrentStepInt",
-  "MaxBetaFloat",
+  "AnnealingConfig",
   "FitnessEvaluator",
   "FitnessFunction",
-  "FitnessRegistry",
-  "FitnessRegistryItem",
-  "FitnessFuncSignature",
-  "CombineFuncSignature",
   "CombineFunction",
-  "CombineRegistry",
-  "CombineRegistryItem",
-  "RegisteredFunction",
-  "Registry",
-  "RegistryItem",
-  "SamplerOutputProtocol",
   "BaseSamplerConfig",
+  "SamplerOutputProtocol",
   "MemoryConfig",
   "AutoTuningConfig",
   "ParallelReplicaConfig",

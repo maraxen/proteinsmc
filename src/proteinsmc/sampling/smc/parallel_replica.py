@@ -17,19 +17,18 @@ from proteinsmc.models.parallel_replica import (
   ExchangeConfig,
   IslandState,
   ParallelReplicaConfig,
-  ParallelReplicaSMCOutput,
   PRSMCCarryState,
   PRSMCStepConfig,
 )
 from proteinsmc.utils import (
-  ANNEALING_REGISTRY,
-  calculate_fitness,
   calculate_logZ_increment,
   dispatch_mutation,
   diversify_initial_sequences,
   generate_template_population,
+  get_fitness_function,
   resample,
 )
+from proteinsmc.utils.annealing import AnnealingFuncSignature, get_annealing_function
 
 
 @partial(jit, static_argnames=("config",))
@@ -54,6 +53,9 @@ def island_smc_step(
   current_population = island_state.population
   p_step = island_state.step
 
+  fitness_func = get_fitness_function(
+    config.fitness_evaluator,
+  )
   mutated_population = jax.lax.cond(
     (p_step > 0),
     lambda x: dispatch_mutation(key_mutate, x, config.mutation_rate, config.sequence_type).astype(
@@ -63,7 +65,7 @@ def island_smc_step(
     current_population,
   )
 
-  fitness_values, fitness_components = calculate_fitness(
+  fitness_values, fitness_components = fitness_func(
     key_fitness,
     mutated_population,
     config.sequence_type,
@@ -163,7 +165,11 @@ def island_smc_step_with_metrics(
 
   """
   updated_island_state = island_smc_step(island_state, config)
-  fitness_values, _ = calculate_fitness(
+  fitness_func = get_fitness_function(
+    config.fitness_evaluator,
+  )
+  updated_island_state.key, _ = jax.random.split(updated_island_state.key)
+  fitness_values, _ = fitness_func(
     updated_island_state.key,
     updated_island_state.population,
     config.sequence_type,
@@ -263,17 +269,18 @@ def migrate(
     config_a = island_a_population[sequence_idx_a]
     config_b = island_b_population[sequence_idx_b]
 
-    fitness_a, _ = calculate_fitness(
+    fitness_func = get_fitness_function(
+      config.fitness_evaluator,
+    )
+    fitness_a, _ = fitness_func(
       key_acceptance,
       jnp.expand_dims(config_a, 0),
       config.sequence_type,
-      config.fitness_evaluator,
     )
-    fitness_b, _ = calculate_fitness(
+    fitness_b, _ = fitness_func(
       key_acceptance,
       jnp.expand_dims(config_b, 0),
       config.sequence_type,
-      config.fitness_evaluator,
     )
     fitness_a = jnp.mean(fitness_a)
     fitness_b = jnp.mean(fitness_b)
@@ -320,11 +327,8 @@ def migrate(
   return updated_island_states, total_accepted_swaps
 
 
-def prsmc_sampler(
-  key: PRNGKeyArray,
-  config: ParallelReplicaConfig,
-) -> ParallelReplicaSMCOutput:
-  """Run Parallel Replica inspired SMC with the new fitness evaluation system."""
+def initialize_prsmc_state(config: ParallelReplicaConfig, key: PRNGKeyArray) -> PRSMCCarryState:
+  """Initialize the state for the Parallel Replica SMC sampler."""
   key_init_islands, key_smc_loop = jax.random.split(key)
   initial_population = generate_template_population(
     initial_sequence=config.seed_sequence,
@@ -363,6 +367,20 @@ def prsmc_sampler(
     *initial_island_states_list,
   )
 
+  return PRSMCCarryState(
+    current_overall_state=initial_island_states,
+    prng_key=key_smc_loop,
+    total_swaps_attempted=jnp.array(0, dtype=jnp.int32),
+    total_swaps_accepted=jnp.array(0, dtype=jnp.int32),
+  )
+
+
+def run_prsmc_loop(
+  config: ParallelReplicaConfig,
+  initial_state: PRSMCCarryState,
+) -> tuple[PRSMCCarryState, dict]:
+  """JIT-compiled Parallel Replica SMC loop."""
+
   @partial(jit, static_argnames=("step_config",))
   def _parallel_replica_scan_step(
     carry_state: PRSMCCarryState,
@@ -376,18 +394,12 @@ def prsmc_sampler(
       step_config,
     )
     ess_p, mean_fit_p, max_fit_p, logZ_inc_p = island_metrics  # noqa: N806
-
-    meta_annealing_schedule = step_config.meta_beta_annealing_schedule
-    n_steps = jnp.array(meta_annealing_schedule.n_steps, dtype=jnp.int32)
-    beta_max = jnp.array(meta_annealing_schedule.beta_max, dtype=jnp.float32)
-    current_meta_beta = lax.cond(
-      step_idx >= meta_annealing_schedule.n_steps,
-      lambda: jnp.array(meta_annealing_schedule.beta_max, dtype=jnp.float32),
-      lambda: meta_annealing_schedule(registry=ANNEALING_REGISTRY)(
-        current_step=step_idx + 1,  # type: ignore[arg-type]
-        n_steps=n_steps,
-        beta_max=beta_max,
-      ),
+    annealing_fn: AnnealingFuncSignature = get_annealing_function(
+      step_config.meta_beta_annealing_schedule,
+    )
+    current_meta_beta = annealing_fn(
+      current_step=step_idx,  # type: ignore[call-arg]
+      _context=None,  # No context needed for this annealing function
     )
 
     exchange_config = step_config.exchange_config
@@ -428,12 +440,6 @@ def prsmc_sampler(
     }
     return next_carry_state, collected_metrics
 
-  initial_carry = PRSMCCarryState(
-    initial_island_states,
-    key_smc_loop,
-    jnp.array(0, dtype=jnp.int32),
-    jnp.array(0, dtype=jnp.int32),
-  )
   step_config = config.step_config
 
   final_carry_state, collected_outputs_scan = lax.scan(
@@ -442,34 +448,9 @@ def prsmc_sampler(
       scan_input,
       step_config,
     ),
-    initial_carry,
+    initial_state,
     jnp.arange(config.generations, dtype=jnp.int32),
     length=config.generations,
   )
 
-  final_island_states = final_carry_state.current_overall_state
-  final_total_swaps_accepted = final_carry_state.total_swaps_accepted
-  final_total_swaps_attempted = final_carry_state.total_swaps_attempted
-
-  swap_acceptance_rate = jnp.where(
-    final_total_swaps_attempted > 0,
-    final_total_swaps_accepted / final_total_swaps_attempted,
-    jnp.array(0.0, dtype=jnp.float32),
-  )
-
-  if not isinstance(swap_acceptance_rate, jax.Array):
-    msg = f"Expected swap_acceptance_rate to be a jax.Array, got {type(swap_acceptance_rate)}"
-    raise TypeError(msg)
-
-  return ParallelReplicaSMCOutput(
-    input_config=config,
-    final_island_states=final_island_states,
-    swap_acceptance_rate=swap_acceptance_rate,
-    history_mean_fitness_per_island=collected_outputs_scan["mean_fitness_per_island"],
-    history_max_fitness_per_island=collected_outputs_scan["max_fitness_per_island"],
-    history_ess_per_island=collected_outputs_scan["ess_per_island"],
-    history_logZ_increment_per_island=collected_outputs_scan["logZ_increment_per_island"],
-    history_meta_beta=collected_outputs_scan["meta_beta"],
-    history_num_accepted_swaps=collected_outputs_scan["num_accepted_swaps"],
-    history_num_attempted_swaps=collected_outputs_scan["num_attempted_swaps"],
-  )
+  return final_carry_state, collected_outputs_scan

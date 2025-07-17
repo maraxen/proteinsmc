@@ -1,5 +1,6 @@
 """Utility functions for protein sequence modeling and sampling."""
 
+from ..sampling.smc.resampling import resample
 from .annealing import (
   ANNEALING_REGISTRY,
   cosine_schedule,
@@ -26,13 +27,7 @@ from .constants import (
   UNKNOWN_AA_INT,
   ECOLI_MAX_FREQS_JAX_list,
 )
-from .fitness import (
-  FITNESS_REGISTRY,
-  calculate_fitness,
-  chunked_calculate_population_fitness,
-  dispatch_fitness_function,
-  make_sequence_log_prob_fn,
-)
+from .fitness import FITNESS_FUNCTIONS, get_fitness_function
 from .initiate import generate_template_population
 from .memory import (
   BenchmarkResult,
@@ -58,7 +53,6 @@ from .mutation import (
   mutate_single,
 )
 from .pmap_utils import distribute
-from ..sampling.smc.resampling import resample
 from .translation import reverse_translate, translate
 from .vmap_utils import chunked_vmap
 
@@ -102,15 +96,12 @@ __all__ = [
   "RES_TO_CODON_CHAR",
   "CODON_TO_RES_CHAR",
   "calculate_logZ_increment",
-  "make_sequence_log_prob_fn",
   "generate_template_population",
   "distribute",
   "chunked_vmap",
   "safe_weighted_mean",
   "chunked_mutation_step",
-  "chunked_calculate_population_fitness",
-  "dispatch_fitness_function",
-  "calculate_fitness",
-  "FITNESS_REGISTRY",
+  "get_fitness_function",
+  "FITNESS_FUNCTIONS",
   "ANNEALING_REGISTRY",
 ]

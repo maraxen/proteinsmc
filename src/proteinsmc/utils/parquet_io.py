@@ -36,7 +36,7 @@ from flax.serialization import (
 )
 
 from proteinsmc.models import (
-  AnnealingScheduleConfig,
+  AnnealingConfig,
   FitnessEvaluator,
   FitnessFunction,
   MemoryConfig,
@@ -196,7 +196,7 @@ def _register_flax_serialization_for_all_types() -> None:
   all_dataclasses = [
     SMCConfig,
     MemoryConfig,
-    AnnealingScheduleConfig,
+    AnnealingConfig,
     FitnessEvaluator,
     FitnessFunction,
     SMCCarryState,

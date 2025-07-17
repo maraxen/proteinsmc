@@ -12,7 +12,7 @@ import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Float
 
-from .annealing import AnnealingScheduleConfig
+from .annealing import AnnealingConfig
 from .fitness import FitnessEvaluator
 from .sampler_base import BaseSamplerConfig, SamplerOutputProtocol
 
@@ -126,7 +126,7 @@ class PRSMCStepConfig:
   fitness_evaluator: FitnessEvaluator
   sequence_type: Literal["protein", "nucleotide"]
   ess_threshold_frac: float
-  meta_beta_annealing_schedule: AnnealingScheduleConfig
+  meta_beta_annealing_schedule: AnnealingConfig
   exchange_config: ExchangeConfig
 
   def _validate_types(self) -> None:
@@ -146,7 +146,7 @@ class PRSMCStepConfig:
     if not isinstance(self.ess_threshold_frac, float):
       msg = "ess_threshold_frac must be a float."
       raise TypeError(msg)
-    if not isinstance(self.meta_beta_annealing_schedule, AnnealingScheduleConfig):
+    if not isinstance(self.meta_beta_annealing_schedule, AnnealingConfig):
       msg = "meta_beta_annealing_schedule must be an AnnealingScheduleConfig instance."
       raise TypeError(msg)
     if not isinstance(self.exchange_config, ExchangeConfig):

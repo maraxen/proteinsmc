@@ -9,24 +9,25 @@ import jax.numpy as jnp
 from jax import jit
 
 if TYPE_CHECKING:
-  from jaxtyping import Array, Float
+  from jaxtyping import Array, Float, PRNGKeyArray
 
-from proteinsmc.models.fitness import (
-  CombineFuncSignature,
-  CombineRegistryItem,
-)
+  from proteinsmc.models.fitness import CombineFuncSignature
 
 
 def make_sum_combine(**_kwargs: Any) -> CombineFuncSignature:
   """Make combine function that sums input along axis 0.
 
   Returns:
-    CombineFuncSignature: A function that sums input along axis 0.
+    A function that sums input along axis 0.
 
   """
 
   @partial(jit, static_argnames=("_context",))
-  def sum_combine(fitness_scores: Float, _context: Array | None = None) -> Float:
+  def sum_combine(
+    fitness_scores: Float,
+    _key: PRNGKeyArray | None = None,
+    _context: Array | None = None,
+  ) -> Float:
     """Combine function that sums input along axis 0."""
     return jnp.sum(fitness_scores, axis=0)
 
@@ -49,6 +50,7 @@ def make_weighted_combine(
   @partial(jit, static_argnames=("_context",))
   def weighted_combine(
     fitness_components: Float,
+    _key: PRNGKeyArray | None = None,
     _context: Array | None = None,
   ) -> Float:
     """Combine individual fitness scores into a single score using weights.
@@ -73,14 +75,3 @@ def make_weighted_combine(
     return combined_fitness
 
   return weighted_combine
-
-
-SUM_COMBINE = CombineRegistryItem(
-  name="sum_combine",
-  method_factory=make_sum_combine,
-)
-
-WEIGHTED_COMBINE = CombineRegistryItem(
-  name="weighted_combine",
-  method_factory=make_weighted_combine,
-)

@@ -1,4 +1,4 @@
-"""Utility functions to generate a population of sequences from a single initial sequence."""
+"""Utility functions to initialize sampler states."""
 
 from __future__ import annotations
 

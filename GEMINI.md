@@ -3,62 +3,79 @@
 This document provides guidelines and context for continuing development on the Protein SMC Experiment project.
 
 ## Project Goals
+
 The primary goals for this repository are:
-1.  **Benchmarking:** Evaluate the performance of the JAX-based Sequential Monte Carlo (SMC) sampling approach against other protein sequence sampling methods. This could involve comparing convergence rates, diversity of generated sequences, and computational efficiency.
-2.  **Evolutionary Studies:** Utilize the SMC framework to study protein evolution, including exploring fitness landscapes, identifying evolutionary pathways, and understanding the impact of different selective pressures.
+
+1. **Benchmarking:** Evaluate the performance of the JAX-based Sequential Monte Carlo (SMC) sampling approach against other protein sequence sampling methods. This could involve comparing convergence rates, diversity of generated sequences, and computational efficiency.
+2. **Evolutionary Studies:** Utilize the SMC framework to study protein evolution, including exploring fitness landscapes, identifying evolutionary pathways, and understanding the impact of different selective pressures.
 
 ## Current Status and Future Work
 
 ### Island Models
+
 A sophisticated island model is implemented in the form of a **Parallel Replica SMC algorithm** located in `src/sampling/parallel_replica.py`. This implementation addresses the core concepts of island models for evolutionary studies and benchmarking.
 
 The key features of this implementation are:
--   **Multiple Islands:** The `run_parallel_replica_smc_jax` function runs multiple independent SMC simulations in parallel, referred to as "islands." Each island maintains its own population of particles.
--   **Replica Exchange:** The model includes a replica exchange strategy where configurations (particles) are swapped between islands based on a Metropolis-Hastings-like criterion. This allows for information to be shared between different temperature replicas, improving sampling efficiency.
--   **State Management:** The `IslandState` NamedTuple is used to manage the state of each island, including the particles, random keys, and other parameters.
--   **Flexible Configuration:** The implementation allows for configuring the number of islands, the number of particles per island, the exchange frequency, and other parameters.
+
+- **Multiple Islands:** The `run_parallel_replica_smc_jax` function runs multiple independent SMC simulations in parallel, referred to as "islands." Each island maintains its own population of particles.
+- **Replica Exchange:** The model includes a replica exchange strategy where configurations (particles) are swapped between islands based on a Metropolis-Hastings-like criterion. This allows for information to be shared between different temperature replicas, improving sampling efficiency.
+- **State Management:** The `IslandState` NamedTuple is used to manage the state of each island, including the particles, random keys, and other parameters.
+- **Flexible Configuration:** The implementation allows for configuring the number of islands, the number of particles per island, the exchange frequency, and other parameters.
 
 ### Benchmarking
+
 To benchmark this SMC implementation, consider:
--   **Defining Metrics:** What constitutes "good" sampling? (e.g., coverage of sequence space, proximity to optimal sequences, diversity).
--   **Comparison Targets:** Identify other sampling algorithms or tools (e.g., MCMC, genetic algorithms, other protein design software) to compare against.
--   **Test Cases:** Create specific protein design problems or fitness landscapes to test the algorithms.
+
+- **Defining Metrics:** What constitutes "good" sampling? (e.g., coverage of sequence space, proximity to optimal sequences, diversity).
+- **Comparison Targets:** Identify other sampling algorithms or tools (e.g., MCMC, genetic algorithms, other protein design software) to compare against.
+- **Test Cases:** Create specific protein design problems or fitness landscapes to test the algorithms.
 
 ### Evolutionary Studies
+
 For evolutionary studies, you might want to:
--   **Fitness Functions:** Experiment with different fitness functions that represent various evolutionary pressures (e.g., stability, binding affinity, catalytic activity).
--   **Landscape Analysis:** Use the sampled sequences to map and analyze protein fitness landscapes.
--   **Ancestral Reconstruction:** Potentially adapt the SMC framework for ancestral sequence reconstruction or inferring evolutionary histories.
+
+- **Fitness Functions:** Experiment with different fitness functions that represent various evolutionary pressures (e.g., stability, binding affinity, catalytic activity).
+- **Landscape Analysis:** Use the sampled sequences to map and analyze protein fitness landscapes.
+- **Ancestral Reconstruction:** Potentially adapt the SMC framework for ancestral sequence reconstruction or inferring evolutionary histories.
 
 ## Development Practices
 
 ### Testing
+
 While there's a `tests/` directory, ensure that new features and modifications are accompanied by appropriate unit and integration tests. This is crucial for maintaining code quality and verifying the correctness of complex simulations.
 
 ### Linting
+
 The project uses `ruff` for linting. The current configuration focuses on `F` (Pyflakes) and `B` (Bugbear) error codes, and ignores `E501` (line length). Always run `ruff check src/ --fix` before committing changes to ensure code quality and consistency.
 
 ### Code Structure
+
 Maintain the modular structure within `src/`. When adding new functionalities, consider where they best fit within the existing `experiment.py`, `initiation.py`, `mpnn.py`, `mutate.py`, `sampling/`, and `utils/` modules, or if a new module is warranted.
 
 ### Virtual Environment
+
 Always activate the virtual environment before running any Python commands or scripts. The activation script is located at `.venv/bin/activate`. You should do this before running any Python-related functions.
 
 ### Running Tests
+
 To run all tests, use the following command from the project root:
+
 ```bash
 "/Users/mar/MIT Dropbox/Marielle Russo/2025_workspace/proteinsmc/.venv/bin/python" -m pytest
 ```
+
 To run a specific test file, provide its path:
+
 ```bash
 "/Users/mar/MIT Dropbox/Marielle Russo/2025_workspace/proteinsmc/.venv/bin/python" -m pytest "/Users/mar/MIT Dropbox/Marielle Russo/2025_workspace/proteinsmc/tests/utils/test_combined_fitness.py"
 ```
 
-
 ### Shell Commands
+
 When using shell commands, especially when dealing with paths that might contain spaces or special characters, always enclose the paths in quotes.
 
 ### Dependencies
+
 Keep `requirements.txt` up-to-date with any new Python package dependencies.
 
 By following these guidelines, we can ensure consistent, high-quality development for the Protein SMC Experiment project.
@@ -69,15 +86,46 @@ By following these guidelines, we can ensure consistent, high-quality developmen
 Review this section at the beginning of each session to understand the current state of work. Update this section upon completing a significant milestone or when handing off the session.
 
 **Work Accomplished:**
-- Corrected the `translate` function in `src/utils/nucleotide.py` to accurately determine `valid_translation` based on the presence of 'X' residues.
-- Fixed the argument order for `mpnn_model.score` in `src/scoring/mpnn.py`.
-- Addressed syntax errors and incorrect Glycine codon frequencies in `src/utils/constants.py` to ensure correct CAI score calculation.
+-
 
 **Remaining Work:**
-- Resolve the failing `test_calculate_fitness_population_nucleotide_sequences` test in `tests/utils/test_combined_fitness.py`. The current issue is that the calculated CAI scores are still incorrect, even after fixing the constants. This suggests a deeper issue with the CAI calculation logic or the test's expected values.
-- Address any remaining test failures in `tests/utils/test_metrics.py` and `tests/utils/test_resampling.py`.
+
+- Scalable Experiment Management and I/O
 
 **Challenges Encountered:**
-- Persistent issues with `replace` tool due to subtle whitespace differences and multiple occurrences of `old_string`. This required careful manual inspection and precise string matching.
-- Debugging JAX-related errors, especially `NameError` and incorrect numerical outputs, required adding `jax.debug.print` statements for intermediate value inspection.
-- The `ModuleNotFoundError: No module named 'src'` when running pytest from the virtual environment was resolved by explicitly using the full path to the `python` executable within the virtual environment.
+-
+
+# **Additional Gemini Development Guide for proteinsmc added 250717**
+
+Thproteis document outlines the high-level goals, coding style, and architectural decisions for the proteinsmc repository. Please use this as your primary guide for all development and refactoring tasks.
+
+## **Core Architectural Strategy**
+
+Based on recent planning, the project has adopted a new, scalable architecture for running experiments and managing data. All new development should align with these principles:
+
+1. **I/O and Data Pipeline (Hot \-\> Warm \-\> Cold):**  
+   - **Core Module:** All I/O operations are managed by src/proteinsmc/io.py, which contains the RunManager and asynchronous DataWriter classes. The old parquet\_io.py is deprecated.  
+   - **Run Identification:** Each experiment is identified by a uuid7.  
+   - **Storage (Hot):** During a run, data is written to a flat output directory. Tensor data is buffered and saved in batches to .safetensors files. Scalar metrics are appended to a .jsonl file. This avoids creating thousands of small files or directories per run.  
+   - **Storage (Warm/Cold):** Post-processing scripts located in the scripts/ directory are used to consolidate run data and create master tables (e.g., Parquet) for efficient querying.  
+2. **Experiment Runner:**  
+   - **Polymorphic Dispatch:** The main entry point for all experiments is the run\_experiment function in src/proteinsmc/runner.py. This function uses the sampler\_type field in the configuration object to dispatch to the correct sampler logic.  
+3. **JAX Data Structures:**  
+   - **Static vs. Dynamic:** We distinguish between static configuration and dynamic state.  
+   - **Configuration (static):** All sampler configurations (e.g., SMCConfig) inherit from BaseSamplerConfig and contain only static parameters.  
+   - **State (dynamic):** The dynamic state that changes at every step of a sampler (e.g., SMCCarryState) must be a flax.struct.PyTreeNode to ensure it is handled correctly by jax.jit and jax.lax.scan.
+
+## **High-Level Goals**
+
+1. **Implement the Core Architectural Strategy:** The immediate priority is to fully implement the refactoring plan. This involves creating the new io.py and runner.py modules, refactoring the data classes, and updating the samplers to use the new system.  
+2. **Expand Sampler Support:** Add more sampler types (e.g., Parallel Replica) to the polymorphic run\_experiment dispatcher.  
+3. **Enhance Post-Processing:** Develop robust scripts in the scripts/ directory for analyzing and visualizing results from the new data format.  
+4. **Continuous Testing:** Ensure all new components are thoroughly tested. I/O logic should be tested separately from the core computational logic of the samplers.
+
+## **Coding Style and Best Practices**
+
+- **Type Hinting:** All new code must be fully type-hinted. Use jaxtyping for JAX arrays.  
+- **Docstrings:** Provide clear and concise docstrings for all modules, classes, and functions.  
+- **Testing:** Use pytest for testing. Use chex for assertions on JAX arrays. Mock external systems like file I/O where appropriate.  
+- **Immutability:** Embrace the functional and immutable nature of JAX. Avoid in-place modifications of state.  
+- **Clarity over Premature Optimization:** Write clear, readable code first. Rely on jax.jit for performance and only optimize further if a bottleneck is identified.

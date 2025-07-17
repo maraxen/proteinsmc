@@ -14,7 +14,7 @@ import jax.numpy as jnp
 
 from proteinsmc.models.annealing import (
   AnnealingRegistryItem,
-  AnnealingScheduleConfig,
+  AnnealingConfig,
   AnnealingScheduleRegistry,
 )
 
@@ -105,8 +105,8 @@ def test_registry_contains_item(sample_registry: AnnealingScheduleRegistry):
 
 def test_annealing_schedule_config_call(sample_registry: AnnealingScheduleRegistry):
   """Test calling an AnnealingScheduleConfig to get a schedule function."""
-  config = AnnealingScheduleConfig(
-    schedule_fn="linear", beta_max=1.0, n_steps=10
+  config = AnnealingConfig(
+    annealing_fn="linear", beta_max=1.0, n_steps=10
   )
   schedule_func = config(sample_registry)
   assert isinstance(schedule_func, Callable)
@@ -124,8 +124,8 @@ def test_annealing_schedule_config_call_invalid(
   sample_registry: AnnealingScheduleRegistry,
 ):
   """Test that calling a config with an unregistered schedule raises ValueError."""
-  config = AnnealingScheduleConfig(
-    schedule_fn="nonexistent", beta_max=1.0, n_steps=10
+  config = AnnealingConfig(
+    annealing_fn="nonexistent", beta_max=1.0, n_steps=10
   )
   with pytest.raises(ValueError, match="Annealing schedule 'nonexistent' is not registered."):
     config(sample_registry)
@@ -133,14 +133,14 @@ def test_annealing_schedule_config_call_invalid(
 
 def test_annealing_schedule_config_pytree_registration():
   """Test that AnnealingScheduleConfig is registered as a PyTree."""
-  config = AnnealingScheduleConfig(
-    schedule_fn="linear",
+  config = AnnealingConfig(
+    annealing_fn="linear",
     beta_max=1.0,
     n_steps=10,
     schedule_args={"extra": 5},
   )
 
-  def process_config(c: AnnealingScheduleConfig) -> float:
+  def process_config(c: AnnealingConfig) -> float:
     return c.beta_max * c.n_steps
 
   jitted_process = jax.jit(process_config)

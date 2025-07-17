@@ -64,7 +64,7 @@ def _validate_numeric_fields(config: SMCConfig) -> None:
 
 def _validate_component_fields(config: SMCConfig) -> None:
   """Validate component fields (fitness evaluator, annealing schedule)."""
-  from proteinsmc.models.annealing import AnnealingScheduleConfig
+  from proteinsmc.models.annealing import AnnealingConfig
   from proteinsmc.models.fitness import FitnessEvaluator
 
   if not isinstance(config.fitness_evaluator, FitnessEvaluator):
@@ -74,7 +74,7 @@ def _validate_component_fields(config: SMCConfig) -> None:
     )
     raise TypeError(msg)
 
-  if not isinstance(config.annealing_schedule, AnnealingScheduleConfig):
+  if not isinstance(config.annealing_schedule, AnnealingConfig):
     msg = (
       f"Expected annealing_schedule to be an instance of "
       f"AnnealingScheduleConfig, got {type(config.annealing_schedule)}"

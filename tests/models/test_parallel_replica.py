@@ -8,7 +8,7 @@ import jax.numpy as jnp
 import pytest
 from jaxtyping import Float
 
-from proteinsmc.models.annealing import AnnealingScheduleConfig
+from proteinsmc.models.annealing import AnnealingConfig
 from proteinsmc.models.fitness import FitnessEvaluator, FitnessFunction
 from proteinsmc.models.memory import MemoryConfig
 from proteinsmc.models.parallel_replica import (
@@ -35,10 +35,10 @@ def mock_memory_config() -> MemoryConfig:
 
 
 @pytest.fixture
-def mock_annealing_schedule() -> AnnealingScheduleConfig:
+def mock_annealing_schedule() -> AnnealingConfig:
   """Create a mock AnnealingScheduleConfig for testing."""
-  return AnnealingScheduleConfig(
-    schedule_fn="linear",
+  return AnnealingConfig(
+    annealing_fn="linear",
     beta_max=1.0,
     n_steps=10,
   )
@@ -62,7 +62,7 @@ def valid_exchange_config(mock_fitness_evaluator: FitnessEvaluator) -> ExchangeC
 @pytest.fixture
 def valid_prsmc_step_config(
   mock_fitness_evaluator: FitnessEvaluator,
-  mock_annealing_schedule: AnnealingScheduleConfig,
+  mock_annealing_schedule: AnnealingConfig,
   valid_exchange_config: ExchangeConfig,
 ) -> PRSMCStepConfig:
   """Create a valid PRSMCStepConfig for testing."""
@@ -249,7 +249,7 @@ class TestPRSMCStepConfig:
   def test_validation_negative_population_size_per_island(
     self,
     mock_fitness_evaluator: FitnessEvaluator,
-    mock_annealing_schedule: AnnealingScheduleConfig,
+    mock_annealing_schedule: AnnealingConfig,
     valid_exchange_config: ExchangeConfig,
   ) -> None:
     """Test validation fails for negative population_size_per_island."""
@@ -267,7 +267,7 @@ class TestPRSMCStepConfig:
   def test_validation_invalid_mutation_rate_high(
     self,
     mock_fitness_evaluator: FitnessEvaluator,
-    mock_annealing_schedule: AnnealingScheduleConfig,
+    mock_annealing_schedule: AnnealingConfig,
     valid_exchange_config: ExchangeConfig,
   ) -> None:
     """Test validation fails for mutation_rate > 1.0."""
@@ -285,7 +285,7 @@ class TestPRSMCStepConfig:
   def test_validation_invalid_ess_threshold_frac_high(
     self,
     mock_fitness_evaluator: FitnessEvaluator,
-    mock_annealing_schedule: AnnealingScheduleConfig,
+    mock_annealing_schedule: AnnealingConfig,
     valid_exchange_config: ExchangeConfig,
   ) -> None:
     """Test validation fails for ess_threshold_frac > 1.0."""
@@ -303,7 +303,7 @@ class TestPRSMCStepConfig:
   def test_validation_invalid_ess_threshold_frac_low(
     self,
     mock_fitness_evaluator: FitnessEvaluator,
-    mock_annealing_schedule: AnnealingScheduleConfig,
+    mock_annealing_schedule: AnnealingConfig,
     valid_exchange_config: ExchangeConfig,
   ) -> None:
     """Test validation fails for ess_threshold_frac <= 0.0."""

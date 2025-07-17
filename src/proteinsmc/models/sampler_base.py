@@ -5,8 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
-import jax
-
+from proteinsmc.models.annealing import AnnealingConfig
 from proteinsmc.models.fitness import FitnessEvaluator
 from proteinsmc.models.memory import MemoryConfig
 
@@ -18,6 +17,7 @@ class BaseSamplerConfig:
   All sampler configurations should inherit from this.
   """
 
+  sampler_type: str
   seed_sequence: str
   generations: int
   n_states: int
@@ -26,6 +26,7 @@ class BaseSamplerConfig:
   sequence_type: Literal["protein", "nucleotide"]
   fitness_evaluator: FitnessEvaluator
   memory_config: MemoryConfig
+  annealing_config: AnnealingConfig
 
   def _validate_types(self) -> None:
     """Validate the types of the fields."""
@@ -69,39 +70,6 @@ class BaseSamplerConfig:
       msg = "sequence_type must be 'protein' or 'nucleotide'."
       raise ValueError(msg)
 
-  def tree_flatten(self) -> tuple[tuple, dict]:
-    """Flatten the dataclass for JAX PyTree compatibility.
-
-    All fields are treated as children as they can vary across instances.
-    """
-    children = (
-      self.seed_sequence,
-      self.generations,
-      self.n_states,
-      self.mutation_rate,
-      self.diversification_ratio,
-      self.sequence_type,
-      self.fitness_evaluator,
-      self.memory_config,
-    )
-    aux_data = {}
-    return children, aux_data
-
-  @classmethod
-  def tree_unflatten(cls, aux_data: dict, children: tuple) -> BaseSamplerConfig:
-    """Unflatten the dataclass for JAX PyTree compatibility."""
-    return cls(
-      seed_sequence=children[0],
-      generations=children[1],
-      n_states=children[2],
-      mutation_rate=children[3],
-      diversification_ratio=children[4],
-      sequence_type=children[5],
-      fitness_evaluator=children[6],
-      memory_config=children[7],
-      **aux_data,
-    )
-
   @property
   def additional_config_fields(self) -> dict[str, str]:
     """Return additional fields for the configuration that are not part of the PyTree."""
@@ -110,14 +78,6 @@ class BaseSamplerConfig:
 
 class SamplerOutputProtocol(Protocol):
   """Protocol for sampler output objects, for generic data extraction."""
-
-  @property
-  def input_configs(self) -> BaseSamplerConfig | tuple[BaseSamplerConfig, ...]:
-    """Return the input configuration(s) for the sampler output.
-
-    This can be a single config or a tuple of configs if batched.
-    """
-    return ()
 
   @property
   def per_gen_stats_metrics(self) -> dict[str, str]:
@@ -133,6 +93,3 @@ class SamplerOutputProtocol(Protocol):
   def output_type_name(self) -> str:
     """Return the string name of the output type (e.g., 'SMC', 'ParallelReplicaSMC')."""
     return "SamplerOutput"
-
-
-jax.tree_util.register_pytree_node_class(BaseSamplerConfig)

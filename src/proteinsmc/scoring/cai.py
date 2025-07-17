@@ -19,7 +19,6 @@ if TYPE_CHECKING:
   from proteinsmc.models.fitness import FitnessFuncSignature
   from proteinsmc.models.types import NucleotideSequence, ProteinSequence
 
-from proteinsmc.models.fitness import FitnessRegistryItem
 from proteinsmc.utils.translation import translate
 
 
@@ -69,10 +68,3 @@ def cai_score(seq: NucleotideSequence, aa_seq: ProteinSequence) -> Float:
   num_valid_codons = jnp.sum(valid_codon_mask)
   cai = jnp.exp(sum_log_wi / jnp.maximum(num_valid_codons, 1.0))
   return jnp.where(num_valid_codons > 0, cai, 0.0)
-
-
-CAI_FITNESS = FitnessRegistryItem(
-  name="cai_score",
-  method_factory=make_cai_score,
-  input_type="nucleotide",
-)

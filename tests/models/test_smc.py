@@ -10,7 +10,7 @@ import jax.numpy as jnp
 import pytest
 from jaxtyping import Float
 
-from proteinsmc.models.annealing import AnnealingScheduleConfig
+from proteinsmc.models.annealing import AnnealingConfig
 from proteinsmc.models.fitness import FitnessEvaluator, FitnessFunction
 from proteinsmc.models.memory import MemoryConfig
 from proteinsmc.models.smc import SMCCarryState, SMCConfig, SMCOutput
@@ -30,10 +30,10 @@ def mock_memory_config() -> MemoryConfig:
 
 
 @pytest.fixture
-def mock_annealing_schedule() -> AnnealingScheduleConfig:
+def mock_annealing_schedule() -> AnnealingConfig:
   """Create a mock AnnealingScheduleConfig for testing."""
-  return AnnealingScheduleConfig(
-    schedule_fn="linear",
+  return AnnealingConfig(
+    annealing_fn="linear",
     beta_max=1.0,
     n_steps=10,
   )
@@ -43,7 +43,7 @@ def mock_annealing_schedule() -> AnnealingScheduleConfig:
 def valid_smc_config(
   mock_fitness_evaluator: FitnessEvaluator,
   mock_memory_config: MemoryConfig,
-  mock_annealing_schedule: AnnealingScheduleConfig,
+  mock_annealing_schedule: AnnealingConfig,
 ) -> SMCConfig:
   """Create a valid SMCConfig for testing."""
   return SMCConfig(
@@ -78,7 +78,7 @@ class TestSMCConfig:
     self,
     mock_fitness_evaluator: FitnessEvaluator,
     mock_memory_config: MemoryConfig,
-    mock_annealing_schedule: AnnealingScheduleConfig,
+    mock_annealing_schedule: AnnealingConfig,
   ) -> None:
     """Test validation fails for negative population_size."""
     with pytest.raises(ValueError, match="population_size must be positive"):
@@ -99,7 +99,7 @@ class TestSMCConfig:
     self,
     mock_fitness_evaluator: FitnessEvaluator,
     mock_memory_config: MemoryConfig,
-    mock_annealing_schedule: AnnealingScheduleConfig,
+    mock_annealing_schedule: AnnealingConfig,
   ) -> None:
     """Test validation fails for zero population_size."""
     with pytest.raises(ValueError, match="population_size must be positive"):
@@ -120,7 +120,7 @@ class TestSMCConfig:
     self,
     mock_fitness_evaluator: FitnessEvaluator,
     mock_memory_config: MemoryConfig,
-    mock_annealing_schedule: AnnealingScheduleConfig,
+    mock_annealing_schedule: AnnealingConfig,
   ) -> None:
     """Test type validation for population_size."""
     with pytest.raises(TypeError, match="population_size must be an integer"):
@@ -185,7 +185,7 @@ class TestSMCConfig:
     assert config.seed_sequence == unflattened_config.seed_sequence
     assert config.generations == unflattened_config.generations
     assert config.population_size == unflattened_config.population_size
-    assert config.annealing_schedule.schedule_fn == unflattened_config.annealing_schedule.schedule_fn
+    assert config.annealing_schedule.annealing_fn == unflattened_config.annealing_schedule.schedule_fn
 
 
 class TestSMCCarryState:

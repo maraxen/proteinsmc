@@ -12,8 +12,6 @@ if TYPE_CHECKING:
   from proteinsmc.models.fitness import FitnessFuncSignature
   from proteinsmc.models.types import MPNNModel, ProteinSequence
 
-from proteinsmc.models.fitness import FitnessRegistryItem
-
 
 def make_mpnn_score(
   mpnn_model: MPNNModel,
@@ -38,10 +36,3 @@ def make_mpnn_score(
     return mpnn_model.score(seq_numeric=protein_sequence, key=_key)
 
   return mpnn_score
-
-
-MPNN_FITNESS = FitnessRegistryItem(
-  name="mpnn_score",
-  method_factory=make_mpnn_score,
-  input_type="protein",
-)
