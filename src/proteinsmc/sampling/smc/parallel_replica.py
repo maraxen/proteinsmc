@@ -12,29 +12,28 @@ from jax import jit, lax, vmap
 if TYPE_CHECKING:
   from jaxtyping import Float, Int, PRNGKeyArray
 
-
+  from proteinsmc.models.fitness import StackedFitnessFuncSignature
+  from proteinsmc.utils.annealing import AnnealingFuncSignature
 from proteinsmc.models.parallel_replica import (
   ExchangeConfig,
   IslandState,
   ParallelReplicaConfig,
-  PRSMCCarryState,
+  PRSMCState,
   PRSMCStepConfig,
 )
+from proteinsmc.sampling.smc.resampling import resample
 from proteinsmc.utils import (
   calculate_logZ_increment,
-  dispatch_mutation,
   diversify_initial_sequences,
-  generate_template_population,
-  get_fitness_function,
-  resample,
 )
-from proteinsmc.utils.annealing import AnnealingFuncSignature, get_annealing_function
+from proteinsmc.utils.mutation import mutate
 
 
-@partial(jit, static_argnames=("config",))
+@partial(jit, static_argnames=("config", "fitness_fn"))
 def island_smc_step(
   island_state: IslandState,
   config: PRSMCStepConfig,
+  fitness_fn: StackedFitnessFuncSignature,
 ) -> IslandState:
   """Perform one SMC step (mutation, weighting, UNCONDITIONAL resampling) for a single island.
 
@@ -42,34 +41,33 @@ def island_smc_step(
   ess_threshold_frac is not used for resampling decision.
 
   Args:
-    island_state (IslandState): Current state of the island.
-    config (PRSMCStepConfig): Configuration for the SMC step.
+    island_state: Current state of the island.
+    config: Configuration for the SMC step.
+    fitness_fn: Stacked fitness function.
 
   Returns:
-    IslandState: Updated state of the island.
+    Updated state of the island.
 
   """
   key_mutate, key_fitness, key_resample, key_next_island = jax.random.split(island_state.key, 4)
   current_population = island_state.population
   p_step = island_state.step
-
-  fitness_func = get_fitness_function(
-    config.fitness_evaluator,
-  )
   mutated_population = jax.lax.cond(
     (p_step > 0),
-    lambda x: dispatch_mutation(key_mutate, x, config.mutation_rate, config.sequence_type).astype(
-      x.dtype,
-    ),
+    lambda x: mutate(
+      key_mutate,
+      x,
+      config.mutation_rate,
+      4 if config.sequence_type == "nucleotide" else 20,
+    ).astype(x.dtype),
     lambda x: x,
     current_population,
   )
 
-  fitness_values, fitness_components = fitness_func(
-    key_fitness,
+  fitness_values, fitness_components = fitness_fn(
     mutated_population,
-    config.sequence_type,
-    config.fitness_evaluator,
+    key_fitness,  # type: ignore[arg-type]
+    _context=None,
   )
 
   log_potential_values = jnp.where(
@@ -144,74 +142,69 @@ def island_smc_step(
   )
 
 
-@partial(jit, static_argnames=("config",))
-def island_smc_step_with_metrics(
-  island_state: IslandState,
+@partial(jit, static_argnames=("config", "fitness_fn"))
+def prsmc_step(
+  island_states: IslandState,
   config: PRSMCStepConfig,
+  fitness_fn: StackedFitnessFuncSignature,
 ) -> tuple[IslandState, tuple[Float, Float, Float, Float]]:
-  """Perform a single step of the island SMC algorithm with metrics.
+  """Perform a single step of the PRSMC algorithm across all islands.
 
   Args:
-    island_state (IslandState): Current state of the island.
-    config (PRSMCStepConfig): Configuration for the SMC step.
+    island_states: Current state of all islands.
+    config: Configuration for the SMC step.
+    fitness_fn: Stacked fitness function.
 
   Returns:
-    tuple[IslandState, tuple[Float, Float, Float, Float]]:
-      Updated island state and a tuple containing:
-        - Effective Sample Size (ESS)
-        - Mean fitness of the population
-        - Maximum fitness of the population
-        - LogZ increment for the step
+    tuple containing:
+      - Updated island states
+      - Tuple of metrics (ESS, mean fitness, max fitness, logZ increment)
 
   """
-  updated_island_state = island_smc_step(island_state, config)
-  fitness_func = get_fitness_function(
-    config.fitness_evaluator,
+  # Apply SMC step to each island
+  updated_islands = vmap(
+    lambda state: island_smc_step(state, config, fitness_fn),
+    in_axes=0,
+    out_axes=0,
+  )(island_states)
+
+  # Extract metrics
+  ess = updated_islands.ess
+  mean_fitness = updated_islands.mean_fitness
+  max_fitness = jnp.max(
+    jnp.asarray(
+      jnp.where(
+        jnp.isfinite(updated_islands.mean_fitness),
+        updated_islands.mean_fitness,
+        -jnp.inf,
+      ),
+    ),
+    axis=0,
   )
-  updated_island_state.key, _ = jax.random.split(updated_island_state.key)
-  fitness_values, _ = fitness_func(
-    updated_island_state.key,
-    updated_island_state.population,
-    config.sequence_type,
-    config.fitness_evaluator,
-  )
-  ess = updated_island_state.ess
-  mean_fitness = updated_island_state.mean_fitness
-  if not isinstance(fitness_values, jax.Array):
-    msg = f"Expected fitness_values to be a jax.Array, got {type(fitness_values)}"
-    raise TypeError(msg)
-  max_fitness = jnp.max(jnp.where(jnp.isfinite(fitness_values), fitness_values, -jnp.inf))
-  logZ_increment = updated_island_state.logZ_estimate - island_state.logZ_estimate  # noqa: N806
-  return updated_island_state, (ess, mean_fitness, max_fitness, logZ_increment)
+  logZ_increment = updated_islands.logZ_estimate - island_states.logZ_estimate  # noqa: N806
+
+  return updated_islands, (ess, mean_fitness, max_fitness, logZ_increment)
 
 
-vmapped_smc_step = jit(
-  vmap(
-    island_smc_step_with_metrics,
-    in_axes=(0, None),
-    out_axes=(0, (0, 0, 0, 0)),
-  ),
-  static_argnames=("config",),
-)
-
-
-@partial(jit, static_argnames=("config",))
+@partial(jit, static_argnames=("config", "fitness_fn"))
 def migrate(
   island_states: IslandState,
   meta_beta_current_value: Float,
   key_exchange: PRNGKeyArray,
   config: ExchangeConfig,
+  fitness_fn: StackedFitnessFuncSignature,
 ) -> tuple[IslandState, Int]:
   """Perform replica exchange attempts. Acceptance is scaled by meta_beta_current_value.
 
   Args:
-    island_states (IslandState): Current state of the islands.
-    meta_beta_current_value (Float): Current value of the meta beta parameter.
-    key_exchange (PRNGKeyArray): JAX PRNG key for random operations.
-    config (ExchangeConfig): Configuration for the exchange process.
+    island_states: Current state of the islands.
+    meta_beta_current_value: Current value of the meta beta parameter.
+    key_exchange: JAX PRNG key for random operations.
+    config: Configuration for the exchange process.
+    fitness_fn: Stacked fitness function.
 
   Returns:
-    tuple[IslandState, Int]: Updated island states and total number of accepted swaps.
+    tuple containing updated island states and total number of accepted swaps.
 
   """
   all_population_stacked = island_states.population
@@ -269,18 +262,15 @@ def migrate(
     config_a = island_a_population[sequence_idx_a]
     config_b = island_b_population[sequence_idx_b]
 
-    fitness_func = get_fitness_function(
-      config.fitness_evaluator,
-    )
-    fitness_a, _ = fitness_func(
-      key_acceptance,
+    fitness_a, _ = fitness_fn(
       jnp.expand_dims(config_a, 0),
-      config.sequence_type,
+      key_acceptance,  # type: ignore[arg-type]
+      _context=None,
     )
-    fitness_b, _ = fitness_func(
-      key_acceptance,
+    fitness_b, _ = fitness_fn(
       jnp.expand_dims(config_b, 0),
-      config.sequence_type,
+      key_acceptance,  # type: ignore[arg-type]
+      _context=None,
     )
     fitness_a = jnp.mean(fitness_a)
     fitness_b = jnp.mean(fitness_b)
@@ -327,20 +317,40 @@ def migrate(
   return updated_island_states, total_accepted_swaps
 
 
-def initialize_prsmc_state(config: ParallelReplicaConfig, key: PRNGKeyArray) -> PRSMCCarryState:
+def initialize_prsmc_state(config: ParallelReplicaConfig, key: PRNGKeyArray) -> PRSMCState:
   """Initialize the state for the Parallel Replica SMC sampler."""
   key_init_islands, key_smc_loop = jax.random.split(key)
-  initial_population = generate_template_population(
-    initial_sequence=config.seed_sequence,
-    population_size=config.step_config.population_size_per_island * config.n_islands,
-    input_sequence_type=config.step_config.sequence_type,
-    output_sequence_type=config.step_config.sequence_type,
-  )
+
+  # Create simple template population based on n_states
+  from proteinsmc.utils.constants import AA_CHAR_TO_INT_MAP, NUCLEOTIDES_INT_MAP
+
+  if config.sequence_type == "protein":
+    try:
+      initial_seq = jnp.array(
+        [AA_CHAR_TO_INT_MAP[res] for res in config.seed_sequence],
+        dtype=jnp.int8,
+      )
+    except KeyError as e:
+      msg = f"Invalid amino acid: {e.args[0]}"
+      raise ValueError(msg) from e
+  else:  # nucleotide
+    try:
+      initial_seq = jnp.array(
+        [NUCLEOTIDES_INT_MAP[nuc] for nuc in config.seed_sequence],
+        dtype=jnp.int8,
+      )
+    except KeyError as e:
+      msg = f"Invalid nucleotide: {e.args[0]}"
+      raise ValueError(msg) from e
+
+  population_size = config.step_config.population_size_per_island * config.n_islands
+  initial_population = jnp.tile(initial_seq, (population_size, 1))
+
   initial_population = diversify_initial_sequences(
     key=key_init_islands,
     seed_sequences=initial_population,
     mutation_rate=config.diversification_ratio,
-    sequence_type=config.step_config.sequence_type,
+    sequence_type=config.sequence_type,  # type: ignore[arg-type]
   )
   initial_populations = jnp.split(
     initial_population,
@@ -367,7 +377,7 @@ def initialize_prsmc_state(config: ParallelReplicaConfig, key: PRNGKeyArray) -> 
     *initial_island_states_list,
   )
 
-  return PRSMCCarryState(
+  return PRSMCState(
     current_overall_state=initial_island_states,
     prng_key=key_smc_loop,
     total_swaps_attempted=jnp.array(0, dtype=jnp.int32),
@@ -377,26 +387,28 @@ def initialize_prsmc_state(config: ParallelReplicaConfig, key: PRNGKeyArray) -> 
 
 def run_prsmc_loop(
   config: ParallelReplicaConfig,
-  initial_state: PRSMCCarryState,
-) -> tuple[PRSMCCarryState, dict]:
+  initial_state: PRSMCState,
+  fitness_fn: StackedFitnessFuncSignature,
+  annealing_fn: AnnealingFuncSignature,
+) -> tuple[PRSMCState, dict]:
   """JIT-compiled Parallel Replica SMC loop."""
 
-  @partial(jit, static_argnames=("step_config",))
+  @partial(jit, static_argnames=("step_config", "fitness_fn", "annealing_fn"))
   def _parallel_replica_scan_step(
-    carry_state: PRSMCCarryState,
+    carry_state: PRSMCState,
     step_idx: Int,
     step_config: PRSMCStepConfig,
-  ) -> tuple[PRSMCCarryState, dict]:
+    fitness_fn: StackedFitnessFuncSignature,
+    annealing_fn: AnnealingFuncSignature,
+  ) -> tuple[PRSMCState, dict]:
     key_step, next_smc_loop_key = jax.random.split(carry_state.prng_key)
 
-    current_overall_state, island_metrics = vmapped_smc_step(
+    current_overall_state, island_metrics = prsmc_step(
       carry_state.current_overall_state,
       step_config,
+      fitness_fn,
     )
     ess_p, mean_fit_p, max_fit_p, logZ_inc_p = island_metrics  # noqa: N806
-    annealing_fn: AnnealingFuncSignature = get_annealing_function(
-      step_config.meta_beta_annealing_schedule,
-    )
     current_meta_beta = annealing_fn(
       current_step=step_idx,  # type: ignore[call-arg]
       _context=None,  # No context needed for this annealing function
@@ -412,6 +424,7 @@ def run_prsmc_loop(
         meta_beta_current_value=current_meta_beta,
         key_exchange=key_step,
         config=exchange_config,
+        fitness_fn=fitness_fn,
       ),
       lambda: (current_overall_state, jnp.array(0, dtype=jnp.int32)),
     )
@@ -422,7 +435,7 @@ def run_prsmc_loop(
       lambda: jnp.array(0, dtype=jnp.int32),
     )
 
-    next_carry_state = PRSMCCarryState(
+    next_carry_state = PRSMCState(
       current_overall_state=current_overall_state,
       prng_key=next_smc_loop_key,
       total_swaps_attempted=carry_state.total_swaps_attempted + total_swaps_attempted_this_cycle,
@@ -447,10 +460,12 @@ def run_prsmc_loop(
       carry,
       scan_input,
       step_config,
+      fitness_fn,
+      annealing_fn,
     ),
     initial_state,
-    jnp.arange(config.generations, dtype=jnp.int32),
-    length=config.generations,
+    jnp.arange(config.num_samples, dtype=jnp.int32),
+    length=config.num_samples,
   )
 
   return final_carry_state, collected_outputs_scan

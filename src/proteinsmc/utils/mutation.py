@@ -190,32 +190,6 @@ def diversify_initial_sequences(
   raise ValueError(msg)
 
 
-@partial(jit, static_argnames=("n_states", "mutation_rate"))
-def mutate_single(
-  key: PRNGKeyArray,
-  sequence: NucleotideSequence,
-  mutation_rate: float,
-  n_states: int,
-) -> NucleotideSequence:
-  """Apply random mutations to a single nucleotide sequence.
-
-  Args:
-      key: JAX PRNG key.
-      sequence: JAX array of nucleotide sequence (shape: (nuc_len,)).
-      mutation_rate: Mutation rate for nucleotides.
-      n_states: Number of states. e.g., nucleotide types (4 for A, C, G, T).
-
-  Returns: JAX array of mutated nucleotide sequence.
-
-  """
-  key_mutate, key_offsets = random.split(key)
-  mutation_mask = random.uniform(key_mutate, shape=sequence.shape) < mutation_rate
-  offsets = random.randint(key_offsets, shape=sequence.shape, minval=1, maxval=n_states)
-  proposed_mutations = (sequence + offsets) % n_states
-  mutated_sequence = jnp.where(mutation_mask, proposed_mutations, sequence)
-  return mutated_sequence.astype(jnp.int8)
-
-
 def chunked_mutation_step(
   key: PRNGKeyArray,
   population: EvoSequence,
@@ -245,7 +219,7 @@ def chunked_mutation_step(
     seq: NucleotideSequence,
   ) -> NucleotideSequence:
     """Mutate a single sequence."""
-    return mutate_single(k, seq, mutation_rate, n_states)
+    return mutate(k, seq, mutation_rate, n_states)
 
   mutation_keys = random.split(key, population.shape[0])
 
@@ -257,37 +231,3 @@ def chunked_mutation_step(
     static_args=None,
   )
   return mutated_population.astype(jnp.int8)
-
-
-def dispatch_mutation_single(
-  key: PRNGKeyArray,
-  sequence: NucleotideSequence,
-  mutation_rate: float,
-  sequence_type: Literal["nucleotide", "protein"],
-) -> NucleotideSequence:
-  """Dispatches the appropriate sequence processing function for a single sequence."""
-  if sequence_type == "nucleotide":
-    n_states = 4
-    return mutate_single(key, sequence, mutation_rate, n_states)
-  if sequence_type == "protein":
-    n_states = 20
-    return mutate_single(key, sequence, mutation_rate, n_states)
-  msg = f"Unsupported sequence_type='{sequence_type}'"
-  raise ValueError(msg)
-
-
-def dispatch_mutation(
-  key: PRNGKeyArray,
-  sequences: EvoSequence,
-  mutation_rate: float,
-  sequence_type: Literal["nucleotide", "protein"],
-) -> EvoSequence:
-  """Dispatches the appropriate sequence processing function based on the sequence type."""
-  if sequence_type == "nucleotide":
-    n_states = 4
-    return mutate(key, sequences, mutation_rate, n_states)
-  if sequence_type == "protein":
-    n_states = 20
-    return mutate(key, sequences, mutation_rate, n_states)
-  msg = f"Unsupported sequence_type='{sequence_type}'"
-  raise ValueError(msg)

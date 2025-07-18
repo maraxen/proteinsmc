@@ -13,7 +13,7 @@ from jaxtyping import Float
 from proteinsmc.models.annealing import AnnealingConfig
 from proteinsmc.models.fitness import FitnessEvaluator, FitnessFunction
 from proteinsmc.models.memory import MemoryConfig
-from proteinsmc.models.smc import SMCCarryState, SMCConfig, SMCOutput
+from proteinsmc.models.smc import SMCState, SMCConfig, SMCOutput
 
 
 @pytest.fixture
@@ -48,7 +48,7 @@ def valid_smc_config(
   """Create a valid SMCConfig for testing."""
   return SMCConfig(
     seed_sequence="MKLLVL",
-    generations=10,
+    num_samples=10,
     n_states=100,
     mutation_rate=0.1,
     diversification_ratio=0.2,
@@ -67,7 +67,7 @@ class TestSMCConfig:
     """Test successful SMCConfig initialization."""
     config = valid_smc_config
     assert config.seed_sequence == "MKLLVL"
-    assert config.generations == 10
+    assert config.num_samples == 10
     assert config.n_states == 100
     assert config.mutation_rate == 0.1
     assert config.diversification_ratio == 0.2
@@ -84,7 +84,7 @@ class TestSMCConfig:
     with pytest.raises(ValueError, match="population_size must be positive"):
       SMCConfig(
         seed_sequence="MKLLVL",
-        generations=10,
+        num_samples=10,
         n_states=100,
         mutation_rate=0.1,
         diversification_ratio=0.2,
@@ -105,7 +105,7 @@ class TestSMCConfig:
     with pytest.raises(ValueError, match="population_size must be positive"):
       SMCConfig(
         seed_sequence="MKLLVL",
-        generations=10,
+        num_samples=10,
         n_states=100,
         mutation_rate=0.1,
         diversification_ratio=0.2,
@@ -126,7 +126,7 @@ class TestSMCConfig:
     with pytest.raises(TypeError, match="population_size must be an integer"):
       SMCConfig(
         seed_sequence="MKLLVL",
-        generations=10,
+        num_samples=10,
         n_states=100,
         mutation_rate=0.1,
         diversification_ratio=0.2,
@@ -146,7 +146,7 @@ class TestSMCConfig:
     with pytest.raises(TypeError, match="annealing_schedule must be an AnnealingScheduleConfig"):
       SMCConfig(
         seed_sequence="MKLLVL",
-        generations=10,
+        num_samples=10,
         n_states=100,
         mutation_rate=0.1,
         diversification_ratio=0.2,
@@ -183,7 +183,7 @@ class TestSMCConfig:
     unflattened_config = jax.tree_util.tree_unflatten(treedef, leaves)
 
     assert config.seed_sequence == unflattened_config.seed_sequence
-    assert config.generations == unflattened_config.generations
+    assert config.num_samples == unflattened_config.generations
     assert config.population_size == unflattened_config.population_size
     assert config.annealing_schedule.annealing_fn == unflattened_config.annealing_schedule.schedule_fn
 
@@ -206,9 +206,9 @@ class TestSMCCarryState:
     self,
     sample_key: jax.Array,
     sample_population: jax.Array,
-  ) -> SMCCarryState:
+  ) -> SMCState:
     """Create a sample SMCCarryState."""
-    return SMCCarryState(
+    return SMCState(
       key=sample_key,
       population=sample_population,
       logZ_estimate=jnp.array(1.5, dtype=jnp.float32),
@@ -216,7 +216,7 @@ class TestSMCCarryState:
       step=jnp.array(5, dtype=jnp.int32),
     )
 
-  def test_init_success(self, sample_carry_state: SMCCarryState) -> None:
+  def test_init_success(self, sample_carry_state: SMCState) -> None:
     """Test successful SMCCarryState initialization."""
     state = sample_carry_state
     assert state.key is not None
@@ -231,7 +231,7 @@ class TestSMCCarryState:
     sample_population: jax.Array,
   ) -> None:
     """Test SMCCarryState initialization with default step."""
-    state = SMCCarryState(
+    state = SMCState(
       key=sample_key,
       population=sample_population,
       logZ_estimate=jnp.array(1.0, dtype=jnp.float32),
@@ -239,12 +239,12 @@ class TestSMCCarryState:
     )
     chex.assert_trees_all_close(state.step, 0)
 
-  def test_pytree_registration(self, sample_carry_state: SMCCarryState) -> None:
+  def test_pytree_registration(self, sample_carry_state: SMCState) -> None:
     """Test that SMCCarryState is properly registered as a PyTree."""
     state = sample_carry_state
 
     # Test that it can be used in JAX transformations
-    def process_state(s: SMCCarryState) -> Float:
+    def process_state(s: SMCState) -> Float:
       return s.beta
 
     jitted_process = jax.jit(process_state)

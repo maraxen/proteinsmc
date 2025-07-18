@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING, Callable
 
@@ -10,51 +9,29 @@ import jax
 import jax.numpy as jnp
 from jax import jit, random
 
+from proteinsmc.models.gibbs import GibbsConfig, GibbsState, GibbsUpdateFuncSignature
+
 if TYPE_CHECKING:
-  from jaxtyping import Float, PRNGKeyArray
+  from jaxtyping import Float, Int, PRNGKeyArray
 
   from proteinsmc.models.types import EvoSequence
+  from proteinsmc.utils.fitness import FitnessFuncSignature
+
+__all__ = ["initialize_gibbs_state", "make_gibbs_update_fns", "run_gibbs_loop"]
 
 
-@dataclass(frozen=True)
-class GibbsSamplerOutput:
-  """Data structure to hold the output of the Gibbs sampler.
-
-  Attributes:
-      samples: Array of sampled sequences.
-      final_fitness: Fitness value of the final state.
-
-  """
-
-  samples: EvoSequence
-  final_fitness: Float
-
-  def tree_flatten(self) -> tuple[tuple, dict]:
-    """Flatten the dataclass for JAX PyTree compatibility."""
-    children = (self.samples, self.final_fitness)
-    aux_data = {}
-    return children, aux_data
-
-  @classmethod
-  def tree_unflatten(cls, _aux_data: dict, children: tuple) -> GibbsSamplerOutput:
-    """Unflatten the dataclass for JAX PyTree compatibility."""
-    return cls(
-      samples=children[0],
-      final_fitness=children[1],
-    )
-
-
-jax.tree_util.register_pytree_node_class(GibbsSamplerOutput)
+def initialize_gibbs_state(config: GibbsConfig) -> GibbsState:
+  """Initialize the state of the Gibbs sampler."""
+  key = jax.random.PRNGKey(config.prng_seed)
+  initial_samples = jnp.array(config.seed_sequence, dtype=jnp.int32)
+  return GibbsState(samples=initial_samples, fitness=jnp.array(0.0), key=key)
 
 
 def make_gibbs_update_fns(
   sequence_length: int,
   n_states: int,
 ) -> tuple[
-  Callable[
-    [jax.Array, EvoSequence, Callable[[PRNGKeyArray, EvoSequence], Float]],
-    EvoSequence,
-  ],
+  GibbsUpdateFuncSignature,
   ...,
 ]:
   """Return update functions for each sequence position.
@@ -78,10 +55,7 @@ def make_gibbs_update_fns(
 
   def update_fn_factory(
     pos: int,
-  ) -> Callable[
-    [jax.Array, EvoSequence, Callable[[PRNGKeyArray, EvoSequence], Float]],
-    EvoSequence,
-  ]:
+  ) -> GibbsUpdateFuncSignature:
     def update_fn(
       key: PRNGKeyArray,
       seq: EvoSequence,
@@ -104,68 +78,45 @@ def make_gibbs_update_fns(
   return update_fns  # type: ignore[return-value]
 
 
-@partial(jit, static_argnames=("num_samples", "log_prob_fn", "update_fns"))
-def gibbs_sampler(
-  key: PRNGKeyArray,
-  initial_state: EvoSequence,
-  num_samples: int,
-  log_prob_fn: Callable[[PRNGKeyArray, EvoSequence], Float],
+@partial(jit, static_argnames=("config", "fitness_fn", "update_fns"))
+def run_gibbs_loop(
+  config: GibbsConfig,
+  initial_state: GibbsState,
+  fitness_fn: FitnessFuncSignature,
   update_fns: tuple[
-    Callable[
-      [jax.Array, EvoSequence, Callable[[PRNGKeyArray, EvoSequence], Float]],
-      EvoSequence,
-    ],
+    GibbsUpdateFuncSignature,
     ...,
   ],
-) -> GibbsSamplerOutput:
-  """Run the Gibbs sampler.
+) -> tuple[GibbsState, GibbsState]:
+  """Run the Gibbs sampler loop.
 
   Args:
-      key: JAX PRNG key.
+      config: Configuration for the Gibbs sampler.
       initial_state: Initial state of the sampler.
-      num_samples: Number of samples to generate.
-      log_prob_fn: Log probability function of the target distribution.
+      fitness_fn: Fitness function to evaluate sequences.
       update_fns: Tuple of update functions, each updating one component of the state.
 
   Returns:
-      Array of samples of shape (num_samples, sequence_length).
-
-  Raises:
-      ValueError: If num_samples is not positive.
+      A tuple containing the final state and the history of states.
 
   """
-  if num_samples <= 0:
-    msg = "num_samples must be positive."
-    raise ValueError(msg)
 
-  def body_fn(
-    i: int,
-    state_and_samples: tuple[EvoSequence, EvoSequence, Float],
-  ) -> tuple[EvoSequence, EvoSequence, Float]:
-    current_state, samples, fitness = state_and_samples
+  def body_fn(state: GibbsState, _i: Int) -> tuple[GibbsState, GibbsState]:
+    current_state = state.samples
 
     new_state = current_state
     for j, update_fn in enumerate(update_fns):
-      key_comp, _ = random.split(random.fold_in(key, i * len(update_fns) + j))
-      new_state = update_fn(key_comp, new_state, log_prob_fn)
+      key_comp, _ = random.split(random.fold_in(state.key, j))
+      new_state = update_fn(key_comp, new_state, fitness_fn)  # type: ignore[call-arg]
 
-    samples = samples.at[i].set(new_state)
-    return (
-      new_state,
-      samples,
-      jnp.where(
-        i == 0,
-        log_prob_fn(key, new_state),
-        fitness,
-      ),
+    fitness = fitness_fn(
+      _key=state.key,  # type: ignore[arg-type]
+      sequence=new_state,
+      _context=None,
     )
+    _, key_next = random.split(state.key)
+    next_state = GibbsState(samples=new_state, fitness=fitness, key=key_next)
+    return next_state, next_state
 
-  samples = jnp.zeros((num_samples, *initial_state.shape), dtype=initial_state.dtype)
-  _, samples, final_fitness = jax.lax.fori_loop(
-    0,
-    num_samples,
-    body_fn,
-    (initial_state, samples, 0.0),
-  )
-
-  return samples
+  final_state, state_history = jax.lax.scan(body_fn, initial_state, jnp.arange(config.num_samples))
+  return final_state, state_history

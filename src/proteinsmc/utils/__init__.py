@@ -1,6 +1,7 @@
 """Utility functions for protein sequence modeling and sampling."""
 
-from ..sampling.smc.resampling import resample
+from proteinsmc.sampling.smc.resampling import resample
+
 from .annealing import (
   ANNEALING_REGISTRY,
   cosine_schedule,
@@ -53,7 +54,7 @@ from .mutation import (
   mutate_single,
 )
 from .pmap_utils import distribute
-from .translation import reverse_translate, translate
+from .translation import aa_to_nucelotide, nucleotide_to_aa
 from .vmap_utils import chunked_vmap
 
 __all__ = [
@@ -91,8 +92,8 @@ __all__ = [
   "dispatch_mutation",
   "dispatch_mutation_single",
   "resample",
-  "translate",
-  "reverse_translate",
+  "nucleotide_to_aa",
+  "aa_to_nucelotide",
   "RES_TO_CODON_CHAR",
   "CODON_TO_RES_CHAR",
   "calculate_logZ_increment",

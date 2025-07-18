@@ -10,7 +10,7 @@ from proteinsmc.utils.mutation import (
   mutate,
   chunked_mutation_step
 )
-from proteinsmc.utils.translation import translate
+from proteinsmc.utils.translation import nucleotide_to_aa
 
 
 @pytest.fixture
@@ -57,7 +57,7 @@ def test_diversify_initial_sequences(sample_sequences):
   )
   chex.assert_shape(diversified, sample_sequences.shape)
 
-  aa_seqs, is_valid = jax.vmap(translate)(diversified)
+  aa_seqs, is_valid = jax.vmap(nucleotide_to_aa)(diversified)
   chex.assert_equal(jnp.all(is_valid), True)
   
 def test_chunked_mutation_step(sample_sequences):

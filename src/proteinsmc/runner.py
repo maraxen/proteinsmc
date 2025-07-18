@@ -1,29 +1,71 @@
 """Main entry point for running experiments."""
 
 import logging
+from pathlib import Path
 
 import jax
+import jax.numpy as jnp
 
 from proteinsmc.io import RunManager
-from proteinsmc.models.parallel_replica import ParallelReplicaConfig
+from proteinsmc.models import (
+    GibbsConfig,
+    HMCConfig,
+    MCMCConfig,
+    NUTSConfig,
+    ParallelReplicaConfig,
+    SMCConfig,
+)
 from proteinsmc.models.sampler_base import BaseSamplerConfig
-from proteinsmc.models.smc import SMCConfig
-from proteinsmc.sampling.smc.parallel_replica import initialize_prsmc_state, run_prsmc_loop
+from proteinsmc.sampling import (
+    run_gibbs_loop,
+    run_hmc_loop,
+    run_mcmc_loop,
+    run_nuts_loop,
+)
+from proteinsmc.sampling.gibbs import initialize_gibbs_state
+from proteinsmc.sampling.hmc import initialize_hmc_state
+from proteinsmc.sampling.mcmc import initialize_mcmc_state
+from proteinsmc.sampling.nuts import initialize_nuts_state
+from proteinsmc.sampling.smc.parallel_replica import (
+    initialize_prsmc_state,
+    run_prsmc_loop,
+)
 from proteinsmc.sampling.smc.smc import initialize_smc_state, run_smc_loop
 from proteinsmc.utils.annealing import get_annealing_function
 from proteinsmc.utils.fitness import get_fitness_function
+from proteinsmc.utils.memory import auto_tune_chunk_size
 
 SAMPLER_REGISTRY = {
-  "smc": {
-    "config_cls": SMCConfig,
-    "initialize_fn": initialize_smc_state,
-    "run_fn": run_smc_loop,
-  },
-  "parallel_replica": {
-    "config_cls": ParallelReplicaConfig,
-    "initialize_fn": initialize_prsmc_state,
-    "run_fn": run_prsmc_loop,
-  },
+    "smc": {
+        "config_cls": SMCConfig,
+        "initialize_fn": initialize_smc_state,
+        "run_fn": run_smc_loop,
+    },
+    "parallel_replica": {
+        "config_cls": ParallelReplicaConfig,
+        "initialize_fn": initialize_prsmc_state,
+        "run_fn": run_prsmc_loop,
+    },
+    "gibbs": {
+        "config_cls": GibbsConfig,
+        "initialize_fn": initialize_gibbs_state,
+        "run_fn": run_gibbs_loop,
+    },
+    "mcmc": {
+        "config_cls": MCMCConfig,
+        "initialize_fn": initialize_mcmc_state,
+        "run_fn": run_mcmc_loop,
+    },
+    "hmc": {
+        "config_cls": HMCConfig,
+        "initialize_fn": initialize_hmc_state,
+        "run_fn": run_hmc_loop,
+    },
+    "nuts": {
+        "config_cls": NUTSConfig,
+        "initialize_fn": initialize_nuts_state,
+        "run_fn": run_nuts_loop,
+    },
 }
 
 
@@ -31,71 +73,97 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def run_experiment(config: BaseSamplerConfig, output_dir: str, seed: int = 0) -> None:
-  """Run a sampling experiment based on the provided configuration.
+def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int = 0) -> None:
+    """Run a sampling experiment based on the provided configuration.
 
-  Args:
-      config: A configuration object inheriting from BaseSamplerConfig.
-      output_dir: The directory to save the results.
-      seed: An integer seed for the random number generator.
+    Args:
+        config: A configuration object inheriting from BaseSamplerConfig.
+        output_dir: The directory to save the results.
+        seed: An integer seed for the random number generator.
 
-  """
-  key = jax.random.PRNGKey(seed)
+    """
+    key = jax.random.PRNGKey(seed)
 
-  if config.sampler_type not in SAMPLER_REGISTRY:
-    msg = (
-      f"Unknown sampler_type: '{config.sampler_type}'. "
-      f"Available types: {list(SAMPLER_REGISTRY.keys())}."
+    if config.sampler_type not in SAMPLER_REGISTRY:
+        msg = (
+            f"Unknown sampler_type: '{config.sampler_type}'. "
+            f"Available types: {list(SAMPLER_REGISTRY.keys())}."
+        )
+        raise ValueError(msg)
+
+    sampler_def = SAMPLER_REGISTRY[config.sampler_type]
+
+    # 1. Validate config type
+    if not isinstance(config, sampler_def["config_cls"]):
+        msg = (
+            f"Configuration object of type {type(config)} does not match "
+            f"sampler type '{config.sampler_type}' which requires {sampler_def['config_cls']}."
+        )
+        raise TypeError(msg)
+
+    fitness_fn = get_fitness_function(config.fitness_evaluator)
+
+    chunk_size = None
+    if config.memory_config.auto_tuning_config.enable_auto_tuning:
+        logger.info(
+            "Auto-tuning is enabled. This may affect performance and memory usage. "
+            "Ensure that the auto-tuning configuration is set correctly.",
+        )
+        chunk_size = auto_tune_chunk_size(
+            func=fitness_fn,
+            test_data=(
+                jax.random.key(key),
+                jnp.zeros(
+                    (
+                        max(config.memory_config.auto_tuning_config.probe_chunk_sizes),
+                        len(config.seed_sequence),
+                    ),
+                ),
+                None,
+            ),
+            config=config.memory_config.auto_tuning_config,
+            static_args={"sequence_type": config.sequence_type},
+        )
+    fitness_fn = get_fitness_function(
+        config.fitness_evaluator,
+        chunk_size=chunk_size,
     )
-    raise ValueError(msg)
+    annealing_fn = get_annealing_function(config.annealing_config)
 
-  sampler_def = SAMPLER_REGISTRY[config.sampler_type]
+    initialize_fn = sampler_def["initialize_fn"]
+    run_fn = sampler_def["run_fn"]
 
-  # 1. Validate config type
-  if not isinstance(config, sampler_def["config_cls"]):
-    msg = (
-      f"Configuration object of type {type(config)} does not match "
-      f"sampler type '{config.sampler_type}' which requires {sampler_def['config_cls']}."
-    )
-    raise TypeError(msg)
+    with RunManager(Path(output_dir), config) as writer:
+        logger.info(
+            "Starting run %s of type '%s'...",
+            writer.run_id,
+            config.sampler_type,
+        )
 
-  # 2. Get the appropriate JIT-compatible functions from our factories
-  fitness_fn = get_fitness_function(config.fitness_evaluator)
-  annealing_fn = get_annealing_function(config.annealing_config)
-  initialize_fn = sampler_def["initialize_fn"]
-  run_fn = sampler_def["run_fn"]
+        # 3. Initialize sampler state
+        key, init_key = jax.random.split(key)
+        initial_state = initialize_fn(config, init_key)
 
-  with RunManager(output_dir, config) as writer:
-    logger.info(
-      "Starting run %s of type '%s'...",
-      writer.run_id,
-      config.sampler_type,
-    )
+        # 4. Run the core sampler loop
+        final_state, all_outputs = run_fn(
+            config=config,
+            initial_state=initial_state,
+            fitness_fn=fitness_fn,
+            annealing_fn=annealing_fn,
+        )
 
-    # 3. Initialize sampler state
-    key, init_key = jax.random.split(key)
-    initial_state = initialize_fn(config, init_key)
+        # 5. Write results to disk
+        logger.info("Writing results to disk...")
+        num_steps = all_outputs[next(iter(all_outputs))].shape[0]
+        for i in range(num_steps):
+            step_output_tree = jax.tree_util.tree_map(lambda x: x[i], all_outputs)
 
-    # 4. Run the core sampler loop
-    final_state, all_outputs = run_fn(
-      config=config,
-      initial_state=initial_state,
-      fitness_fn=fitness_fn,
-      annealing_fn=annealing_fn,
-    )
+            scalar_metrics: dict[str, int | float] = {"step": i}
+            for metric_name, metric_value in step_output_tree.items():
+                if metric_value.ndim == 0:
+                    scalar_metrics[metric_name] = float(metric_value)
+            writer.log_scalars(scalar_metrics)
 
-    # 5. Write results to disk
-    logger.info("Writing results to disk...")
-    num_steps = all_outputs[next(iter(all_outputs))].shape[0]
-    for i in range(num_steps):
-      step_output_tree = jax.tree_util.tree_map(lambda x: x[i], all_outputs)
+            writer.step(step_output_tree)
 
-      scalar_metrics: dict[str, int | float] = {"step": i}
-      for metric_name, metric_value in step_output_tree.items():
-        if metric_value.ndim == 0:
-          scalar_metrics[metric_name] = float(metric_value)
-      writer.log_scalars(scalar_metrics)
-
-      writer.step(step_output_tree)
-
-  logger.info("Run %s completed successfully.", writer.run_id)
+    logger.info("Run %s completed successfully.", writer.run_id)

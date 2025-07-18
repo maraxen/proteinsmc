@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING, Callable
 
@@ -10,37 +9,22 @@ import jax
 import jax.numpy as jnp
 from jax import jit, random
 
-if TYPE_CHECKING:
-  from jaxtyping import Float, PRNGKeyArray
+from proteinsmc.models.mcmc import MCMCConfig, MCMCState
 
+if TYPE_CHECKING:
+  from jaxtyping import Int, PRNGKeyArray
+
+  from proteinsmc.models.fitness import StackedFitnessFuncSignature
   from proteinsmc.models.types import EvoSequence
 
-
-@dataclass(frozen=True)
-class MCMCOutput:
-  """Data structure to hold the output of the MCMC sampler."""
-
-  samples: EvoSequence
-  final_state: EvoSequence
-  final_fitness: Float
-
-  def tree_flatten(self) -> tuple[tuple, dict]:
-    """Flatten the dataclass for JAX PyTree compatibility."""
-    children = (self.samples, self.final_state, self.final_fitness)
-    aux_data = {}
-    return (children, aux_data)
-
-  @classmethod
-  def tree_unflatten(cls, _aux_data: dict, children: tuple) -> MCMCOutput:
-    """Unflatten the dataclass for JAX PyTree compatibility."""
-    return cls(
-      samples=children[0],
-      final_state=children[1],
-      final_fitness=children[2],
-    )
+__all__ = ["initialize_mcmc_state", "make_random_mutation_proposal_fn", "run_mcmc_loop"]
 
 
-jax.tree_util.register_pytree_node_class(MCMCOutput)
+def initialize_mcmc_state(config: MCMCConfig) -> MCMCState:
+  """Initialize the state of the MCMC sampler."""
+  key = jax.random.PRNGKey(config.prng_seed)
+  initial_samples = jnp.array(config.seed_sequence, dtype=jnp.int32)
+  return MCMCState(samples=initial_samples, fitness=jnp.array(0.0), key=key)
 
 
 def make_random_mutation_proposal_fn(
@@ -67,60 +51,46 @@ def make_random_mutation_proposal_fn(
   return proposal_fn
 
 
-@partial(jit, static_argnames=("num_samples", "log_prob_fn", "proposal_fn"))
-def mcmc_sampler(
-  key: PRNGKeyArray,
-  initial_state: EvoSequence,
-  num_samples: int,
-  log_prob_fn: Callable[[PRNGKeyArray, EvoSequence], Float],
+@partial(jit, static_argnames=("config", "fitness_fn", "proposal_fn"))
+def run_mcmc_loop(
+  config: MCMCConfig,
+  initial_state: MCMCState,
+  fitness_fn: StackedFitnessFuncSignature,
   proposal_fn: Callable[[PRNGKeyArray, EvoSequence], EvoSequence],
-) -> MCMCOutput:
-  """Run the Metropolis-Hastings MCMC sampler.
+) -> tuple[MCMCState, MCMCState]:
+  """Run the Metropolis-Hastings MCMC sampler loop.
 
   Args:
-      key: JAX PRNG key.
+      config: Configuration for the MCMC sampler.
       initial_state: Initial state of the sampler.
-      num_samples: Number of samples to generate.
-      log_prob_fn: Log probability function of the target distribution.
+      fitness_fn: Fitness function to evaluate sequences.
       proposal_fn: Proposal function to generate new states.
 
   Returns:
-      Array of samples.
+      A tuple containing the final state and the history of states.
 
   """
 
-  def body_fn(
-    i: int,
-    state_and_samples: tuple[EvoSequence, EvoSequence, Float],
-  ) -> tuple[EvoSequence, EvoSequence, Float]:
-    current_state, samples, _ = state_and_samples
+  def body_fn(state: MCMCState, _i: Int) -> tuple[MCMCState, MCMCState]:
+    current_state = state.samples
 
-    key_proposal, key_accept, key_log_prob = random.split(random.fold_in(key, i), 3)
+    key_proposal, key_accept, key_log_prob, key_next = random.split(state.key, 4)
 
     proposed_state = proposal_fn(key_proposal, current_state)
 
-    current_log_prob = log_prob_fn(key_log_prob, current_state)
-    proposed_log_prob = log_prob_fn(key_log_prob, proposed_state)
+    current_log_prob = fitness_fn(current_state, key_log_prob, _context=None)  # type: ignore[arg-type]
+    proposed_log_prob = fitness_fn(proposed_state, key_log_prob, _context=None)  # type: ignore[arg-type]
 
     acceptance_ratio = jnp.exp(proposed_log_prob - current_log_prob)
 
     accept = random.uniform(key_accept) < acceptance_ratio
 
     next_state = jnp.where(accept, proposed_state, current_state)
-    samples = samples.at[i].set(next_state)
+    fitness = jnp.where(accept, proposed_log_prob, current_log_prob)
 
-    return next_state, samples, jnp.where(accept, proposed_log_prob, current_log_prob)
+    next_mcmc_state = MCMCState(samples=next_state, fitness=fitness, key=key_next)
+    return next_mcmc_state, next_mcmc_state
 
-  samples = jnp.zeros((num_samples, *initial_state.shape), dtype=initial_state.dtype)
-  final_state, samples, final_fitness = jax.lax.fori_loop(
-    0,
-    num_samples,
-    body_fn,
-    (initial_state, samples, 0.0),
-  )
+  final_state, state_history = jax.lax.scan(body_fn, initial_state, jnp.arange(config.num_samples))
 
-  return MCMCOutput(
-    samples=samples,
-    final_state=final_state,
-    final_fitness=final_fitness,
-  )
+  return final_state, state_history

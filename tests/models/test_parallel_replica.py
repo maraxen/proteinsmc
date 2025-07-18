@@ -14,7 +14,7 @@ from proteinsmc.models.memory import MemoryConfig
 from proteinsmc.models.parallel_replica import (
   ExchangeConfig,
   IslandState,
-  PRSMCCarryState,
+  PRSMCState,
   PRSMCStepConfig,
   ParallelReplicaConfig,
   ParallelReplicaSMCOutput,
@@ -86,7 +86,7 @@ def valid_parallel_replica_config(
   """Create a valid ParallelReplicaConfig for testing."""
   return ParallelReplicaConfig(
     seed_sequence="MKLLVL",
-    generations=10,
+    num_samples=10,
     n_states=100,
     mutation_rate=0.1,
     diversification_ratio=0.2,
@@ -347,7 +347,7 @@ class TestParallelReplicaConfig:
     """Test successful ParallelReplicaConfig initialization."""
     config = valid_parallel_replica_config
     assert config.seed_sequence == "MKLLVL"
-    assert config.generations == 10
+    assert config.num_samples == 10
     assert config.n_islands == 4
     assert config.island_betas == [0.0, 0.3, 0.7, 1.0]
     assert config.population_size_per_island == 25
@@ -362,7 +362,7 @@ class TestParallelReplicaConfig:
     with pytest.raises(ValueError, match="n_islands must be positive"):
       ParallelReplicaConfig(
         seed_sequence="MKLLVL",
-        generations=10,
+        num_samples=10,
         n_states=100,
         mutation_rate=0.1,
         diversification_ratio=0.2,
@@ -385,7 +385,7 @@ class TestParallelReplicaConfig:
     with pytest.raises(ValueError, match="Length of island_betas \\(3\\) must match n_islands \\(4\\)"):
       ParallelReplicaConfig(
         seed_sequence="MKLLVL",
-        generations=10,
+        num_samples=10,
         n_states=100,
         mutation_rate=0.1,
         diversification_ratio=0.2,
@@ -408,7 +408,7 @@ class TestParallelReplicaConfig:
     with pytest.raises(ValueError, match="All island_betas must be in \\[0.0, 1.0\\]"):
       ParallelReplicaConfig(
         seed_sequence="MKLLVL",
-        generations=10,
+        num_samples=10,
         n_states=100,
         mutation_rate=0.1,
         diversification_ratio=0.2,
@@ -431,7 +431,7 @@ class TestParallelReplicaConfig:
     with pytest.raises(TypeError, match="island_betas must be a list of floats"):
       ParallelReplicaConfig(
         seed_sequence="MKLLVL",
-        generations=10,
+        num_samples=10,
         n_states=100,
         mutation_rate=0.1,
         diversification_ratio=0.2,
@@ -454,7 +454,7 @@ class TestParallelReplicaConfig:
     with pytest.raises(TypeError, match="island_betas must be a list of floats"):
       ParallelReplicaConfig(
         seed_sequence="MKLLVL",
-        generations=10,
+        num_samples=10,
         n_states=100,
         mutation_rate=0.1,
         diversification_ratio=0.2,
@@ -495,7 +495,7 @@ class TestParallelReplicaConfig:
     unflattened_config = jax.tree_util.tree_unflatten(treedef, leaves)
 
     assert config.seed_sequence == unflattened_config.seed_sequence
-    assert config.generations == unflattened_config.generations
+    assert config.num_samples == unflattened_config.generations
     assert config.n_islands == unflattened_config.n_islands
     # Note: island_betas is converted from tuple back to list during unflatten
     assert list(config.island_betas) == list(unflattened_config.island_betas)
@@ -561,7 +561,7 @@ class TestPRSMCCarryState:
   """Test cases for PRSMCCarryState."""
 
   @pytest.fixture
-  def sample_carry_state(self) -> PRSMCCarryState:
+  def sample_carry_state(self) -> PRSMCState:
     """Create a sample PRSMCCarryState."""
     key = jax.random.PRNGKey(42)
     overall_state = IslandState(
@@ -572,14 +572,14 @@ class TestPRSMCCarryState:
       ess=jnp.array(40.0, dtype=jnp.float32),
       mean_fitness=jnp.array(2.0, dtype=jnp.float32),
     )
-    return PRSMCCarryState(
+    return PRSMCState(
       current_overall_state=overall_state,
       prng_key=key,
       total_swaps_attempted=jnp.array(10, dtype=jnp.int32),
       total_swaps_accepted=jnp.array(3, dtype=jnp.int32),
     )
 
-  def test_init_success(self, sample_carry_state: PRSMCCarryState) -> None:
+  def test_init_success(self, sample_carry_state: PRSMCState) -> None:
     """Test successful PRSMCCarryState initialization."""
     state = sample_carry_state
     assert state.current_overall_state is not None
@@ -587,12 +587,12 @@ class TestPRSMCCarryState:
     chex.assert_trees_all_close(state.total_swaps_attempted, 10)
     chex.assert_trees_all_close(state.total_swaps_accepted, 3)
 
-  def test_pytree_registration(self, sample_carry_state: PRSMCCarryState) -> None:
+  def test_pytree_registration(self, sample_carry_state: PRSMCState) -> None:
     """Test that PRSMCCarryState is properly registered as a PyTree."""
     state = sample_carry_state
 
     # Test that it can be used in JAX transformations
-    def process_state(s: PRSMCCarryState) -> jax.Array:
+    def process_state(s: PRSMCState) -> jax.Array:
       return s.total_swaps_attempted
 
     jitted_process = jax.jit(process_state)

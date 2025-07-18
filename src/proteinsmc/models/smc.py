@@ -54,7 +54,7 @@ class SMCConfig(BaseSamplerConfig):
     }
 
 
-class SMCCarryState(struct.PyTreeNode):
+class SMCState(struct.PyTreeNode):
   """State of the SMC sampler at a single step. Designed to be a JAX PyTree."""
 
   population: PopulationSequences

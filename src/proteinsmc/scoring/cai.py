@@ -19,7 +19,7 @@ if TYPE_CHECKING:
   from proteinsmc.models.fitness import FitnessFuncSignature
   from proteinsmc.models.types import NucleotideSequence, ProteinSequence
 
-from proteinsmc.utils.translation import translate
+from proteinsmc.utils.translation import nucleotide_to_aa
 
 
 def make_cai_score() -> FitnessFuncSignature:
@@ -37,7 +37,7 @@ def make_cai_score() -> FitnessFuncSignature:
     _context: Array | None = None,
   ) -> Float:
     """Calculate CAI for a nucleotide sequence and its corresponding amino acid sequence."""
-    aa_seq, _ = translate(seq)
+    aa_seq, _ = nucleotide_to_aa(seq)
     return cai_score(seq, aa_seq)
 
   return _cai_score

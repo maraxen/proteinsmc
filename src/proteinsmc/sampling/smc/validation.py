@@ -49,8 +49,8 @@ def _validate_numeric_fields(config: SMCConfig) -> None:
     msg = f"Number of states must be positive, got {config.n_states}."
     raise ValueError(msg)
 
-  if config.generations <= 0:
-    msg = f"Number of generations must be positive, got {config.generations}."
+  if config.num_samples <= 0:
+    msg = f"Number of generations must be positive, got {config.num_samples}."
     raise ValueError(msg)
 
   if config.mutation_rate < 0 or config.mutation_rate > 1:

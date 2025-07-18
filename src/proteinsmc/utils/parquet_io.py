@@ -41,9 +41,9 @@ from proteinsmc.models import (
   FitnessFunction,
   MemoryConfig,
   ParallelReplicaSMCOutput,
-  SMCCarryState,
   SMCConfig,
   SMCOutput,
+  SMCState,
 )
 
 logger = logging.getLogger(__name__)
@@ -199,7 +199,7 @@ def _register_flax_serialization_for_all_types() -> None:
     AnnealingConfig,
     FitnessEvaluator,
     FitnessFunction,
-    SMCCarryState,
+    SMCState,
     SMCOutput,
     ParallelReplicaSMCOutput,
   ]

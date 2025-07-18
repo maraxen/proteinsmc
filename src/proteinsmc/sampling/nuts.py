@@ -8,175 +8,128 @@ NUTS sampler.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from functools import partial
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 import jax
 import jax.numpy as jnp
 from jax import jit, random
 
-if TYPE_CHECKING:
-  from jaxtyping import Float, PRNGKeyArray
+from proteinsmc.models.nuts import NUTSConfig, NUTSState
 
-  from proteinsmc.models.types import (
-    EvoSequence,
+if TYPE_CHECKING:
+  from jaxtyping import Int, PRNGKeyArray
+
+  from proteinsmc.models.fitness import StackedFitnessFuncSignature
+  from proteinsmc.models.types import EvoSequence
+
+__all__ = ["initialize_nuts_state", "run_nuts_loop"]
+
+
+def initialize_nuts_state(config: NUTSConfig) -> NUTSState:
+  """Initialize the state of the NUTS sampler.
+
+  Args:
+      config: Configuration for the NUTS sampler.
+      key: JAX PRNG key.
+
+  Returns:
+      An initial NUTSState.
+
+  """
+  initial_samples = jnp.array(config.seed_sequence, dtype=jnp.int32)
+  return NUTSState(
+    samples=initial_samples,
+    fitness=jnp.array(0.0),
+    key=jax.random.PRNGKey(config.prng_seed),
   )
 
 
-@dataclass(frozen=True)
-class NUTSConfig:
-  """Configuration for the NUTS sampler.
-
-  Attributes:
-      log_prob_fn: Function to compute the log probability of a sequence.
-      step_size: Integration step size for leapfrog.
-      num_samples: Number of samples to generate after warmup.
-      warmup_steps: Number of warmup steps to adapt the step size.
-      num_chains: Number of parallel chains to run.
-      num_leapfrog_steps: Number of leapfrog steps to take.
-      adapt_step_size: Whether to adapt the step size during warmup.
-
-  """
-
-  log_prob_fn: Callable[[EvoSequence], Float]
-  step_size: float
-  warmup_steps: int
-  num_samples: int
-  num_chains: int
-  num_leapfrog_steps: int
-  adapt_step_size: bool = True
-
-  def tree_flatten(self) -> tuple[tuple, dict]:
-    """Flatten the dataclass for JAX PyTree compatibility."""
-    children: tuple = ()
-    aux_data: dict = self.__dict__
-    return (children, aux_data)
-
-  @classmethod
-  def tree_unflatten(
-    cls: type[NUTSConfig],
-    aux_data: dict,
-    _children: tuple,
-  ) -> NUTSConfig:
-    """Unflatten the dataclass for JAX PyTree compatibility."""
-    return cls(**aux_data)
-
-
-jax.tree_util.register_pytree_node_class(NUTSConfig)
-
-
-@partial(
-  jit,
-  static_argnames=("config",),
-)
-def nuts_sampler(
-  key: PRNGKeyArray,
-  initial_position: EvoSequence,
+@partial(jit, static_argnames=("config", "fitness_fn"))
+def run_nuts_loop(
   config: NUTSConfig,
-) -> EvoSequence:
-  """Run a simplified conceptual NUTS sampler (placeholder).
+  initial_state: NUTSState,
+  fitness_fn: StackedFitnessFuncSignature,
+  key: PRNGKeyArray,
+) -> tuple[NUTSState, NUTSState]:
+  """Run a simplified conceptual NUTS sampler loop (placeholder).
 
   This function demonstrates the basic idea of NUTS but lacks the full
   adaptivity and tree-building of a true NUTS implementation.
 
   Args:
-      key: JAX PRNG key.
-      initial_position: Initial position of the sampler.
       config: Configuration for the NUTS sampler.
+      initial_state: Initial position of the sampler.
+      fitness_fn: Fitness function to evaluate sequences.
+      key: JAX PRNG key for random number generation.
 
   Returns:
-      Array of samples.
+      A tuple containing the final state and the history of states.
 
   """
 
   def leapfrog(
     current_q: EvoSequence,
     current_p: EvoSequence,
-    log_prob_fn: Callable[[EvoSequence], Float],
+    fitness_fn: StackedFitnessFuncSignature,
     step_size: float,
+    key: PRNGKeyArray,
   ) -> tuple[EvoSequence, EvoSequence]:
-    """Perform a single leapfrog step.
-
-    Args:
-        current_q: Current position.
-        current_p: Current momentum.
-        log_prob_fn: Log probability function.
-        step_size: Integration step size for leapfrog.
-
-    Returns:
-        Tuple of (next position, next momentum).
-
-    """
-    grad_log_prob = jax.grad(log_prob_fn)
+    """Perform a single leapfrog step."""
+    grad_log_prob = jax.grad(lambda x: fitness_fn(x, key, None))  # type: ignore[arg-type]
 
     p_half = current_p + step_size * grad_log_prob(current_q) / 2.0
-
     next_q = current_q + step_size * p_half
-
     next_p = p_half + step_size * grad_log_prob(next_q) / 2.0
 
     return next_q, next_p
 
-  def nuts_step(
-    carry: tuple[EvoSequence, EvoSequence, Float, PRNGKeyArray],
-    _: None,
-  ) -> tuple[tuple[EvoSequence, EvoSequence, Float, PRNGKeyArray], EvoSequence]:
-    """Perform a single NUTS step.
+  def nuts_step(state: NUTSState, _i: Int) -> tuple[NUTSState, NUTSState]:
+    """Perform a single NUTS step."""
+    current_q = state.samples
+    current_log_prob = state.fitness
 
-    Args:
-        carry: Tuple containing the current position, momentum, log probability,
-                and PRNG key.
-        _: Unused placeholder for the scan loop.
-
-    Returns:
-        Tuple of (next carry, next position).
-
-    """
-    current_q, current_p, current_log_prob, key = carry
-
-    key_momentum, key_accept, key_nuts = random.split(key, 3)
+    key_momentum, key_leapfrog, key_accept, key_next = random.split(state.key, 4)
 
     p0 = random.normal(key_momentum, shape=current_q.shape)
 
     q_new, p_new = current_q, p0
 
     for _i in range(config.num_leapfrog_steps):
-      q_new, p_new = leapfrog(q_new, p_new, config.log_prob_fn, config.step_size)
+      q_new, p_new = leapfrog(q_new, p_new, fitness_fn, config.step_size, key_leapfrog)
 
-    proposed_log_prob = config.log_prob_fn(q_new)
+    proposed_log_prob = fitness_fn(q_new, key_leapfrog, None)  # type: ignore[arg-type]
 
-    current_hamiltonian = -current_log_prob + 0.5 * jnp.sum(current_p**2)
+    current_hamiltonian = -current_log_prob + 0.5 * jnp.sum(p0**2)
     proposed_hamiltonian = -proposed_log_prob + 0.5 * jnp.sum(p_new**2)
 
     acceptance_ratio = jnp.exp(current_hamiltonian - proposed_hamiltonian)
     accept = random.uniform(key_accept) < acceptance_ratio
 
     next_q = jnp.where(accept, q_new, current_q)
-    next_log_prob = jnp.where(accept, proposed_log_prob, current_log_prob)
-
-    return (next_q, p0, next_log_prob, key_nuts), next_q
-
-  def run_chain(
-    key: PRNGKeyArray,
-    initial_position: EvoSequence,
-  ) -> jax.Array:
-    initial_log_prob = config.log_prob_fn(initial_position)
-    initial_momentum = random.normal(key, shape=initial_position.shape)
-
-    _, samples = jax.lax.scan(
-      nuts_step,
-      (initial_position, initial_momentum, initial_log_prob, key),
-      None,
-      length=config.num_samples + config.warmup_steps,
+    next_log_prob = jnp.array(
+      jnp.where(accept, proposed_log_prob, current_log_prob),
+      dtype=jnp.float32,
     )
-    return samples[config.warmup_steps :]
 
-  keys = random.split(key, config.num_chains)
-  if config.num_chains > 1:
-    initial_positions = jnp.tile(initial_position, (config.num_chains, 1))
-    samples = jax.vmap(run_chain)(keys, initial_positions)
-  else:
-    samples = run_chain(key, initial_position)[None, ...]
+    next_state = NUTSState(samples=next_q, fitness=next_log_prob, key=key_next)
+    return next_state, next_state
 
-  return samples
+  def scan_body(state: NUTSState, i: Int) -> tuple[NUTSState, NUTSState]:
+    """Scan body function for the NUTS loop."""
+    step_key = random.fold_in(key, i)
+    next_state, history_state = nuts_step(state, step_key)
+    return next_state, history_state
+
+  # Initialize with proper fitness evaluation
+  key_init, key_loop = random.split(key)
+  initial_fitness = fitness_fn(initial_state.samples, key_init, None)  # type: ignore[arg-type]
+  state_with_fitness = initial_state.replace(fitness=initial_fitness)
+
+  final_state, state_history = jax.lax.scan(
+    scan_body,
+    state_with_fitness,
+    jnp.arange(config.num_samples),
+  )
+
+  return final_state, state_history

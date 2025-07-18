@@ -9,6 +9,8 @@ import jax.numpy as jnp
 from jax import lax
 
 if TYPE_CHECKING:
+  from typing import Any, Sequence
+
   from jaxtyping import Array, PyTree
 
 
@@ -16,7 +18,7 @@ def chunked_vmap(  # noqa: PLR0913
   func: Callable,
   data: PyTree[Array],
   chunk_size: int,
-  in_axes: int | tuple[int, ...] | None = 0,
+  in_axes: int | Sequence[Any] | None = 0,
   out_axes: int | tuple[int, ...] | None = 0,
   static_args: dict | None = None,
 ) -> PyTree[Array]:

@@ -10,10 +10,10 @@ import jax.numpy as jnp
 from jax import jit
 from jaxtyping import Float
 
-from proteinsmc.models.annealing import AnnealingConfig, AnnealingFuncSignature
-
 if TYPE_CHECKING:
   from jaxtyping import Array
+
+  from proteinsmc.models.annealing import AnnealingConfig, AnnealingFuncSignature
 
 CurrentBetaFloat = Float[jax.Array, ""]
 

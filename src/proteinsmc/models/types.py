@@ -5,5 +5,5 @@ from jaxtyping import Array, Int
 
 NucleotideSequence = Int[Array, "nucleotide_sequence_length n_seqs"]
 ProteinSequence = Int[Array, "protein_sequence_length n_seqs"]
-EvoSequence = NucleotideSequence | ProteinSequence
+EvoSequence = NucleotideSequence | ProteinSequence | Int[Array, "n_sequence n_seqs"]
 MPNNModel = mk_mpnn_model

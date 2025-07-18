@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable, Literal, TypedDict, Unpack
+from typing import TYPE_CHECKING, Any, Callable, TypedDict, Unpack
 
-from jaxtyping import Array, Float, PRNGKeyArray
+import jax.numpy as jnp
+from jaxtyping import Array, Bool, Float, PRNGKeyArray
 
 if TYPE_CHECKING:
   from proteinsmc.models.types import EvoSequence
+
+NeedsTranslation = Bool[Array, "n_fitness_functions"]
 
 
 class FitnessKwargs(TypedDict):
@@ -20,18 +23,7 @@ class FitnessKwargs(TypedDict):
 
 
 FitnessFuncSignature = Callable[[Unpack[FitnessKwargs]], Float]
-
-
-class FinalFitnessFunctionKwargs(TypedDict):
-  """TypedDict for the parameters of the final fitness function."""
-
-  key: PRNGKeyArray
-  sequence: EvoSequence
-  sequence_type: str
-  _context: Array | None
-
-
-FinalFitnessFuncSignature = Callable[[Unpack[FinalFitnessFunctionKwargs]], tuple[Array, Array]]
+StackedFitnessFuncSignature = Callable[[Unpack[FitnessKwargs]], tuple[Array, Array]]
 
 
 class CombineKwargs(TypedDict):
@@ -50,7 +42,7 @@ class FitnessFunction:
   """Represents a single fitness function configuration."""
 
   name: str
-  input_type: Literal["protein", "nucleotide"] = "protein"
+  n_states: int
   kwargs: dict[str, Any] = field(default_factory=dict)
 
 
@@ -77,9 +69,17 @@ class FitnessEvaluator:
       msg = "At least one fitness function must be provided."
       raise ValueError(msg)
 
-  def get_functions_by_type(
+  def get_functions_by_states(
     self,
-    input_type: Literal["nucleotide", "protein"],
+    n_states: int,
   ) -> list[FitnessFunction]:
-    """Get active fitness functions that accept the specified input type."""
-    return [f for f in self.fitness_functions if f.input_type == input_type]
+    """Get active fitness functions that accept the specified number of states."""
+    return [f for f in self.fitness_functions if f.n_states == n_states]
+
+  def needs_translation(self, n_states: int) -> NeedsTranslation:
+    """Check if any fitness function requires sequence translation."""
+    return jnp.where(
+      jnp.array([f.n_states != n_states for f in self.fitness_functions]),
+      True,
+      False,
+    )

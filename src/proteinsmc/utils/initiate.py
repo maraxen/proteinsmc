@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Literal
 import jax.numpy as jnp
 
 from .constants import AA_CHAR_TO_INT_MAP, NUCLEOTIDES_INT_MAP
-from .translation import reverse_translate, translate
+from .translation import aa_to_nucleotide, nucleotide_to_aa
 
 if TYPE_CHECKING:
   from proteinsmc.models.types import EvoSequence
@@ -56,12 +56,12 @@ def generate_template_population(
       msg = f"Invalid nucleotide: {e.args[0]}"
       raise ValueError(msg) from e
     nuc_seq = jnp.array(nuc_seq, dtype=jnp.int8)
-    aa_seq, _ = translate(nuc_seq)
+    aa_seq, _ = nucleotide_to_aa(nuc_seq)
 
   if output_sequence_type == "protein":
     pop = jnp.tile(aa_seq, (population_size, 1))
   elif output_sequence_type == "nucleotide":
-    nuc_seq, _ = reverse_translate(aa_seq)
+    nuc_seq, _ = aa_to_nucleotide(aa_seq)
     pop = jnp.tile(nuc_seq, (population_size, 1))
 
   return pop.astype(jnp.int8)

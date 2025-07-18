@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 
-from proteinsmc.models.annealing import AnnealingConfig
 from proteinsmc.models.fitness import FitnessEvaluator
 from proteinsmc.models.memory import MemoryConfig
+
+if TYPE_CHECKING:
+  from proteinsmc.models.annealing import AnnealingConfig
 
 
 @dataclass(frozen=True)
@@ -17,11 +19,22 @@ class BaseSamplerConfig:
   All sampler configurations should inherit from this.
   """
 
+  prng_seed: int
+  """Random seed for reproducibility."""
   sampler_type: str
+  """Type of the sampler (e.g., 'gibbs', 'smc', etc.)."""
+  """This is used to identify the sampler type in the registry."""
   seed_sequence: str
-  generations: int
+  """Initial sequence to start the sampling process."""
+  num_samples: int
+  """Number of generations to run the sampler."""
+  """This is used to control the number of iterations in the sampling process."""
   n_states: int
+  """Number of possible states for each position in the sequence."""
+  """This is used to define the state space of the sequences."""
   mutation_rate: float
+  """Rate of mutation applied to the sequences during sampling."""
+  """This is used to control the diversity of the sampled sequences."""
   diversification_ratio: float
   sequence_type: Literal["protein", "nucleotide"]
   fitness_evaluator: FitnessEvaluator
@@ -36,7 +49,7 @@ class BaseSamplerConfig:
     if not isinstance(self.n_states, int):
       msg = "n_states must be an integer."
       raise TypeError(msg)
-    if not isinstance(self.generations, int):
+    if not isinstance(self.num_samples, int):
       msg = "generations must be an integer."
       raise TypeError(msg)
     if not isinstance(self.mutation_rate, float):
@@ -57,7 +70,7 @@ class BaseSamplerConfig:
     if self.n_states <= 0:
       msg = "n_states must be positive."
       raise ValueError(msg)
-    if self.generations <= 0:
+    if self.num_samples <= 0:
       msg = "generations must be positive."
       raise ValueError(msg)
     if not (0.0 <= self.mutation_rate <= 1.0):
@@ -74,6 +87,11 @@ class BaseSamplerConfig:
   def additional_config_fields(self) -> dict[str, str]:
     """Return additional fields for the configuration that are not part of the PyTree."""
     return {}
+
+  @property
+  def generations(self) -> int:
+    """Alias for num_samples for backward compatibility."""
+    return self.num_samples
 
 
 class SamplerOutputProtocol(Protocol):

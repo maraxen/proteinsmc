@@ -57,7 +57,7 @@ def valid_sampler_config(
   """Create a valid BaseSamplerConfig for testing."""
   return BaseSamplerConfig(
     seed_sequence="MKLLVL",
-    generations=10,
+    num_samples=10,
     n_states=100,
     mutation_rate=0.1,
     diversification_ratio=0.2,
@@ -283,7 +283,7 @@ class TestBaseSamplerConfig:
     """Test successful BaseSamplerConfig initialization."""
     config = valid_sampler_config
     assert config.seed_sequence == "MKLLVL"
-    assert config.generations == 10
+    assert config.num_samples == 10
     assert config.n_states == 100
     assert config.mutation_rate == 0.1
     assert config.diversification_ratio == 0.2
@@ -298,7 +298,7 @@ class TestBaseSamplerConfig:
     with pytest.raises(ValueError, match="n_states must be positive"):
       BaseSamplerConfig(
         seed_sequence="MKLLVL",
-        generations=10,
+        num_samples=10,
         n_states=-1,
         mutation_rate=0.1,
         diversification_ratio=0.2,
@@ -316,7 +316,7 @@ class TestBaseSamplerConfig:
     with pytest.raises(ValueError, match="generations must be positive"):
       BaseSamplerConfig(
         seed_sequence="MKLLVL",
-        generations=-1,
+        num_samples=-1,
         n_states=100,
         mutation_rate=0.1,
         diversification_ratio=0.2,
@@ -334,7 +334,7 @@ class TestBaseSamplerConfig:
     with pytest.raises(ValueError, match="mutation_rate must be in \\[0.0, 1.0\\]"):
       BaseSamplerConfig(
         seed_sequence="MKLLVL",
-        generations=10,
+        num_samples=10,
         n_states=100,
         mutation_rate=1.5,
         diversification_ratio=0.2,
@@ -352,7 +352,7 @@ class TestBaseSamplerConfig:
     with pytest.raises(ValueError, match="diversification_ratio must be in \\[0.0, 1.0\\]"):
       BaseSamplerConfig(
         seed_sequence="MKLLVL",
-        generations=10,
+        num_samples=10,
         n_states=100,
         mutation_rate=0.1,
         diversification_ratio=1.5,
@@ -370,7 +370,7 @@ class TestBaseSamplerConfig:
     with pytest.raises(ValueError, match="sequence_type must be 'protein' or 'nucleotide'"):
       BaseSamplerConfig(
         seed_sequence="MKLLVL",
-        generations=10,
+        num_samples=10,
         n_states=100,
         mutation_rate=0.1,
         diversification_ratio=0.2,
@@ -385,7 +385,7 @@ class TestBaseSamplerConfig:
 
     # Test that it can be used in JAX transformations
     def process_config(c: BaseSamplerConfig) -> int:
-      return c.generations
+      return c.num_samples
 
     jitted_process = jax.jit(process_config)
     result = jitted_process(config)
@@ -396,7 +396,7 @@ class TestBaseSamplerConfig:
     unflattened_config = jax.tree_util.tree_unflatten(treedef, leaves)
 
     assert config.seed_sequence == unflattened_config.seed_sequence
-    assert config.generations == unflattened_config.generations
+    assert config.num_samples == unflattened_config.generations
     assert config.n_states == unflattened_config.n_states
     assert config.mutation_rate == unflattened_config.mutation_rate
     assert config.diversification_ratio == unflattened_config.diversification_ratio
