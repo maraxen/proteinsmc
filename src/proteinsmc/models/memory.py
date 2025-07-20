@@ -11,9 +11,10 @@ import jax
 class MemoryConfig:
   """Configuration for memory efficiency and performance optimization."""
 
-  population_chunk_size: int = 64
-  enable_chunked_vmap: bool = True
-  device_memory_fraction: float = 0.8
+  population_chunk_size: int = field(default=64)
+  """Size of the population chunk for processing."""
+  enable_chunked_vmap: bool = field(default=True)
+  device_memory_fraction: float = field(default=0.8)
   auto_tuning_config: AutoTuningConfig = field(default_factory=lambda: AutoTuningConfig())
 
   def _validate_types(self) -> None:
@@ -71,11 +72,11 @@ class MemoryConfig:
 class AutoTuningConfig:
   """Configuration for automatic chunk size tuning."""
 
-  enable_auto_tuning: bool = True
-  probe_chunk_sizes: tuple[int, ...] = (16, 32, 64, 128, 256)
-  max_probe_iterations: int = 3
-  memory_safety_factor: float = 0.8
-  performance_tolerance: float = 0.1
+  enable_auto_tuning: bool = field(default=True)
+  probe_chunk_sizes: tuple[int, ...] = field(default=(16, 32, 64, 128, 256))
+  max_probe_iterations: int = field(default=3)
+  memory_safety_factor: float = field(default=0.8)
+  performance_tolerance: float = field(default=0.1)
 
   def tree_flatten(self) -> tuple[tuple, dict]:
     """Flatten the dataclass for JAX PyTree compatibility.

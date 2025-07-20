@@ -40,16 +40,9 @@ class GibbsState(PyTreeNode):
   """
 
   samples: EvoSequence
-  fitness: Float[Array, ""]
+  fitness: Float
   key: PRNGKeyArray
 
 
 class GibbsConfig(BaseSamplerConfig):
-  """Configuration for the Gibbs sampler.
-
-  Attributes:
-      num_samples: The number of samples to generate.
-
-  """
-
-  num_samples: int
+  """Configuration for the Gibbs sampler."""

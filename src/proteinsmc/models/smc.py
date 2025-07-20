@@ -23,8 +23,9 @@ StackedPopulationMetrics = Float[PopulationMetrics, "population_size combine_fun
 class SMCConfig(BaseSamplerConfig):
   """Configuration for the SMC sampler."""
 
-  population_size: int
-  annealing_schedule: AnnealingConfig
+  population_size: int = field(default=64)
+  """Number of sequences in the population."""
+  annealing_schedule: AnnealingConfig = field(kw_only=True)
   sampler_type: str = field(default="smc", init=False)
 
   def _validate_types(self) -> None:

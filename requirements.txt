@@ -1,12 +1,10 @@
 jax
-jaxlib
+blackjax
 dill
 flax
 chex
 jaxtyping
 polars
-pyarrow
 git+https://github.com/maraxen/ColabDesign.git
 uuid-utils
 safetensors
-safejax

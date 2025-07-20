@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import field
 from typing import TYPE_CHECKING
 
 from flax.struct import PyTreeNode
@@ -9,7 +10,7 @@ from flax.struct import PyTreeNode
 from proteinsmc.models.sampler_base import BaseSamplerConfig
 
 if TYPE_CHECKING:
-  from jaxtyping import Array, Float, PRNGKeyArray
+  from jaxtyping import Float, PRNGKeyArray
 
   from proteinsmc.models.types import EvoSequence
 
@@ -24,7 +25,7 @@ class NUTSState(PyTreeNode):
   """
 
   samples: EvoSequence
-  fitness: Float[Array, ""]
+  fitness: Float
   key: PRNGKeyArray
 
 
@@ -41,9 +42,8 @@ class NUTSConfig(BaseSamplerConfig):
 
   """
 
-  num_samples: int
-  step_size: float
-  num_leapfrog_steps: int
-  warmup_steps: int
-  num_chains: int
-  adapt_step_size: bool = True
+  step_size: float = field(default=0.1)
+  num_leapfrog_steps: int = field(default=10)
+  warmup_steps: int = field(default=100)
+  num_chains: int = field(default=1)
+  adapt_step_size: bool = field(default=True)

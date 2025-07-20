@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from flax.struct import PyTreeNode
@@ -25,9 +25,9 @@ class NKLandscapeConfig:
 
   """
 
-  n: int
-  k: int
-  q: int
+  n: int = field(default=20)
+  k: int = field(default=2)
+  q: int = field(default=2)
 
 
 class NKLandscape(PyTreeNode):

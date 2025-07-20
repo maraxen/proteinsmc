@@ -47,14 +47,11 @@ from .metrics import (
 from .mutation import (
   _revert_x_codons_if_mutated,
   chunked_mutation_step,
-  dispatch_mutation,
-  dispatch_mutation_single,
   diversify_initial_sequences,
   mutate,
-  mutate_single,
 )
 from .pmap_utils import distribute
-from .translation import aa_to_nucelotide, nucleotide_to_aa
+from .translation import aa_to_nucleotide, nucleotide_to_aa
 from .vmap_utils import chunked_vmap
 
 __all__ = [

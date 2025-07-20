@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal, Protocol
 
 from proteinsmc.models.fitness import FitnessEvaluator
@@ -19,27 +19,28 @@ class BaseSamplerConfig:
   All sampler configurations should inherit from this.
   """
 
-  prng_seed: int
+  prng_seed: int = field(default=42)
   """Random seed for reproducibility."""
-  sampler_type: str
+  sampler_type: str = field(default="unknown")
   """Type of the sampler (e.g., 'gibbs', 'smc', etc.)."""
   """This is used to identify the sampler type in the registry."""
-  seed_sequence: str
+  seed_sequence: str = field(default="")
   """Initial sequence to start the sampling process."""
-  num_samples: int
+  num_samples: int = field(default=100)
   """Number of generations to run the sampler."""
   """This is used to control the number of iterations in the sampling process."""
-  n_states: int
+  n_states: int = field(default=20)
   """Number of possible states for each position in the sequence."""
   """This is used to define the state space of the sequences."""
-  mutation_rate: float
+  mutation_rate: float = field(default=0.1)
   """Rate of mutation applied to the sequences during sampling."""
   """This is used to control the diversity of the sampled sequences."""
-  diversification_ratio: float
-  sequence_type: Literal["protein", "nucleotide"]
-  fitness_evaluator: FitnessEvaluator
-  memory_config: MemoryConfig
-  annealing_config: AnnealingConfig
+  diversification_ratio: float = field(default=0.0)
+  """Ratio of diversification applied to the sequences."""
+  sequence_type: Literal["protein", "nucleotide"] = field(default="protein")
+  fitness_evaluator: FitnessEvaluator = field(kw_only=True)
+  memory_config: MemoryConfig = field(default_factory=MemoryConfig)
+  annealing_config: AnnealingConfig = field(kw_only=True)
 
   def _validate_types(self) -> None:
     """Validate the types of the fields."""
@@ -67,6 +68,7 @@ class BaseSamplerConfig:
 
   def __post_init__(self) -> None:
     """Validate the common configuration fields."""
+    self._validate_types()
     if self.n_states <= 0:
       msg = "n_states must be positive."
       raise ValueError(msg)

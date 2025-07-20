@@ -9,7 +9,7 @@ from flax.struct import PyTreeNode
 from proteinsmc.models.sampler_base import BaseSamplerConfig
 
 if TYPE_CHECKING:
-  from jaxtyping import Array, Float, PRNGKeyArray
+  from jaxtyping import Float, PRNGKeyArray
 
   from proteinsmc.models.types import EvoSequence
 
@@ -24,16 +24,9 @@ class MCMCState(PyTreeNode):
   """
 
   samples: EvoSequence
-  fitness: Float[Array, ""]
+  fitness: Float
   key: PRNGKeyArray
 
 
 class MCMCConfig(BaseSamplerConfig):
-  """Configuration for the MCMC sampler.
-
-  Attributes:
-      num_samples: The number of samples to generate.
-
-  """
-
-  num_samples: int
+  """Configuration for the MCMC sampler."""

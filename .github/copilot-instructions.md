@@ -28,10 +28,25 @@ Adherence to these principles is paramount for maintaining code quality and cons
 * **Immutability:** Favor immutable data structures (e.g., JAX PyTrees, `equinox.Module`, `flax.linen.Module`) where applicable.
 * **JIT/Vmap/Scan Compatibility:** Ensure functions are compatible with JAX's `jit`, `vmap`, and `scan` transformations for performance.
 * **Static Arguments:** Utilize `static_argnums` for function arguments that are not JAX types and do not change across JAX transformations (e.g., Python built-in types, strings, tuples of static values, or dataclasses acting as auxiliary data).
-* **PyTree Registration and Dataclasses:**
-    * Custom data structures used with JAX should be registered as PyTrees.
-    * **If a dataclass contains frozen Python built-in types (e.g., `int`, `str`, `tuple`), these dataclasses should be treated as *auxiliary data* (i.e., passed as `static_argnums` to `jax.jit` or other transformations).**
-    * **If a dataclass contains JAX types (e.g., `jax.Array`), these dataclasses should *not* be frozen and their JAX type fields should be registered as *children* in the PyTree structure. This allows JAX to trace and transform the internal JAX arrays.**
+* **Documentation:** Use Google-style docstrings for all functions, including type hints and examples. Ensure that JAX transformations are clearly documented, especially when using `jit`, `vmap`, or `scan`.
+* **Example  Docstring:**
+```python
+def example_function():
+    """Test the example function with a specific input.
+    Args:
+        None
+    Returns:
+        None
+    Raises:
+        TypeError: If the output does not match the expected value.
+    Example:
+        >>> example_function()
+    """
+    result = example_function(input_data)
+    expected = expected_output
+    if not isinstance(result, expected_type):
+        raise TypeError(f"Expected {expected_type}, but got {type(result)}")
+```
 
 ### B. Code Quality & Linting (Ruff)
 * **Linter:** Use **Ruff** for linting.
@@ -50,9 +65,36 @@ Adherence to these principles is paramount for maintaining code quality and cons
 
 ### D. Testing
 * **Availability:** All new components and features *must* be accompanied by comprehensive **unit and/or integration tests**.
-* **Framework:** Use `pytest`.
+* **Framework:** Use `pytest` and where relevant`chex`
+* **Test Location:** Place tests in the `tests/` directory, mirroring the structure of the source code (e.g., `tests/models/`, `tests/sampling/`, etc.).
 * **Execution:** Tests are located in the `tests/` directory. Run tests with `python -m pytest tests/`.
 * **Test Philosophy:** Tests should cover typical use cases, edge cases, and ensure correctness of JAX transformations where applicable.
+* **Test Coverage:** Aim for high test coverage, especially for critical components like SMC steps, resampling methods, and scoring functions.
+* **Test Structure:** Organize tests by functionality (e.g., `sampling/`, `scoring/`, `utils/`) and ensure they mirror the structure of the source code for clarity.
+* **Test Documentation:** Use Google-style docstrings for tests, clearly describing the purpose, inputs, and expected outputs.
+* **Example Test Docstring:**
+```python
+def test_example_function():
+    """Test the example function with a specific input.
+    Args:
+        None
+    Returns:
+        None
+    Raises:
+        AssertionError: If the output does not match the expected value. 
+    Example:
+        >>> test_example_function()
+    """
+    result = example_function(input_data)
+    expected = expected_output
+    assert result == expected, f"Expected {expected}, but got {result}"
+```
+* **Test Coverage Reporting:** Use `pytest-cov` to generate coverage reports. Aim for at least 90% coverage across the codebase.
+* **Test Failures:** If a test fails, provide a clear error message indicating the expected vs. actual output, and ensure the test is reproducible.
+* **Test Data:** Use fixtures or mock data where necessary to ensure tests are deterministic and do not rely on external state.
+* **Test Dependencies:** Ensure that tests do not introduce unnecessary dependencies. Use `pytest` fixtures to manage setup and teardown of test environments.
+* **Test Isolation:** Each test should be independent and not rely on the state left by previous tests. Use fixtures to set up and tear down any necessary state.
+* **Test Performance:** Ensure tests run efficiently, especially for performance-critical components. Use `pytest-benchmark` or the JAX equivalent `jax.benchmark` for performance testing where applicable.
 
 ### E. Code Structure & Modularity
 * **Modularity:** Maintain the modular structure within the `src/proteinsmc/` directory (e.g., `sampling/`, `scoring/`, `utils/`).

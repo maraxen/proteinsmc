@@ -20,36 +20,37 @@ if TYPE_CHECKING:
 class ExchangeConfig:
   """Configuration for the replica exchange process."""
 
-  n_islands: int
-  population_size_per_island: int
-  n_exchange_attempts: int
-  exchange_frequency: int
-  fitness_evaluator: FitnessEvaluator
-  sequence_type: str
+  n_islands: int = field(default=1)
+  """Number of islands in the Parallel Replica SMC."""
+  population_size_per_island: int = field(default=64)
+  n_exchange_attempts: int = field(default=10)
+  exchange_frequency: int = field(default=5)
+  fitness_evaluator: FitnessEvaluator = field(kw_only=True)
+  sequence_type: str = field(default="protein")
 
 
 @dataclass(frozen=True)
 class PRSMCStepConfig:
   """Configuration for a single step of the Parallel Replica SMC algorithm."""
 
-  population_size_per_island: int
-  mutation_rate: float
-  sequence_type: str
-  fitness_evaluator: FitnessEvaluator
-  exchange_config: ExchangeConfig
-  meta_beta_annealing_schedule: AnnealingConfig
+  population_size_per_island: int = field(default=64)
+  mutation_rate: float = field(default=0.1)
+  sequence_type: str = field(default="protein")
+  fitness_evaluator: FitnessEvaluator = field(kw_only=True)
+  exchange_config: ExchangeConfig = field(kw_only=True)
+  meta_beta_annealing_schedule: AnnealingConfig = field(kw_only=True)
 
 
 @dataclass(frozen=True)
 class ParallelReplicaConfig(BaseSamplerConfig):
   """Configuration for the Parallel Replica SMC sampler."""
 
-  n_islands: int
-  population_size_per_island: int
-  n_exchange_attempts: int
-  exchange_frequency: int
-  island_betas: list[float]
-  meta_beta_annealing_schedule: AnnealingConfig
+  n_islands: int = field(default=1)
+  population_size_per_island: int = field(default=64)
+  n_exchange_attempts: int = field(default=10)
+  exchange_frequency: int = field(default=5)
+  island_betas: list[float] = field(default_factory=list)
+  meta_beta_annealing_schedule: AnnealingConfig = field(kw_only=True)
   sampler_type: str = field(default="parallel_replica", init=False)
 
   def __post_init__(self) -> None:

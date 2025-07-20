@@ -1,158 +1,139 @@
-from __future__ import annotations
-from functools import partial
-from typing import Any, Callable
-import chex
-import jax
+"""Unit tests for the annealing schedule data structures.
+
+Tests cover the AnnealingKwargs TypedDict and AnnealingConfig dataclass.
+"""
+
+from typing import Any
+
 import pytest
-from jaxtyping import Float, Int
-
-"""Tests for annealing schedule data structures."""
-
+import dataclasses
+from proteinsmc.models.annealing import AnnealingConfig, AnnealingFuncSignature, AnnealingKwargs
 
 
-import jax.numpy as jnp
+def test_annealing_kwargs_typeddict():
+  """Test that AnnealingKwargs TypedDict accepts correct keys and types.
 
-from proteinsmc.models.annealing import (
-  AnnealingRegistryItem,
-  AnnealingConfig,
-  AnnealingScheduleRegistry,
-)
+  Args:
+    None
 
-# Define type aliases for clarity in mock functions
-CurrentStepInt = Int[jax.Array, "current_step"]
-ScheduleLenInt = Int[jax.Array, "schedule_len"]
-MaxBetaFloat = Float[jax.Array, "max_beta"]
-CurrentBetaFloat = Float[jax.Array, "current_beta"]
+  Returns:
+    None
 
+  Raises:
+    AssertionError: If the TypedDict does not accept the correct keys and types.
 
-# Mock annealing schedule functions for testing
-@partial(jax.jit, static_argnames=("_context",))
-def linear_schedule(
-  current_step: CurrentStepInt, n_steps: ScheduleLenInt, beta_max: MaxBetaFloat, _context: jax.Array | None = None
-) -> CurrentBetaFloat:
-  """A mock linear schedule."""
-  return beta_max * (current_step - 1) / (n_steps - 1)
+  Example:
+    >>> test_annealing_kwargs_typeddict()
 
-@partial(jax.jit, static_argnames=("_context",))
-def constant_schedule(
-  current_step: CurrentStepInt, n_steps: ScheduleLenInt, beta_max: MaxBetaFloat, _context: jax.Array | None = None
-) -> CurrentBetaFloat:
-  """A mock constant schedule."""
-  return beta_max
+  """
+  kwargs: AnnealingKwargs = {"current_step": 5, "_context": {"foo": "bar"}}
+  assert kwargs["current_step"] == 5
+  assert kwargs["_context"] == {"foo": "bar"}
+
+  # _context can be None
+  kwargs2: AnnealingKwargs = {"current_step": 0, "_context": None}
+  assert kwargs2["_context"] is None
 
 
-@pytest.fixture
-def linear_schedule_item() -> AnnealingRegistryItem:
-  """Fixture for a linear annealing schedule registry item."""
-  return AnnealingRegistryItem(
-    method_factory=lambda: linear_schedule, name="linear"
-  )
+def test_annealing_func_signature_type():
+  """Test that AnnealingFuncSignature accepts a function with the correct signature.
+
+  Args:
+    None
+
+  Returns:
+    None
+
+  Raises:
+    AssertionError: If the function signature does not match.
+
+  Example:
+    >>> test_annealing_func_signature_type()
+
+  """
+
+  def dummy_schedule(current_step: int, _context: Any | None) -> float:
+    return float(current_step)
+
+  # Should be assignable to AnnealingFuncSignature
+  func: AnnealingFuncSignature = dummy_schedule # type: ignore[assignment]
+  result = func(current_step=3, _context=None) # type: ignore[arg-type]
+  assert isinstance(result, float)
+  assert result == 3.0
 
 
-@pytest.fixture
-def constant_schedule_item() -> AnnealingRegistryItem:
-  """Fixture for a constant annealing schedule registry item."""
-  return AnnealingRegistryItem(
-    method_factory=lambda: constant_schedule, name="constant"
-  )
+def test_annealing_config_creation():
+  """Test creation and attribute access of AnnealingConfig dataclass.
 
+  Args:
+    None
 
-@pytest.fixture
-def sample_registry(
-  linear_schedule_item: AnnealingRegistryItem,
-  constant_schedule_item: AnnealingRegistryItem,
-) -> AnnealingScheduleRegistry:
-  """Fixture for a sample AnnealingScheduleRegistry."""
-  return AnnealingScheduleRegistry(
-    items={"linear": linear_schedule_item, "constant": constant_schedule_item}
-  )
+  Returns:
+    None
 
+  Raises:
+    AssertionError: If attributes are not set or accessed correctly.
 
-def test_registry_init_success(sample_registry: AnnealingScheduleRegistry):
-  """Test that AnnealingScheduleRegistry initializes correctly with valid items."""
-  assert "linear" in sample_registry
-  assert "constant" in sample_registry
-  assert len(sample_registry.items) == 2
+  Example:
+    >>> test_annealing_config_creation()
 
-
-def test_registry_init_type_error():
-  """Test that AnnealingScheduleRegistry raises TypeError for invalid item types."""
-  with pytest.raises(TypeError):
-    AnnealingScheduleRegistry(items={"invalid": "not_an_item"})  # type: ignore
-
-
-def test_registry_get_item(
-  sample_registry: AnnealingScheduleRegistry,
-  linear_schedule_item: AnnealingRegistryItem,
-):
-  """Test retrieving an item from the registry."""
-  item = sample_registry.get("linear")
-  assert item == linear_schedule_item
-  assert item.name == "linear"
-
-
-def test_registry_get_nonexistent_item(sample_registry: AnnealingScheduleRegistry):
-  """Test that getting a non-existent item raises a KeyError."""
-  with pytest.raises(KeyError):
-    sample_registry.get("nonexistent")
-
-
-def test_registry_contains_item(sample_registry: AnnealingScheduleRegistry):
-  """Test the `in` operator for checking item existence."""
-  assert "linear" in sample_registry
-  assert "nonexistent" not in sample_registry
-
-
-def test_annealing_schedule_config_call(sample_registry: AnnealingScheduleRegistry):
-  """Test calling an AnnealingScheduleConfig to get a schedule function."""
-  config = AnnealingConfig(
-    annealing_fn="linear", beta_max=1.0, n_steps=10
-  )
-  schedule_func = config(sample_registry)
-  assert isinstance(schedule_func, Callable)
-
-  beta = schedule_func(
-    current_step=jnp.array(5, dtype=jnp.int32), # type: ignore[arg-type]
-    n_steps=jnp.array(10, dtype=jnp.int32),
-    beta_max=jnp.array(1.0, dtype=jnp.float32),
-    _context=None,
-  )
-  chex.assert_trees_all_close(beta, 4.0 / 9.0)
-
-
-def test_annealing_schedule_config_call_invalid(
-  sample_registry: AnnealingScheduleRegistry,
-):
-  """Test that calling a config with an unregistered schedule raises ValueError."""
-  config = AnnealingConfig(
-    annealing_fn="nonexistent", beta_max=1.0, n_steps=10
-  )
-  with pytest.raises(ValueError, match="Annealing schedule 'nonexistent' is not registered."):
-    config(sample_registry)
-
-
-def test_annealing_schedule_config_pytree_registration():
-  """Test that AnnealingScheduleConfig is registered as a PyTree."""
+  """
   config = AnnealingConfig(
     annealing_fn="linear",
-    beta_max=1.0,
-    n_steps=10,
-    schedule_args={"extra": 5},
+    beta_max=10.0,
+    n_steps=100,
+    schedule_args={"foo": 1, "bar": 2},
   )
+  assert config.annealing_fn == "linear"
+  assert config.beta_max == 10.0
+  assert config.n_steps == 100
+  assert config.schedule_args == {"foo": 1, "bar": 2}
 
-  def process_config(c: AnnealingConfig) -> float:
-    return c.beta_max * c.n_steps
 
-  jitted_process = jax.jit(process_config)
-  result = jitted_process(config)
+def test_annealing_config_default_schedule_args():
+  """Test that AnnealingConfig.schedule_args defaults to an empty dict.
 
-  chex.assert_trees_all_close(result, 10.0)
+  Args:
+    None
 
-  # Test tree flatten/unflatten
-  leaves, treedef = jax.tree_util.tree_flatten(config)
-  unflattened_config = jax.tree_util.tree_unflatten(treedef, leaves)
+  Returns:
+    None
 
-  assert config == unflattened_config
-  assert leaves[0] == 1.0
-  assert leaves[1] == 10
-  
+  Raises:
+    AssertionError: If the default value is not an empty dict.
+
+  Example:
+    >>> test_annealing_config_default_schedule_args()
+
+  """
+  config = AnnealingConfig(
+    annealing_fn="exp",
+    beta_max=5.0,
+    n_steps=50,
+  )
+  assert config.schedule_args == {}
+
+
+def test_annealing_config_immutable():
+  """Test that AnnealingConfig is immutable (frozen=True).
+
+  Args:
+    None
+
+  Returns:
+    None
+
+  Raises:
+    AssertionError: If the dataclass is not frozen.
+
+  Example:
+    >>> test_annealing_config_immutable()
+
+  """
+  config = AnnealingConfig(
+    annealing_fn="exp",
+    beta_max=5.0,
+    n_steps=50,
+  )
+  with pytest.raises(dataclasses.FrozenInstanceError):
+    config.beta_max = 42.0 # type: ignore[assignment]
