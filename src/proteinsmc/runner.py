@@ -37,6 +37,7 @@ from proteinsmc.utils.annealing import get_annealing_function
 from proteinsmc.utils.constants import NUCLEOTIDES_NUM_STATES
 from proteinsmc.utils.fitness import get_fitness_function
 from proteinsmc.utils.memory import auto_tune_chunk_size
+from proteinsmc.utils.mutation import make_transition_generator
 from proteinsmc.utils.translation import aa_to_nucleotide, nucleotide_to_aa
 
 if TYPE_CHECKING:
@@ -144,10 +145,12 @@ def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int 
       else aa_to_nucleotide,
       chunk_size=chunk_size,
     )
-  annealing_fn = get_annealing_function(config.annealing_config)
 
   initialize_fn = sampler_def["initialize_fn"]
   run_fn = sampler_def["run_fn"]
+  transition_generator = make_transition_generator(
+    config=config,
+  )
 
   with RunManager(Path(output_dir), config) as writer:
     logger.info(
@@ -158,15 +161,26 @@ def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int 
 
     # 3. Initialize sampler state
     key, init_key = jax.random.split(key)
-    initial_state = initialize_fn(config, init_key)
+    initial_state = initialize_fn(config, fitness_fn, init_key)
+
+    if hasattr(config, "annealing_config"):
+      annealing_fn = get_annealing_function(config.annealing_config)  # type: ignore[assignment]
+      final_state, all_outputs = run_fn(
+        config=config,
+        initial_state=initial_state,
+        log_prob_fn=fitness_fn,
+        transition_generator=transition_generator,
+        annealing_fn=annealing_fn,
+      )
+    else:
+      final_state, all_outputs = run_fn(
+        config=config,
+        initial_state=initial_state,
+        log_prob_fn=fitness_fn,
+        transition_generator=transition_generator,
+      )
 
     # 4. Run the core sampler loop
-    final_state, all_outputs = run_fn(
-      config=config,
-      initial_state=initial_state,
-      fitness_fn=fitness_fn,
-      annealing_fn=annealing_fn,
-    )
 
     # 5. Write results to disk
     logger.info("Writing results to disk...")

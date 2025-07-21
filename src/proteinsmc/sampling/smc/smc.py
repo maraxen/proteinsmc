@@ -7,22 +7,26 @@ from typing import TYPE_CHECKING
 
 import jax
 import jax.numpy as jnp
-from jax import jit
+from jax import jit, vmap
 
+from proteinsmc.models.mutation import MutationFn
 from proteinsmc.models.smc import SMCConfig, SMCState
 from proteinsmc.sampling.smc.resampling import resample
 from proteinsmc.utils.initiate import generate_template_population
 from proteinsmc.utils.metrics import calculate_logZ_increment, safe_weighted_mean, shannon_entropy
-from proteinsmc.utils.mutation import mutate
 
 if TYPE_CHECKING:
   from jaxtyping import Int, PRNGKeyArray
 
   from proteinsmc.models.annealing import AnnealingFuncSignature
-  from proteinsmc.models.fitness import StackedFitnessFuncSignature
+  from proteinsmc.models.fitness import StackedFitnessFn
 
 
-def initialize_smc_state(config: SMCConfig, key: PRNGKeyArray) -> SMCState:
+def initialize_smc_state(
+  config: SMCConfig,
+  _fitness_function: StackedFitnessFn,
+  key: PRNGKeyArray,
+) -> SMCState:
   """Initialize the state for the SMC sampler."""
   key, subkey = jax.random.split(key)
 
@@ -43,26 +47,25 @@ def initialize_smc_state(config: SMCConfig, key: PRNGKeyArray) -> SMCState:
   )
 
 
-@partial(jit, static_argnames=("config", "fitness_fn"))
+@jit
 def smc_step(
   state: SMCState,
-  config: SMCConfig,
-  fitness_fn: StackedFitnessFuncSignature,
+  fitness_fn: StackedFitnessFn,
+  mutation_fn: MutationFn,
 ) -> tuple[SMCState, dict]:
   """Perform one step of the SMC algorithm."""
   key_mutate, key_fitness, key_resample, key_next = jax.random.split(state.key, 4)
 
-  mutated_population = mutate(
-    key_mutate,
-    state.population,
-    config.mutation_rate,
-    config.n_states,
-  )
+  mutated_population = vmap(
+    mutation_fn,
+    in_axes=(0, 0),
+    out_axes=0,
+  )(key_mutate, state.population)
 
   fitness_values, fitness_components = fitness_fn(
     mutated_population,
-    key_fitness,  # type: ignore[arg-type]
-    _context=None,
+    key_fitness,
+    None,
   )
 
   log_weights = jnp.where(jnp.isneginf(fitness_values), -jnp.inf, state.beta * fitness_values)
@@ -116,11 +119,12 @@ def smc_step(
   return next_state, metrics
 
 
-@partial(jit, static_argnames=("config", "fitness_fn", "annealing_fn"))
+@partial(jit, static_argnames=("config", "log_prob_fn", "annealing_fn"))
 def run_smc_loop(
   config: SMCConfig,
   initial_state: SMCState,
-  fitness_fn: StackedFitnessFuncSignature,
+  fitness_fn: StackedFitnessFn,
+  mutation_fn: MutationFn,
   annealing_fn: AnnealingFuncSignature,
 ) -> tuple[SMCState, dict]:
   """JIT-compiled SMC loop."""
@@ -128,7 +132,7 @@ def run_smc_loop(
   def scan_body(carry_state: SMCState, i: Int) -> tuple[SMCState, dict]:
     current_beta = annealing_fn(i, _context=None)  # type: ignore[call-arg]
     state_for_step = carry_state.replace(beta=current_beta)
-    next_state, metrics = smc_step(state_for_step, config, fitness_fn)
+    next_state, metrics = smc_step(state_for_step, config, fitness_fn, mutation_fn)
     return next_state, metrics
 
   final_state, collected_metrics = jax.lax.scan(

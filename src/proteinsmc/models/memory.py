@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-import jax
-
 
 @dataclass(frozen=True)
 class MemoryConfig:
@@ -42,31 +40,6 @@ class MemoryConfig:
       msg = "population_chunk_size must be positive."
       raise ValueError(msg)
 
-  def tree_flatten(self) -> tuple[tuple, dict]:
-    """Flatten the dataclass for JAX PyTree compatibility.
-
-    All fields are treated as children as they can vary across instances.
-    """
-    children = (
-      self.population_chunk_size,
-      self.enable_chunked_vmap,
-      self.device_memory_fraction,
-      self.auto_tuning_config,
-    )
-    aux_data = {}  # aux_data is empty as all varying fields are children
-    return children, aux_data
-
-  @classmethod
-  def tree_unflatten(cls, aux_data: dict, children: tuple) -> MemoryConfig:
-    """Unflatten the dataclass for JAX PyTree compatibility."""
-    return cls(
-      population_chunk_size=children[0],
-      enable_chunked_vmap=children[1],
-      device_memory_fraction=children[2],
-      auto_tuning_config=children[3],
-      **aux_data,
-    )
-
 
 @dataclass(frozen=True)
 class AutoTuningConfig:
@@ -77,34 +50,3 @@ class AutoTuningConfig:
   max_probe_iterations: int = field(default=3)
   memory_safety_factor: float = field(default=0.8)
   performance_tolerance: float = field(default=0.1)
-
-  def tree_flatten(self) -> tuple[tuple, dict]:
-    """Flatten the dataclass for JAX PyTree compatibility.
-
-    All fields are treated as children as they can vary across instances.
-    """
-    children = (
-      self.enable_auto_tuning,
-      self.probe_chunk_sizes,
-      self.max_probe_iterations,
-      self.memory_safety_factor,
-      self.performance_tolerance,
-    )
-    aux_data = {}
-    return children, aux_data
-
-  @classmethod
-  def tree_unflatten(cls, aux_data: dict, children: tuple) -> AutoTuningConfig:
-    """Unflatten the dataclass for JAX PyTree compatibility."""
-    return cls(
-      enable_auto_tuning=children[0],
-      probe_chunk_sizes=children[1],
-      max_probe_iterations=children[2],
-      memory_safety_factor=children[3],
-      performance_tolerance=children[4],
-      **aux_data,
-    )
-
-
-jax.tree_util.register_pytree_node_class(MemoryConfig)
-jax.tree_util.register_pytree_node_class(AutoTuningConfig)

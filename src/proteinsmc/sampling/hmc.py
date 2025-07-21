@@ -5,109 +5,94 @@ from __future__ import annotations
 from functools import partial
 from typing import TYPE_CHECKING
 
+import blackjax
 import jax
-import jax.numpy as jnp
-from jax import jit, random
+from jax import jit
 
 from proteinsmc.models.hmc import HMCConfig, HMCState
+from proteinsmc.utils.initiate import generate_template_population
 
 if TYPE_CHECKING:
-  from jaxtyping import Int
+  from jaxtyping import PRNGKeyArray
 
-  from proteinsmc.models.fitness import StackedFitnessFuncSignature
-  from proteinsmc.models.types import EvoSequence
+  from proteinsmc.models.fitness import StackedFitnessFn
+  from proteinsmc.models.mutation import MutationFn
 
 __all__ = ["initialize_hmc_state", "run_hmc_loop"]
 
 
-def initialize_hmc_state(config: HMCConfig) -> HMCState:
+def initialize_hmc_state(
+  config: HMCConfig,
+  fitness_fn: StackedFitnessFn,
+  key: PRNGKeyArray,
+) -> HMCState:
   """Initialize the state of the HMC sampler.
 
   Args:
       config: Configuration for the HMC sampler.
+      fitness_fn: Fitness function to evaluate sequences.
       key: JAX PRNG key.
 
   Returns:
       An initial HMCState.
 
   """
-  key = jax.random.PRNGKey(config.prng_seed)
-  initial_samples = jnp.array(config.seed_sequence, dtype=jnp.int32)
-  return HMCState(samples=initial_samples, fitness=jnp.array(0.0), key=key)
+  initial_sequence = generate_template_population(
+    initial_sequence=config.seed_sequence,
+    population_size=1,
+    input_sequence_type=config.sequence_type,
+    output_sequence_type=config.sequence_type,
+  )
+  blackjax_initial_state = blackjax.hmc.init(
+    initial_sequence,
+    fitness_fn,
+    step_size=config.step_size,
+    num_integration_steps=config.num_leapfrog_steps,
+  )
+  return HMCState(
+    sequence=initial_sequence,
+    fitness=blackjax_initial_state.logdensity,
+    key=key,
+    blackjax_state=blackjax_initial_state,
+  )
 
 
-@partial(jit, static_argnames=("config", "fitness_fn"))
+@partial(jit, static_argnames=("config", "fitness_fn", "mutation_fn"))
 def run_hmc_loop(
   config: HMCConfig,
   initial_state: HMCState,
-  fitness_fn: StackedFitnessFuncSignature,
+  fitness_fn: StackedFitnessFn,
+  _mutation_fn: MutationFn | None = None,
 ) -> tuple[HMCState, HMCState]:
   """Run the Hamiltonian Monte Carlo (HMC) sampler loop.
 
   Args:
       config: HMC sampler configuration.
-      initial_state: Initial position of the sampler.
+      initial_state: Initial sequence of the sampler.
       fitness_fn: Fitness function to evaluate sequences.
+      mutation_fn: Mutation function to generate new sequences.
 
   Returns:
       A tuple containing the final state and the history of states.
 
   """
-  key = jax.random.PRNGKey(config.prng_seed)
+  kernel = blackjax.hmc.build_kernel()
 
-  def leapfrog(
-    q: EvoSequence,
-    p: EvoSequence,
-    config: HMCConfig,
-  ) -> tuple[EvoSequence, EvoSequence]:
-    """Perform leapfrog integration for HMC."""
-    grad_log_prob = jax.grad(fitness_fn)
-
-    def body_fn(
-      _i: int,
-      carry: tuple[EvoSequence, EvoSequence],
-    ) -> tuple[EvoSequence, EvoSequence]:
-      q, p = carry
-      p_half = p + config.step_size * grad_log_prob(q) / 2.0
-      q_new = q + config.step_size * p_half
-      p_new = p_half + config.step_size * grad_log_prob(q_new) / 2.0
-      return q_new, p_new
-
-    final_q, final_p = jax.lax.fori_loop(
-      0,
-      config.num_leapfrog_steps,
-      body_fn,
-      (q, p),
+  def one_step(state: HMCState, key: PRNGKeyArray) -> tuple[HMCState, HMCState]:
+    """Perform one step of the HMC sampler."""
+    new_blackjax_state, _ = kernel(
+      rng_key=key,
+      state=state.blackjax_state,
+      logdensity_fn=fitness_fn,
     )
-    return final_q, final_p
-
-  def hmc_step(state: HMCState, _i: Int) -> tuple[HMCState, HMCState]:
-    """Perform a single HMC step."""
-    current_q = state.samples
-    current_log_prob = state.fitness
-
-    key_momentum, key_accept, key_next = random.split(key, 3)
-
-    p0 = random.normal(key_momentum, shape=current_q.shape)
-
-    q_new, p_new = leapfrog(current_q, p0, config)
-
-    current_hamiltonian = -current_log_prob + 0.5 * jnp.sum(p0**2)
-    proposed_log_prob = fitness_fn(sequence=q_new, _key=key, _context=None)  # type: ignore[arg-type]
-    proposed_hamiltonian = -proposed_log_prob + 0.5 * jnp.sum(p_new**2)
-
-    acceptance_ratio = jnp.exp(current_hamiltonian - proposed_hamiltonian)
-    accept = random.uniform(key_accept) < acceptance_ratio
-
-    next_q = jnp.where(accept, q_new, current_q)
-    next_log_prob = jnp.asarray(
-      jnp.where(accept, proposed_log_prob, current_log_prob),
-      dtype=jnp.float32,
+    new_state = state.replace(
+      sequence=new_blackjax_state.position,
+      fitness=new_blackjax_state.logdensity,
+      key=key,
+      blackjax_state=new_blackjax_state,
     )
+    return new_state, new_state
 
-    next_state = HMCState(samples=next_q, fitness=next_log_prob, key=key_next)
-    return next_state, next_state
-
-  final_state, state_history = jax.lax.scan(hmc_step, initial_state, jnp.arange(config.num_samples))
-
+  keys = jax.random.split(initial_state.key, config.num_samples)
+  final_state, state_history = jax.lax.scan(one_step, initial_state, keys)
   return final_state, state_history

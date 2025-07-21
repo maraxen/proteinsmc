@@ -12,7 +12,7 @@ from jax import jit, lax, vmap
 if TYPE_CHECKING:
   from jaxtyping import Float, Int, PRNGKeyArray
 
-  from proteinsmc.models.fitness import StackedFitnessFuncSignature
+  from proteinsmc.models.fitness import StackedFitnessFn
   from proteinsmc.utils.annealing import AnnealingFuncSignature
 from proteinsmc.models.parallel_replica import (
   ExchangeConfig,
@@ -33,7 +33,7 @@ from proteinsmc.utils.mutation import mutate
 def island_smc_step(
   island_state: IslandState,
   config: PRSMCStepConfig,
-  fitness_fn: StackedFitnessFuncSignature,
+  fitness_fn: StackedFitnessFn,
 ) -> IslandState:
   """Perform one SMC step (mutation, weighting, UNCONDITIONAL resampling) for a single island.
 
@@ -146,7 +146,7 @@ def island_smc_step(
 def prsmc_step(
   island_states: IslandState,
   config: PRSMCStepConfig,
-  fitness_fn: StackedFitnessFuncSignature,
+  fitness_fn: StackedFitnessFn,
 ) -> tuple[IslandState, tuple[Float, Float, Float, Float]]:
   """Perform a single step of the PRSMC algorithm across all islands.
 
@@ -192,7 +192,7 @@ def migrate(
   meta_beta_current_value: Float,
   key_exchange: PRNGKeyArray,
   config: ExchangeConfig,
-  fitness_fn: StackedFitnessFuncSignature,
+  fitness_fn: StackedFitnessFn,
 ) -> tuple[IslandState, Int]:
   """Perform replica exchange attempts. Acceptance is scaled by meta_beta_current_value.
 
@@ -388,7 +388,7 @@ def initialize_prsmc_state(config: ParallelReplicaConfig, key: PRNGKeyArray) -> 
 def run_prsmc_loop(
   config: ParallelReplicaConfig,
   initial_state: PRSMCState,
-  fitness_fn: StackedFitnessFuncSignature,
+  fitness_fn: StackedFitnessFn,
   annealing_fn: AnnealingFuncSignature,
 ) -> tuple[PRSMCState, dict]:
   """JIT-compiled Parallel Replica SMC loop."""
@@ -398,7 +398,7 @@ def run_prsmc_loop(
     carry_state: PRSMCState,
     step_idx: Int,
     step_config: PRSMCStepConfig,
-    fitness_fn: StackedFitnessFuncSignature,
+    fitness_fn: StackedFitnessFn,
     annealing_fn: AnnealingFuncSignature,
   ) -> tuple[PRSMCState, dict]:
     key_step, next_smc_loop_key = jax.random.split(carry_state.prng_key)

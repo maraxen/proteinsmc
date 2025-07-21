@@ -9,13 +9,13 @@ import jax
 import jax.numpy as jnp
 from jax import jit, random
 
-from proteinsmc.models.gibbs import GibbsConfig, GibbsState, GibbsUpdateFuncSignature
+from proteinsmc.models.gibbs import GibbsConfig, GibbsState, GibbsUpdateFn
 
 if TYPE_CHECKING:
   from jaxtyping import Float, Int, PRNGKeyArray
 
   from proteinsmc.models.types import EvoSequence
-  from proteinsmc.utils.fitness import FitnessFuncSignature
+  from proteinsmc.utils.fitness import FitnessFn
 
 __all__ = ["initialize_gibbs_state", "make_gibbs_update_fns", "run_gibbs_loop"]
 
@@ -31,7 +31,7 @@ def make_gibbs_update_fns(
   sequence_length: int,
   n_states: int,
 ) -> tuple[
-  GibbsUpdateFuncSignature,
+  GibbsUpdateFn,
   ...,
 ]:
   """Return update functions for each sequence position.
@@ -55,7 +55,7 @@ def make_gibbs_update_fns(
 
   def update_fn_factory(
     pos: int,
-  ) -> GibbsUpdateFuncSignature:
+  ) -> GibbsUpdateFn:
     def update_fn(
       key: PRNGKeyArray,
       seq: EvoSequence,
@@ -82,9 +82,9 @@ def make_gibbs_update_fns(
 def run_gibbs_loop(
   config: GibbsConfig,
   initial_state: GibbsState,
-  fitness_fn: FitnessFuncSignature,
+  fitness_fn: FitnessFn,
   update_fns: tuple[
-    GibbsUpdateFuncSignature,
+    GibbsUpdateFn,
     ...,
   ],
 ) -> tuple[GibbsState, GibbsState]:

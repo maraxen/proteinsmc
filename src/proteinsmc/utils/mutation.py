@@ -11,6 +11,8 @@ from jax import jit, random, vmap
 if TYPE_CHECKING:
   from jaxtyping import PRNGKeyArray
 
+  from proteinsmc.models.mutation import MutationFn
+  from proteinsmc.models.sampler_base import BaseSamplerConfig
   from proteinsmc.models.types import EvoSequence, NucleotideSequence
 
 from .constants import (
@@ -45,6 +47,21 @@ def mutate(
   proposed_mutations = (sequence + offsets) % n_states
   mutated_sequences = jnp.where(mutation_mask, proposed_mutations, sequence)
   return mutated_sequences.astype(jnp.int8)
+
+
+def make_transition_generator(
+  config: BaseSamplerConfig,
+) -> MutationFn:
+  """Create a transition generator for mutating sequences."""
+
+  def transition_generator(
+    key: PRNGKeyArray,
+    sequence: EvoSequence,
+  ) -> EvoSequence:
+    """Generate a mutated sequence."""
+    return mutate(key, sequence, mutation_rate=config.mutation_rate, n_states=config.n_states)
+
+  return transition_generator
 
 
 @jit

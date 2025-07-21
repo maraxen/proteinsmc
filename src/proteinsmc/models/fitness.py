@@ -3,38 +3,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable, TypedDict, Unpack
+from typing import Any, Callable
 
 import jax.numpy as jnp
 from jaxtyping import Array, Bool, Float, PRNGKeyArray
 
-if TYPE_CHECKING:
-  from proteinsmc.models.types import EvoSequence
+from proteinsmc.models.types import EvoSequence
 
+StackedFitness = Float[Array, "1+n_fitness_functions"]
+"""Type alias for stacked fitness scores, including combined score on the 0 batch dimension."""
 NeedsTranslation = Bool[Array, "n_fitness_functions"]
-
-
-class FitnessKwargs(TypedDict):
-  """TypedDict for the parameters of a fitness function."""
-
-  sequence: EvoSequence
-  _key: PRNGKeyArray | None
-  _context: Array | None
-
-
-FitnessFuncSignature = Callable[[Unpack[FitnessKwargs]], Float]
-StackedFitnessFuncSignature = Callable[[Unpack[FitnessKwargs]], tuple[Array, Array]]
-
-
-class CombineKwargs(TypedDict):
-  """TypedDict for the parameters of a combine function."""
-
-  scores: Array
-  _key: PRNGKeyArray | None
-  _context: Array | None
-
-
-CombineFuncSignature = Callable[[Unpack[CombineKwargs]], Float]
+FitnessFn = Callable[[EvoSequence, PRNGKeyArray | None, Array | None], Float]
+CombineFn = Callable[[Array, PRNGKeyArray | None, Array | None], Float]
+StackedFitnessFn = Callable[
+  [EvoSequence, PRNGKeyArray | None, Array | None],
+  StackedFitness,
+]
 
 
 @dataclass(frozen=True)
@@ -80,6 +64,6 @@ class FitnessEvaluator:
     """Check if any fitness function requires sequence translation."""
     return jnp.where(
       jnp.array([f.n_states != n_states for f in self.fitness_functions]),
-      True,
-      False,
+      1,
+      0,
     )

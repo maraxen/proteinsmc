@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
-from flax import struct
+from flax.struct import PyTreeNode
 from jaxtyping import Array, Bool, Float, Int, PRNGKeyArray
 
-from .annealing import AnnealingConfig
 from .sampler_base import BaseSamplerConfig, SamplerOutputProtocol
+
+if TYPE_CHECKING:
+  from .annealing import AnnealingConfig
 
 PopulationNucleotideSequences = Int[Array, "population_size nucleotide_sequence_length"]
 PopulationProteinSequences = Int[Array, "population_size protein_sequence_length"]
@@ -25,16 +28,15 @@ class SMCConfig(BaseSamplerConfig):
 
   population_size: int = field(default=64)
   """Number of sequences in the population."""
-  annealing_schedule: AnnealingConfig = field(kw_only=True)
-  sampler_type: str = field(default="smc", init=False)
+  sampler_type: str = "smc"
+  annealing_config: AnnealingConfig = field(
+    default=AnnealingConfig(annealing_fn="static"),
+  )
 
   def _validate_types(self) -> None:
     """Validate the types of the fields."""
     if not isinstance(self.population_size, int):
       msg = "population_size must be an integer."
-      raise TypeError(msg)
-    if not isinstance(self.annealing_schedule, AnnealingConfig):
-      msg = "annealing_schedule must be an AnnealingScheduleConfig instance."
       raise TypeError(msg)
     super()._validate_types()
 
@@ -51,18 +53,17 @@ class SMCConfig(BaseSamplerConfig):
     """Return additional fields for the configuration that are not part of the PyTree."""
     return {
       "population_size": "population_size",
-      "annealing_schedule": "annealing_schedule",
     }
 
 
-class SMCState(struct.PyTreeNode):
+class SMCState(PyTreeNode):
   """State of the SMC sampler at a single step. Designed to be a JAX PyTree."""
 
   population: PopulationSequences
   log_weights: PopulationMetrics
   log_likelihood: PopulationMetrics
-  beta: float
   key: PRNGKeyArray
+  beta: float = 1.0
   step: int = 0
 
 

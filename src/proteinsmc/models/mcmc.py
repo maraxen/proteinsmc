@@ -9,24 +9,40 @@ from flax.struct import PyTreeNode
 from proteinsmc.models.sampler_base import BaseSamplerConfig
 
 if TYPE_CHECKING:
-  from jaxtyping import Float, PRNGKeyArray
+  from blackjax.mcmc.random_walk import RWState as BlackjaxState
+  from jaxtyping import PRNGKeyArray
 
+  from proteinsmc.models.fitness import StackedFitness
   from proteinsmc.models.types import EvoSequence
+
+DEFAULT_STEP_SIZE = 1e-1
+
+
+class MCMCConfig(BaseSamplerConfig):
+  """Configuration for the MCMC sampler using a Random Walk Metropolis kernel.
+
+  Attributes:
+      step_size: The step size (standard deviation of the Gaussian proposal)
+                  for the Random Walk Metropolis kernel.
+
+  """
+
+  step_size: float = DEFAULT_STEP_SIZE
 
 
 class MCMCState(PyTreeNode):
   """State of the MCMC sampler.
 
   Attributes:
-      samples: An array of sampled sequences.
-      fitness: The fitness of the last sampled sequence.
+      sequence: The current sequence (sequence) of the sampler.
+      fitness: The log-probability (fitness) of the current sequence.
+      components_fitness: The individual components of the fitness function.
+      key: The JAX PRNG key for the next step.
+      blackjax_state: The internal state of the Blackjax sampler.
 
   """
 
-  samples: EvoSequence
-  fitness: Float
+  sequence: EvoSequence
+  fitness: StackedFitness
   key: PRNGKeyArray
-
-
-class MCMCConfig(BaseSamplerConfig):
-  """Configuration for the MCMC sampler."""
+  blackjax_state: BlackjaxState

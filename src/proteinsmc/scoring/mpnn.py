@@ -9,13 +9,13 @@ from jax import jit
 if TYPE_CHECKING:
   from jaxtyping import Array, Float, PRNGKeyArray
 
-  from proteinsmc.models.fitness import FitnessFuncSignature
+  from proteinsmc.models.fitness import FitnessFn
   from proteinsmc.models.types import MPNNModel, ProteinSequence
 
 
 def make_mpnn_score(
   mpnn_model: MPNNModel,
-) -> FitnessFuncSignature:
+) -> FitnessFn:
   """Create a scoring function for the MPNN model.
 
   Args:

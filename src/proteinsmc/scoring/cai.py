@@ -16,13 +16,13 @@ from proteinsmc.utils.constants import (
 if TYPE_CHECKING:
   from jaxtyping import Array, Float, PRNGKeyArray
 
-  from proteinsmc.models.fitness import FitnessFuncSignature
+  from proteinsmc.models.fitness import FitnessFn
   from proteinsmc.models.types import NucleotideSequence, ProteinSequence
 
 from proteinsmc.utils.translation import nucleotide_to_aa
 
 
-def make_cai_score() -> FitnessFuncSignature:
+def make_cai_score() -> FitnessFn:
   """Create a function to calculate the Codon Adaptation Index (CAI).
 
   Returns:
@@ -32,24 +32,24 @@ def make_cai_score() -> FitnessFuncSignature:
 
   @jit
   def _cai_score(
+    sequence: NucleotideSequence,
     _key: PRNGKeyArray,
-    seq: NucleotideSequence,
     _context: Array | None = None,
   ) -> Float:
     """Calculate CAI for a nucleotide sequence and its corresponding amino acid sequence."""
-    aa_seq, _ = nucleotide_to_aa(seq)
-    return cai_score(seq, aa_seq)
+    aa_seq, _ = nucleotide_to_aa(sequence)
+    return cai_score(sequence, aa_seq)
 
   return _cai_score
 
 
-def cai_score(seq: NucleotideSequence, aa_seq: ProteinSequence) -> Float:
+def cai_score(sequence: NucleotideSequence, aa_seq: ProteinSequence) -> Float:
   """Calculate Codon Adaptation Index (CAI).
 
   `aa_seq` uses ColabDesign's AA integers.
 
   Args:
-      seq: JAX array of nucleotide sequence (integer encoded).
+      sequence: JAX array of nucleotide sequence (integer encoded).
       aa_seq: JAX array of amino acid sequence (integer encoded in
               ColabDesign's scheme).
 
@@ -57,8 +57,8 @@ def cai_score(seq: NucleotideSequence, aa_seq: ProteinSequence) -> Float:
       cai: JAX array of CAI values.
 
   """
-  protein_len = seq.shape[0] // 3
-  codons_int = seq[: protein_len * 3].reshape((protein_len, 3))
+  protein_len = sequence.shape[0] // 3
+  codons_int = sequence[: protein_len * 3].reshape((protein_len, 3))
   codon_frequencies = ECOLI_CODON_FREQ_JAX[codons_int[:, 0], codons_int[:, 1], codons_int[:, 2]]
   max_aa_frequencies = ECOLI_MAX_FREQS_JAX[aa_seq]
   wi = codon_frequencies / jnp.maximum(max_aa_frequencies, 1e-9)

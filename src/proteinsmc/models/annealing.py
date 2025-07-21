@@ -29,6 +29,7 @@ class AnnealingConfig:
   """
 
   annealing_fn: str
-  beta_max: float
-  n_steps: int
-  schedule_args: dict[str, Any] = field(default_factory=dict)
+  beta_min: float = 0.1
+  beta_max: float = 1.0
+  n_steps: int = 1000
+  kwargs: dict[str, Any] = field(default_factory=dict)

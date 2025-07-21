@@ -13,7 +13,10 @@ from jaxtyping import Float
 if TYPE_CHECKING:
   from jaxtyping import Array
 
-  from proteinsmc.models.annealing import AnnealingConfig, AnnealingFuncSignature
+  from proteinsmc.models.annealing import (
+    AnnealingConfig,
+    AnnealingFuncSignature,
+  )
 
 CurrentBetaFloat = Float[jax.Array, ""]
 
@@ -25,7 +28,8 @@ def register_schedule(
 ) -> Callable[[AnnealingFuncSignature], AnnealingFuncSignature]:
   """Register an annealing schedule function."""
 
-  def decorator(func: AnnealingFuncSignature):
+  def decorator(func: AnnealingFuncSignature) -> AnnealingFuncSignature:
+    """Decorate to register an annealing schedule function."""
     ANNEALING_REGISTRY[name] = func
     return func
 
@@ -46,9 +50,10 @@ def get_annealing_function(config: AnnealingConfig) -> AnnealingFuncSignature:
     return func(
       current_step=current_step,
       n_steps=config.n_steps,
+      beta_min=config.beta_min,
       beta_max=config.beta_max,
       _context=_context,
-      **config.schedule_args,
+      **config.kwargs,
     )
 
   return annealing_fn
@@ -59,17 +64,33 @@ def get_annealing_function(config: AnnealingConfig) -> AnnealingFuncSignature:
 def linear_schedule(
   current_step: int,
   n_steps: int,
+  beta_min: float,
   beta_max: float,
   _context: Array | None = None,
 ) -> CurrentBetaFloat:
-  """Linear annealing schedule for beta that is JAX-compatible."""
-  step_val = (current_step - 1) / (n_steps - 1) * beta_max
+  """Linear annealing schedule for beta that is JAX-compatible.
+
+  Args:
+    current_step (int): The current annealing step (1-based).
+    n_steps (int): Total number of annealing steps.
+    beta_min (float): Minimum beta value.
+    beta_max (float): Maximum beta value.
+    _context (Array | None): Optional context for schedule.
+
+  Returns:
+    CurrentBetaFloat: The annealed beta value for the current step.
+
+  Raises:
+    TypeError: If the output is not a JAX array.
+
+  Example:
+    >>> linear_schedule(1, 10, 0.1, 1.0)
+    Array(0.1, dtype=float32)
+
+  """
+  step_val = beta_min + (current_step - 1) / (n_steps - 1) * (beta_max - beta_min)
   result = jnp.where(current_step >= n_steps, beta_max, step_val)
-  result = jnp.where(current_step <= 1, 0.0, result)
-  if not isinstance(result, jnp.ndarray):
-    msg = f"Expected result to be a JAX array, got {type(result)}"
-    raise TypeError(msg)
-  return jnp.where(current_step <= 1, 0.0, result)
+  return jnp.clip(result, beta_min, beta_max)
 
 
 @register_schedule("exponential")
@@ -77,13 +98,34 @@ def linear_schedule(
 def exponential_schedule(
   current_step: int,
   n_steps: int,
+  beta_min: float,
   beta_max: float,
   _context: Array | None = None,
   rate: float = 5.0,
 ) -> CurrentBetaFloat:
-  """Exponential annealing schedule for beta."""
+  """Exponential annealing schedule for beta that starts at beta_min and ends at beta_max.
+
+  Args:
+    current_step (int): The current annealing step (1-based).
+    n_steps (int): Total number of annealing steps.
+    beta_min (float): Minimum beta value.
+    beta_max (float): Maximum beta value.
+    _context (Array | None): Optional context for schedule.
+    rate (float): Exponential growth rate.
+
+  Returns:
+    CurrentBetaFloat: The annealed beta value for the current step.
+
+  Raises:
+    TypeError: If the output is not a JAX array.
+
+  Example:
+    >>> exponential_schedule(1, 10, 0.1, 1.0)
+    Array(0.1, dtype=float32)
+
+  """
   if current_step <= 1:
-    return jnp.array(0.0, dtype=jnp.float32)
+    return jnp.array(beta_min, dtype=jnp.float32)
   if current_step >= n_steps:
     return jnp.array(beta_max, dtype=jnp.float32)
   x = (current_step - 1) / (n_steps - 1)
@@ -91,10 +133,11 @@ def exponential_schedule(
   denominator = jnp.exp(rate) - 1.0
   eps = 1e-9
   if abs(denominator) < eps:
-    scale_factor = beta_max / (denominator + eps)
+    scale_factor = (beta_max - beta_min) / (denominator + eps)
   else:
-    scale_factor = beta_max / denominator
-  return scale_factor * (exp_val - 1)
+    scale_factor = (beta_max - beta_min) / denominator
+  result = beta_min + scale_factor * (exp_val - 1)
+  return jnp.clip(result, beta_min, beta_max)
 
 
 @register_schedule("cosine")
@@ -102,16 +145,37 @@ def exponential_schedule(
 def cosine_schedule(
   current_step: int,
   n_steps: int,
+  beta_min: float,
   beta_max: float,
   _context: Array | None = None,
 ) -> CurrentBetaFloat:
-  """Cosine annealing schedule for beta."""
+  """Cosine annealing schedule for beta that starts at beta_min and ends at beta_max.
+
+  Args:
+    current_step (int): The current annealing step (1-based).
+    n_steps (int): Total number of annealing steps.
+    beta_min (float): Minimum beta value.
+    beta_max (float): Maximum beta value.
+    _context (Array | None): Optional context for schedule.
+
+  Returns:
+    CurrentBetaFloat: The annealed beta value for the current step.
+
+  Raises:
+    TypeError: If the output is not a JAX array.
+
+  Example:
+    >>> cosine_schedule(1, 10, 0.1, 1.0)
+    Array(0.1, dtype=float32)
+
+  """
   if current_step <= 1:
-    return jnp.array(0.0, dtype=jnp.float32)
+    return jnp.array(beta_min, dtype=jnp.float32)
   if current_step >= n_steps:
     return jnp.array(beta_max, dtype=jnp.float32)
   x = (current_step - 1) / (n_steps - 1)
-  return beta_max * 0.5 * (1.0 - jnp.cos(jnp.pi * x))
+  result = beta_min + 0.5 * (beta_max - beta_min) * (1.0 - jnp.cos(jnp.pi * x))
+  return jnp.clip(result, beta_min, beta_max)
 
 
 @register_schedule("static")
@@ -119,12 +183,30 @@ def cosine_schedule(
 def static_schedule(
   current_step: int,
   n_steps: int,
+  beta_min: float,
   beta_max: float,
   _context: Array | None = None,
 ) -> CurrentBetaFloat:
-  """Run static annealing schedule (beta is constant)."""
+  """Implement static annealing schedule, constant at beta max.
+
+  Args:
+    current_step (int): The current annealing step (1-based).
+    n_steps (int): Total number of annealing steps.
+    beta_min (float): Minimum beta value.
+    beta_max (float): Maximum beta value.
+    _context (Array | None): Optional context for schedule.
+
+  Returns:
+    CurrentBetaFloat: The annealed beta value for the current step.
+
+  Raises:
+    TypeError: If the output is not a JAX array.
+
+  Example:
+    >>> static_schedule(1, 10, 0.1, 1.0)
+    Array(0.1, dtype=float32)
+
+  """
   if current_step <= 1:
-    return jnp.array(0.0, dtype=jnp.float32)
-  if current_step >= n_steps:
-    return jnp.array(beta_max, dtype=jnp.float32)
+    return jnp.array(beta_min, dtype=jnp.float32)
   return jnp.array(beta_max, dtype=jnp.float32)

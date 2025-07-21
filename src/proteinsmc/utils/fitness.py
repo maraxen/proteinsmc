@@ -16,21 +16,21 @@ if TYPE_CHECKING:
   from jaxtyping import Array, PRNGKeyArray
 
   from proteinsmc.models.fitness import (
-    CombineFuncSignature,
+    CombineFn,
     FitnessEvaluator,
-    FitnessFuncSignature,
-    StackedFitnessFuncSignature,
+    FitnessFn,
+    StackedFitnessFn,
   )
   from proteinsmc.models.translation import TranslateFuncSignature
   from proteinsmc.models.types import EvoSequence
 
 
-FITNESS_FUNCTIONS: dict[str, Callable[..., FitnessFuncSignature]] = {
+FITNESS_FUNCTIONS: dict[str, Callable[..., FitnessFn]] = {
   "cai": cai.make_cai_score,
   "mpnn": mpnn.make_mpnn_score,
 }
 
-COMBINE_FUNCTIONS: dict[str, Callable[..., CombineFuncSignature]] = {
+COMBINE_FUNCTIONS: dict[str, Callable[..., CombineFn]] = {
   "sum": combine.make_sum_combine,
   "weighted_sum": combine.make_weighted_combine,
 }
@@ -41,9 +41,9 @@ def get_fitness_function(
   n_states: int,
   translate_func: TranslateFuncSignature,
   chunk_size: int | None = None,
-) -> StackedFitnessFuncSignature:
+) -> StackedFitnessFn:
   """Create a single, JIT-compatible fitness function."""
-  score_fns: list[FitnessFuncSignature] = []
+  score_fns: list[FitnessFn] = []
   for func_config in evaluator_config.fitness_functions:
     if func_config.name not in FITNESS_FUNCTIONS:
       error_msg = f"Unknown fitness function: {func_config.name}"
@@ -57,19 +57,23 @@ def get_fitness_function(
     error_msg = f"Unknown combine function: {combine_config.name}"
     raise ValueError(error_msg)
   make_combine_fn = COMBINE_FUNCTIONS[combine_config.name]
-  combine_fn: CombineFuncSignature = make_combine_fn(**combine_config.kwargs)
+  combine_fn: CombineFn = make_combine_fn(**combine_config.kwargs)
 
   @jit
   def final_fitness_fn(
     key: PRNGKeyArray,
     sequence: EvoSequence,
     _context: Array | None = None,
-  ) -> tuple[Array, Array]:
+  ) -> Array:
     keys = jax.random.split(key, len(score_fns) + 1)
 
-    all_scores = []
-    for i, score_fn in enumerate(score_fns):
-      sequence = (
+    def score_body(
+      i: int,
+      carry: tuple[list[Array], EvoSequence],
+    ) -> tuple[list[Array], EvoSequence]:
+      all_scores, sequence = carry
+      score_fn = score_fns[i]
+      seq = (
         translate_func(sequence=sequence, _key=keys[i], _context=_context)  # type: ignore[call-arg]
         if needs_translation[i]
         else sequence
@@ -77,14 +81,22 @@ def get_fitness_function(
       if chunk_size is not None:
         vmapped_scorer = chunked_vmap(
           score_fn,
-          (sequence, keys[i], _context),
+          (seq, keys[i], _context),
           in_axes=(0, 0, None),
           chunk_size=chunk_size,
         )
       else:
         vmapped_scorer = vmap(score_fn, in_axes=(0, 0, None))
-      scores = vmapped_scorer(jax.random.split(keys[i], sequence.shape[0]), sequence, _context)  # type: ignore[arg-type]
-      all_scores.append(scores)
+      scores = vmapped_scorer(jax.random.split(keys[i], seq.shape[0]), seq, _context)  # type: ignore[arg-type]
+      all_scores = [*all_scores, scores]
+      return all_scores, sequence
+
+    all_scores, _ = jax.lax.fori_loop(
+      0,
+      len(score_fns),
+      score_body,
+      ([], sequence),
+    )
 
     fitness_components = jnp.stack(all_scores, axis=0)
 
@@ -99,6 +111,9 @@ def get_fitness_function(
       vmapped_combiner = vmap(combine_fn, in_axes=(0, 0, 0))
     combined_fitness = vmapped_combiner(keys[-1], fitness_components.T, _context)  # type: ignore[arg-type]
 
-    return combined_fitness, fitness_components
+    return jnp.stack(
+      [combined_fitness, *fitness_components],
+      axis=0,
+    )
 
   return final_fitness_fn

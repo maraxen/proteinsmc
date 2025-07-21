@@ -11,10 +11,10 @@ from jax import jit
 if TYPE_CHECKING:
   from jaxtyping import Array, Float, PRNGKeyArray
 
-  from proteinsmc.models.fitness import CombineFuncSignature
+  from proteinsmc.models.fitness import CombineFn
 
 
-def make_sum_combine(**_kwargs: Any) -> CombineFuncSignature:
+def make_sum_combine(**_kwargs: Any) -> CombineFn:
   """Make combine function that sums input along axis 0.
 
   Returns:
@@ -22,7 +22,7 @@ def make_sum_combine(**_kwargs: Any) -> CombineFuncSignature:
 
   """
 
-  @partial(jit, static_argnames=("_context",))
+  @partial(jit, static_argnames=("_key", "_context"))
   def sum_combine(
     fitness_scores: Float,
     _key: PRNGKeyArray | None = None,
@@ -36,7 +36,7 @@ def make_sum_combine(**_kwargs: Any) -> CombineFuncSignature:
 
 def make_weighted_combine(
   fitness_weights: Float | None = None,
-) -> CombineFuncSignature:
+) -> CombineFn:
   """Make combine function that combines fitness scores with optional weights.
 
   Args:

@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol, TypeVar
 
 from proteinsmc.models.fitness import FitnessEvaluator
 from proteinsmc.models.memory import MemoryConfig
 
 if TYPE_CHECKING:
-  from proteinsmc.models.annealing import AnnealingConfig
+  from proteinsmc.models.gibbs import GibbsState
+  from proteinsmc.models.hmc import HMCState
+  from proteinsmc.models.mcmc import MCMCState
+  from proteinsmc.models.nuts import NUTSState
+  from proteinsmc.models.smc import SMCState
 
 
 @dataclass(frozen=True)
@@ -40,7 +44,6 @@ class BaseSamplerConfig:
   sequence_type: Literal["protein", "nucleotide"] = field(default="protein")
   fitness_evaluator: FitnessEvaluator = field(kw_only=True)
   memory_config: MemoryConfig = field(default_factory=MemoryConfig)
-  annealing_config: AnnealingConfig = field(kw_only=True)
 
   def _validate_types(self) -> None:
     """Validate the types of the fields."""
@@ -113,3 +116,9 @@ class SamplerOutputProtocol(Protocol):
   def output_type_name(self) -> str:
     """Return the string name of the output type (e.g., 'SMC', 'ParallelReplicaSMC')."""
     return "SamplerOutput"
+
+
+SamplerState = TypeVar(
+  "SamplerState",
+  bound="GibbsState | HMCState | MCMCState | NUTSState | SMCState",
+)

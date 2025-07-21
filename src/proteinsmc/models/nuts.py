@@ -10,23 +10,29 @@ from flax.struct import PyTreeNode
 from proteinsmc.models.sampler_base import BaseSamplerConfig
 
 if TYPE_CHECKING:
-  from jaxtyping import Float, PRNGKeyArray
+  from blackjax.base import State as BlackjaxState
+  from jaxtyping import PRNGKeyArray
 
+  from proteinsmc.models.fitness import StackedFitness
   from proteinsmc.models.types import EvoSequence
 
 
 class NUTSState(PyTreeNode):
-  """State of the NUTS sampler.
+  """State of the MCMC sampler.
 
   Attributes:
-      samples: An array of sampled sequences.
-      fitness: The fitness of the last sampled sequence.
+      sequence: The current sequence (sequence) of the sampler.
+      fitness: The log-probability (fitness) of the current sequence.
+      components_fitness: The individual components of the fitness function.
+      key: The JAX PRNG key for the next step.
+      blackjax_state: The internal state of the Blackjax sampler.
 
   """
 
-  samples: EvoSequence
-  fitness: Float
+  sequence: EvoSequence
+  fitness: StackedFitness
   key: PRNGKeyArray
+  blackjax_state: BlackjaxState
 
 
 class NUTSConfig(BaseSamplerConfig):
@@ -43,7 +49,4 @@ class NUTSConfig(BaseSamplerConfig):
   """
 
   step_size: float = field(default=0.1)
-  num_leapfrog_steps: int = field(default=10)
-  warmup_steps: int = field(default=100)
-  num_chains: int = field(default=1)
-  adapt_step_size: bool = field(default=True)
+  max_num_doublings: int = field(default=10)

@@ -2,7 +2,7 @@
 
 from .annealing import AnnealingConfig
 from .fitness import CombineFunction, FitnessEvaluator, FitnessFunction
-from .gibbs import GibbsConfig, GibbsState, GibbsUpdateFuncSignature
+from .gibbs import GibbsConfig, GibbsState, GibbsUpdateFn
 from .hmc import HMCConfig, HMCState
 from .mcmc import MCMCConfig, MCMCState
 from .memory import AutoTuningConfig, MemoryConfig
@@ -54,7 +54,7 @@ __all__ = [
   "MPNNModel",
   "GibbsConfig",
   "GibbsState",
-  "GibbsUpdateFuncSignature",
+  "GibbsUpdateFn",
   "HMCConfig",
   "HMCState",
   "MCMCConfig",
