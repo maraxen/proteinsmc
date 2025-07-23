@@ -21,7 +21,6 @@ from proteinsmc.models.parallel_replica import (
   PRSMCState,
   PRSMCStepConfig,
 )
-from proteinsmc.sampling.smc.resampling import resample
 from proteinsmc.utils import (
   calculate_logZ_increment,
   diversify_initial_sequences,

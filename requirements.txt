@@ -5,7 +5,10 @@ flax
 chex
 jaxtyping
 polars
+equinox
+httpx
 git+https://github.com/maraxen/ColabDesign.git
 uuid-utils
 safetensors
+git+https://github.com/maraxen/esm.git
 git+https://github.com/maraxen/esmj.git

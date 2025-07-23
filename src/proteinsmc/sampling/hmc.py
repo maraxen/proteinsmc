@@ -57,7 +57,7 @@ def initialize_hmc_state(
   )
 
 
-@partial(jit, static_argnames=("config", "fitness_fn", "mutation_fn"))
+@partial(jit, static_argnames=("config", "fitness_fn", "_mutation_fn"))
 def run_hmc_loop(
   config: HMCConfig,
   initial_state: HMCState,

@@ -22,7 +22,6 @@ from .smc import (
 )
 from .types import (
   EvoSequence,
-  MPNNModel,
   NucleotideSequence,
   ProteinSequence,
 )

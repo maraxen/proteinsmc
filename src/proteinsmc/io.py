@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 import jax
 import jax.numpy as jnp
 import uuid_utils as uuid
-from safetensors.flax import serialize
+from safetensors import serialize
 
 if TYPE_CHECKING:
   from proteinsmc.models.sampler_base import BaseSamplerConfig
@@ -19,6 +19,7 @@ class DataWriter:
   """Handles buffering and batched writing of experiment results asynchronously."""
 
   def __init__(self, output_dir: Path, run_id: uuid.UUID, batch_size: int = 100) -> None:
+    """Initialize the DataWriter."""
     self.output_dir = output_dir
     self.run_id = run_id
     self.batch_size = batch_size
@@ -30,7 +31,7 @@ class DataWriter:
 
   def log_scalars(self, step_metrics: dict) -> None:
     """Append a dictionary of scalar metrics to the JSONL file."""
-    with open(self.scalar_log_path, "a") as f:
+    with Path.open(self.scalar_log_path, "a") as f:
       f.write(json.dumps(step_metrics) + "\n")
 
   def step(self, step_result: Any) -> None:
@@ -53,13 +54,13 @@ class DataWriter:
     self._batch_index += 1
 
   def _write_batch_thread(self, data: list[Any], batch_index: int) -> None:
-    """The actual function that runs in the background thread."""
+    """Run write in the background thread."""
     batched_pytree = jax.tree_util.tree_map(lambda *x: jnp.stack(x), *data)
     filename = self.output_dir / f"{self.run_id}_batch_{batch_index}.safetensors"
     serialize(batched_pytree, str(filename))
 
   def close(self) -> None:
-    """Writes any remaining data and shuts down the executor."""
+    """Write any remaining data and shut down the executor."""
     self._dispatch_write()
     self.executor.shutdown(wait=True)  # Wait for all pending writes to complete
 
@@ -79,14 +80,14 @@ class RunManager:
     self.run_id = uuid.uuid7()
 
   def __enter__(self) -> DataWriter:
-    """Initializes the run: creates directory, saves metadata, returns a writer."""
+    """Initialize the run: creates directory, saves metadata, returns a writer."""
     self.output_dir.mkdir(parents=True, exist_ok=True)
     metadata_path = self.output_dir / f"{self.run_id}_metadata.json"
-    with open(metadata_path, "w") as f:
+    with Path.open(metadata_path, "w") as f:
       json.dump({"run_id": str(self.run_id), "config": asdict(self.config)}, f, indent=2)
     self.writer = DataWriter(self.output_dir, self.run_id, self.batch_size)
     return self.writer
 
-  def __exit__(self, exc_type, exc_val, exc_tb):
-    """Ensures all data is written at the end of the run."""
+  def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    """Ensure all data is written at the end of the run."""
     self.writer.close()

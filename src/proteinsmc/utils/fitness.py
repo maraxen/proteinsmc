@@ -9,7 +9,7 @@ import jax.numpy as jnp
 from jax import jit, vmap
 from jaxtyping import Array, PRNGKeyArray
 
-from proteinsmc.scoring import cai, combine, mpnn
+from proteinsmc.scoring import cai, combine, esm, mpnn
 from proteinsmc.utils.vmap_utils import chunked_vmap
 
 if TYPE_CHECKING:
@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 FITNESS_FUNCTIONS: dict[str, Callable[..., FitnessFn]] = {
   "cai": cai.make_cai_score,
   "mpnn": mpnn.make_mpnn_score,
+  "esm": esm.make_esm_pll_score,
 }
 
 COMBINE_FUNCTIONS: dict[str, Callable[..., CombineFn]] = {

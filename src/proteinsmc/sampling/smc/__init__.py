@@ -5,7 +5,6 @@ from .distribution import (
   validate_island_distribution,
 )
 from .parallel_replica import initialize_prsmc_state, run_prsmc_loop
-from .resampling import resample
 from .smc import (
   initialize_smc_state,
   run_smc_loop,
@@ -16,7 +15,6 @@ __all__ = [
   "initialize_smc_state",
   "run_prsmc_loop",
   "initialize_prsmc_state",
-  "resample",
   "estimate_island_memory_usage",
   "validate_island_distribution",
 ]

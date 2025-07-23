@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import collections
+from venv import logger
 
 import jax.numpy as jnp
 from colabdesign.mpnn.model import (  # type: ignore[import]
@@ -194,3 +195,81 @@ for aa_char, aa_int_colabdesign in colabdesign_aa_order.items():
     max_f = max(max_f, ECOLI_CODON_FREQ_CHAR.get(codon_str, 0.0))
   ECOLI_MAX_FREQS_JAX_list[aa_int_colabdesign] = max(max_f, 1e-9)
 ECOLI_MAX_FREQS_JAX = jnp.array(ECOLI_MAX_FREQS_JAX_list, dtype=jnp.float32)
+
+
+ESM_SEQUENCE_VOCAB = SEQUENCE_VOCAB = [
+  "<cls>",
+  "<pad>",
+  "<eos>",
+  "<unk>",
+  "L",
+  "A",
+  "G",
+  "V",
+  "S",
+  "E",
+  "R",
+  "T",
+  "I",
+  "D",
+  "P",
+  "K",
+  "Q",
+  "N",
+  "F",
+  "Y",
+  "M",
+  "H",
+  "W",
+  "C",
+  "X",
+  "B",
+  "U",
+  "Z",
+  "O",
+  ".",
+  "-",
+  "|",
+  "<mask>",
+]
+CHAIN_BREAK_STR = "|"
+
+SEQUENCE_BOS_STR = "<cls>"
+SEQUENCE_EOS_STR = "<eos>"
+
+MASK_STR_SHORT = "_"
+SEQUENCE_MASK_STR = "<mask>"
+ESM_AA_CHAR_TO_INT_MAP = {c: i for i, c in enumerate(ESM_SEQUENCE_VOCAB)}
+
+ESM_BOS_ID = ESM_AA_CHAR_TO_INT_MAP["<cls>"]
+ESM_PAD_ID = ESM_AA_CHAR_TO_INT_MAP["<pad>"]
+ESM_EOS_ID = ESM_AA_CHAR_TO_INT_MAP["<eos>"]
+ESM_UNK_ID = ESM_AA_CHAR_TO_INT_MAP["<unk>"]
+ESM_MASK_ID = ESM_AA_CHAR_TO_INT_MAP["<mask>"]
+COLABDESIGN_TO_ESM_AA_MAP_JAX = jnp.full(
+  AMINO_ACIDS_NUM_STATES,  # Size is based on ColabDesign's max AA int
+  ESM_UNK_ID,
+  dtype=jnp.int32,
+)
+
+# Populate the mapping
+for cd_char, cd_int in AA_CHAR_TO_INT_MAP.items():
+  if cd_char in ESM_AA_CHAR_TO_INT_MAP:
+    esm_int = ESM_AA_CHAR_TO_INT_MAP[cd_char]
+    COLABDESIGN_TO_ESM_AA_MAP_JAX = COLABDESIGN_TO_ESM_AA_MAP_JAX.at[cd_int].set(esm_int)
+  else:
+    msg = (
+      f"ColabDesign character '{cd_char}' (int {cd_int}) not found in "
+      f"ESM vocabulary. Mapping to UNK."
+    )
+    logger.warning(msg)
+
+if "X" in AA_CHAR_TO_INT_MAP and "X" in ESM_AA_CHAR_TO_INT_MAP:
+  COLABDESIGN_TO_ESM_AA_MAP_JAX = COLABDESIGN_TO_ESM_AA_MAP_JAX.at[AA_CHAR_TO_INT_MAP["X"]].set(
+    ESM_AA_CHAR_TO_INT_MAP["X"],
+  )
+elif "X" in AA_CHAR_TO_INT_MAP:
+  # If ESM doesn't have 'X' as a regular token, map to UNK
+  COLABDESIGN_TO_ESM_AA_MAP_JAX = COLABDESIGN_TO_ESM_AA_MAP_JAX.at[AA_CHAR_TO_INT_MAP["X"]].set(
+    ESM_UNK_ID,
+  )

@@ -1,7 +1,5 @@
 """Utility functions for protein sequence modeling and sampling."""
 
-from proteinsmc.sampling.smc.resampling import resample
-
 from .annealing import (
   ANNEALING_REGISTRY,
   cosine_schedule,
@@ -85,12 +83,8 @@ __all__ = [
   "_revert_x_codons_if_mutated",
   "diversify_initial_sequences",
   "mutate",
-  "mutate_single",
-  "dispatch_mutation",
-  "dispatch_mutation_single",
-  "resample",
   "nucleotide_to_aa",
-  "aa_to_nucelotide",
+  "aa_to_nucleotide",
   "RES_TO_CODON_CHAR",
   "CODON_TO_RES_CHAR",
   "calculate_logZ_increment",
