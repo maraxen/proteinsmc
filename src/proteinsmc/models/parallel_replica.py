@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from blackjax.base import State as BlackjaxState
 from flax import struct
 from jaxtyping import Array, Float, Int, PRNGKeyArray
 
@@ -102,6 +103,7 @@ class IslandState(struct.PyTreeNode):
 
   key: PRNGKeyArray
   population: PopulationSequences
+  blackjax_initial_state: BlackjaxState
   beta: Float
   logZ_estimate: Float  # noqa: N815
   mean_fitness: Float

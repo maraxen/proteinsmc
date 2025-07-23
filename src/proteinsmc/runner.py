@@ -37,7 +37,7 @@ from proteinsmc.utils.annealing import get_annealing_function
 from proteinsmc.utils.constants import NUCLEOTIDES_NUM_STATES
 from proteinsmc.utils.fitness import get_fitness_function
 from proteinsmc.utils.memory import auto_tune_chunk_size
-from proteinsmc.utils.mutation import make_transition_generator
+from proteinsmc.utils.mutation import make_mutation_fn
 from proteinsmc.utils.translation import aa_to_nucleotide, nucleotide_to_aa
 
 if TYPE_CHECKING:
@@ -148,7 +148,7 @@ def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int 
 
   initialize_fn = sampler_def["initialize_fn"]
   run_fn = sampler_def["run_fn"]
-  transition_generator = make_transition_generator(
+  mutation_fn = make_mutation_fn(
     config=config,
   )
 
@@ -169,7 +169,7 @@ def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int 
         config=config,
         initial_state=initial_state,
         log_prob_fn=fitness_fn,
-        transition_generator=transition_generator,
+        mutation_fn=mutation_fn,
         annealing_fn=annealing_fn,
       )
     else:
@@ -177,7 +177,7 @@ def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int 
         config=config,
         initial_state=initial_state,
         log_prob_fn=fitness_fn,
-        transition_generator=transition_generator,
+        mutation_fn=mutation_fn,
       )
 
     # 4. Run the core sampler loop

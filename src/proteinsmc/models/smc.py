@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import enum
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import Any, Callable, Literal
 
+from blackjax.smc.base import SMCState as BaseSMCState
+from blackjax.smc.inner_kernel_tuning import StateWithParameterOverride as InnerMCMCState
+from blackjax.smc.partial_posteriors_path import PartialPosteriorsSMCState
+from blackjax.smc.pretuning import StateWithParameterOverride as PretuningSMCState
+from blackjax.smc.tempered import TemperedSMCState
 from flax.struct import PyTreeNode
 from jaxtyping import Array, Bool, Float, Int, PRNGKeyArray
 
+from .annealing import AnnealingConfig
 from .sampler_base import BaseSamplerConfig, SamplerOutputProtocol
-
-if TYPE_CHECKING:
-  from .annealing import AnnealingConfig
 
 PopulationNucleotideSequences = Int[Array, "population_size nucleotide_sequence_length"]
 PopulationProteinSequences = Int[Array, "population_size protein_sequence_length"]
@@ -21,6 +25,27 @@ PopulationBools = Bool[Array, "population_size"]
 StackedPopulationMetrics = Float[PopulationMetrics, "population_size combine_funcs"]
 """Data structures for SMC sampling algorithms."""
 
+ResampleFn = Callable[[PopulationSequences, PRNGKeyArray], PopulationSequences]
+
+BlackjaxSMCState = (
+  BaseSMCState | TemperedSMCState | InnerMCMCState | PartialPosteriorsSMCState | PretuningSMCState
+)
+
+
+class SMCAlgorithm(enum.Enum):
+  """Enum for SMC algorithms."""
+
+  BASE = "BaseSMC"
+  ADAPTIVE_TEMPERED = "AdaptiveTemperedSMC"
+  ANNEALING = "AnnealedSMC"
+  PARALLEL_REPLICA = "ParallelReplicaSMC"
+  FROM_MCMC = "FromMCMC"
+  INNER_MCMC = "InnerMCMC"
+  PARTIAL_POSTERIORS = "PartialPosteriors"
+  PRETUNING = "PretuningSMC"
+  TEMPERED = "TemperedSMC"
+  CUSTOM = "CustomSMC"
+
 
 @dataclass(frozen=True)
 class SMCConfig(BaseSamplerConfig):
@@ -29,9 +54,17 @@ class SMCConfig(BaseSamplerConfig):
   population_size: int = field(default=64)
   """Number of sequences in the population."""
   sampler_type: str = "smc"
-  annealing_config: AnnealingConfig = field(
-    default=AnnealingConfig(annealing_fn="static"),
+  algorithm: Literal["AdaptiveTemperedSMC", "ParallelReplicaSMC", "CustomSMC"] = (
+    "AdaptiveTemperedSMC"
   )
+  annealing_config: AnnealingConfig | None = None
+  """Annealing schedule configuration."""
+  resampling_approach: Literal["systematic", "multinomial", "stratified", "residual"] = (
+    "multinomial"
+  )
+  """Approach to resampling, e.g., 'multinomial' or 'systematic'."""
+  smc_algo_kwargs: dict[str, Any] = field(default_factory=dict)
+  """Additional keyword arguments for the SMC algorithm."""
 
   def _validate_types(self) -> None:
     """Validate the types of the fields."""
@@ -60,11 +93,15 @@ class SMCState(PyTreeNode):
   """State of the SMC sampler at a single step. Designed to be a JAX PyTree."""
 
   population: PopulationSequences
-  log_weights: PopulationMetrics
-  log_likelihood: PopulationMetrics
+  """Population of sequences at the current step. Also termed "particles" in SMC literature."""
+  blackjax_state: BlackjaxSMCState
+  """State for the blackjax SMC algorithm."""
   key: PRNGKeyArray
+  """JAX PRNG key for random number generation."""
   beta: float = 1.0
+  """Current inverse temperature (beta) for the SMC algorithm."""
   step: int = 0
+  """Current step in the SMC algorithm."""
 
 
 @dataclass

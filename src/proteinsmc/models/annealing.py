@@ -13,7 +13,7 @@ class AnnealingKwargs(TypedDict):
   _context: Any | None
 
 
-AnnealingFuncSignature = Callable[[Unpack[AnnealingKwargs]], float]
+AnnealingFn = Callable[[Unpack[AnnealingKwargs]], float]
 
 
 @dataclass(frozen=True)

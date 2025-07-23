@@ -8,3 +8,4 @@ polars
 git+https://github.com/maraxen/ColabDesign.git
 uuid-utils
 safetensors
+git+https://github.com/maraxen/esmj.git

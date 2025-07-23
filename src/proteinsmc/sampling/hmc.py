@@ -47,7 +47,7 @@ def initialize_hmc_state(
     initial_sequence,
     fitness_fn,
     step_size=config.step_size,
-    num_integration_steps=config.num_leapfrog_steps,
+    num_integration_steps=config.num_integration_steps,
   )
   return HMCState(
     sequence=initial_sequence,

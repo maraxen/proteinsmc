@@ -98,7 +98,7 @@ def basic_annealing_config() -> AnnealingConfig:
     annealing_fn="linear",
     beta_max=1.0,
     n_steps=10,
-    schedule_args={},
+    kwargs={},
   )
 
 
@@ -131,7 +131,6 @@ def basic_smc_config(
     memory_config=basic_memory_config,
     annealing_config=basic_annealing_config,
     population_size=16,
-    annealing_schedule=basic_annealing_config,
   )
 
 

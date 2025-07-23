@@ -7,6 +7,7 @@ maintaining clarity and correctness in a JAX-based codebase.
 
 from __future__ import annotations
 
+import enum
 from typing import Protocol, TypeVar
 
 import jax.numpy as jnp
@@ -22,6 +23,16 @@ The integers correspond to the amino acids in the protein alphabet.
 """
 EvoSequence = Int[NucleotideSequence | ProteinSequence, "sequence_length alphabet_size"]
 BatchEvoSequence = Int[Array, "batch_size sequence_length alphabet_size"]
+
+
+class SequenceType(enum.Enum):
+  """Enumeration for sequence types.
+
+  This is used to specify the type of sequence being processed.
+  """
+
+  NUCLEOTIDE = "nucleotide"
+  PROTEIN = "protein"
 
 
 class Vmapped(Protocol):

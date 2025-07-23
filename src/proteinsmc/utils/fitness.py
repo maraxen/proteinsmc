@@ -111,6 +111,11 @@ def get_fitness_function(
       vmapped_combiner = vmap(combine_fn, in_axes=(0, 0, 0))
     combined_fitness = vmapped_combiner(keys[-1], fitness_components.T, _context)  # type: ignore[arg-type]
 
+    if (
+      _context is not None
+    ):  # TODO(mar): assume _context is our beta and fitness is logprob, this should be reworked
+      combined_fitness = combined_fitness * _context
+
     return jnp.stack(
       [combined_fitness, *fitness_components],
       axis=0,

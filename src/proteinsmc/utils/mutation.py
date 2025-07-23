@@ -49,19 +49,19 @@ def mutate(
   return mutated_sequences.astype(jnp.int8)
 
 
-def make_transition_generator(
+def make_mutation_fn(
   config: BaseSamplerConfig,
 ) -> MutationFn:
   """Create a transition generator for mutating sequences."""
 
-  def transition_generator(
+  def mutation_fn(
     key: PRNGKeyArray,
     sequence: EvoSequence,
   ) -> EvoSequence:
     """Generate a mutated sequence."""
     return mutate(key, sequence, mutation_rate=config.mutation_rate, n_states=config.n_states)
 
-  return transition_generator
+  return mutation_fn
 
 
 @jit

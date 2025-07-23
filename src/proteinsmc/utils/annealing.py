@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
   from proteinsmc.models.annealing import (
     AnnealingConfig,
-    AnnealingFuncSignature,
+    AnnealingFn,
   )
 
 CurrentBetaFloat = Float[jax.Array, ""]
@@ -25,10 +25,10 @@ ANNEALING_REGISTRY = {}
 
 def register_schedule(
   name: str,
-) -> Callable[[AnnealingFuncSignature], AnnealingFuncSignature]:
+) -> Callable[[AnnealingFn], AnnealingFn]:
   """Register an annealing schedule function."""
 
-  def decorator(func: AnnealingFuncSignature) -> AnnealingFuncSignature:
+  def decorator(func: AnnealingFn) -> AnnealingFn:
     """Decorate to register an annealing schedule function."""
     ANNEALING_REGISTRY[name] = func
     return func
@@ -36,7 +36,7 @@ def register_schedule(
   return decorator
 
 
-def get_annealing_function(config: AnnealingConfig) -> AnnealingFuncSignature:
+def get_annealing_function(config: AnnealingConfig) -> AnnealingFn:
   """Get a configured annealing schedule function."""
   if config.annealing_fn not in ANNEALING_REGISTRY:
     msg = f"Unknown annealing schedule: {config.annealing_fn}"
@@ -182,7 +182,7 @@ def cosine_schedule(
 @partial(jit, static_argnames=("_context",))
 def static_schedule(
   current_step: int,
-  n_steps: int,
+  _n_steps: int,
   beta_min: float,
   beta_max: float,
   _context: Array | None = None,

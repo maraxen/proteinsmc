@@ -13,7 +13,7 @@ if TYPE_CHECKING:
   from jaxtyping import Float, Int, PRNGKeyArray
 
   from proteinsmc.models.fitness import StackedFitnessFn
-  from proteinsmc.utils.annealing import AnnealingFuncSignature
+  from proteinsmc.utils.annealing import AnnealingFn
 from proteinsmc.models.parallel_replica import (
   ExchangeConfig,
   IslandState,
@@ -26,7 +26,54 @@ from proteinsmc.utils import (
   calculate_logZ_increment,
   diversify_initial_sequences,
 )
+from proteinsmc.utils.initiate import generate_template_population
 from proteinsmc.utils.mutation import mutate
+
+
+def initialize_parallel_replica_state(
+  config: ParallelReplicaConfig,
+  _fitness_function: StackedFitnessFn,
+  key: PRNGKeyArray,
+) -> PRSMCState:
+  """Initialize the state for a parallel replica."""
+  template_population = generate_template_population(
+    config.seed_sequence,
+    config.step_config.population_size_per_island * config.n_islands,
+    config.sequence_type,
+    config.sequence_type,
+  )
+  template_population = diversify_initial_sequences(
+    key=key,
+    seed_sequences=template_population,
+    mutation_rate=config.diversification_ratio,
+    sequence_type=config.sequence_type,
+  )
+  template_population = jnp.split(
+    template_population,
+    config.n_islands,
+    axis=0,
+  )
+  island_keys = jax.random.split(key, config.n_islands)
+
+  return PRSMCState(
+    prng_key=key,
+    current_overall_state=jax.tree_util.tree_map(
+      lambda *xs: jnp.stack(xs, axis=0),
+      *[
+        IslandState(
+          key=island_keys[i],
+          population=template_population[i],
+          beta=config.island_betas[i],
+          logZ_estimate=jnp.array(0.0, dtype=jnp.float32),
+          mean_fitness=jnp.array(0.0, dtype=jnp.float32),
+          ess=jnp.array(0.0, dtype=jnp.float32),
+        )
+        for i in range(config.n_islands)
+      ],
+    ),
+    total_swaps_attempted=jnp.array(0, dtype=jnp.int32),
+    total_swaps_accepted=jnp.array(0, dtype=jnp.int32),
+  )
 
 
 @partial(jit, static_argnames=("config", "fitness_fn"))
@@ -66,8 +113,8 @@ def island_smc_step(
 
   fitness_values, fitness_components = fitness_fn(
     mutated_population,
-    key_fitness,  # type: ignore[arg-type]
-    _context=None,
+    key_fitness,
+    None,
   )
 
   log_potential_values = jnp.where(
@@ -389,7 +436,7 @@ def run_prsmc_loop(
   config: ParallelReplicaConfig,
   initial_state: PRSMCState,
   fitness_fn: StackedFitnessFn,
-  annealing_fn: AnnealingFuncSignature,
+  annealing_fn: AnnealingFn,
 ) -> tuple[PRSMCState, dict]:
   """JIT-compiled Parallel Replica SMC loop."""
 
@@ -399,7 +446,7 @@ def run_prsmc_loop(
     step_idx: Int,
     step_config: PRSMCStepConfig,
     fitness_fn: StackedFitnessFn,
-    annealing_fn: AnnealingFuncSignature,
+    annealing_fn: AnnealingFn,
   ) -> tuple[PRSMCState, dict]:
     key_step, next_smc_loop_key = jax.random.split(carry_state.prng_key)
 

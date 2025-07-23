@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import field
 from typing import TYPE_CHECKING
 
 from flax.struct import PyTreeNode
@@ -40,12 +39,12 @@ class HMCConfig(BaseSamplerConfig):
 
   Attributes:
       num_samples: The number of samples to generate.
-      step_size: The step size for the leapfrog integrator.
-      num_leapfrog_steps: The number of leapfrog steps to take.
+      step_size: The step size for the integrator.
+      num_integration_steps: The number of integration steps to take.
 
   """
 
-  step_size: float = field(default=0.1)
-  """Step size for the leapfrog integrator."""
-  num_leapfrog_steps: int = field(default=10)
-  """Number of leapfrog steps to take."""
+  step_size: float = 0.1
+  """Step size for the integrator."""
+  num_integration_steps: int = 10
+  """Number of integration steps to take."""

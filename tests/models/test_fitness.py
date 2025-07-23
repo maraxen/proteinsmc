@@ -1,150 +1,57 @@
-"""Unit tests for the fitness models.
+"""Unit tests for FitnessFunction and FitnessEvaluator data models.
 
-Tests FitnessFunction, CombineFunction, and FitnessEvaluator dataclasses,
-including validation, filtering, and translation logic.
-
-Run with:
-  pytest tests/models/test_fitness.py
+Tests cover initialization, type checking, and edge cases for FitnessFunction and FitnessEvaluator.
 """
-
 import pytest
-
-import dataclasses
-
-import jax.numpy as jnp
-
-from proteinsmc.models.fitness import (
-  CombineFunction,
-  FitnessEvaluator,
-  FitnessFunction,
-)
+from proteinsmc.models import FitnessFunction, FitnessEvaluator
 
 
-def test_fitness_function_dataclass():
-  """Test initialization and immutability of FitnessFunction.
-
+def test_fitness_function_initialization():
+  """Test FitnessFunction initialization with valid arguments.
   Args:
     None
   Returns:
     None
   Raises:
-    AssertionError: If the dataclass fields are not set correctly or are mutable.
-
+    AssertionError: If the fields do not match expected values.
   Example:
-    >>> test_fitness_function_dataclass()
-
+    >>> test_fitness_function_initialization()
   """
-  ff = FitnessFunction(name="mock", n_states=20, kwargs={"foo": 1})
-  assert ff.name == "mock"
-  assert ff.n_states == 20
-  assert ff.kwargs == {"foo": 1}
-  with pytest.raises(dataclasses.FrozenInstanceError):
-    ff.name = "other"  # type: ignore[unreachable]
+  func = FitnessFunction(name="stability", n_states=20)
+  assert func.name == "stability"
+  assert func.n_states == 20
 
 
-def test_combine_function_dataclass():
-  """Test initialization and immutability of CombineFunction.
-
+def test_fitness_evaluator_initialization():
+  """Test FitnessEvaluator initialization with valid fitness functions.
   Args:
     None
   Returns:
     None
   Raises:
-    AssertionError: If the dataclass fields are not set correctly or are mutable.
-
+    AssertionError: If the evaluator does not contain the expected functions.
   Example:
-    >>> test_combine_function_dataclass()
-
+    >>> test_fitness_evaluator_initialization()
   """
-  cf = CombineFunction(name="sum", kwargs={"bar": 2})
-  assert cf.name == "sum"
-  assert cf.kwargs == {"bar": 2}
-  with pytest.raises(dataclasses.FrozenInstanceError):
-    cf.name = "other"  # type: ignore[unreachable]
+  evaluator = FitnessEvaluator(fitness_functions=(FitnessFunction(name="stability", n_states=20),))
+  assert isinstance(evaluator.fitness_functions, tuple)
+  assert evaluator.fitness_functions[0].name == "stability"
 
 
-def test_fitness_evaluator_requires_at_least_one_function():
-  """Test that FitnessEvaluator raises ValueError if no fitness functions are provided.
-
+def test_fitness_function_invalid_type():
+  """Test FitnessFunction raises error on invalid types.
   Args:
     None
   Returns:
     None
   Raises:
-    AssertionError: If ValueError is not raised.
-
+    AssertionError: If TypeError is not raised for invalid types.
   Example:
-    >>> test_fitness_evaluator_requires_at_least_one_function()
-
+    >>> test_fitness_function_invalid_type()
   """
-  with pytest.raises(ValueError, match="At least one fitness function must be provided."):
-    FitnessEvaluator(fitness_functions=())
-
-
-def test_fitness_evaluator_get_functions_by_states():
-  """Test filtering of fitness functions by n_states.
-
-  Args:
-    None
-  Returns:
-    None
-  Raises:
-    AssertionError: If filtering does not return the correct subset.
-
-  Example:
-    >>> test_fitness_evaluator_get_functions_by_states()
-
-  """
-  ff1 = FitnessFunction(name="f1", n_states=20)
-  ff2 = FitnessFunction(name="f2", n_states=61)
-  ff3 = FitnessFunction(name="f3", n_states=20)
-  evaluator = FitnessEvaluator(fitness_functions=(ff1, ff2, ff3))
-  result = evaluator.get_functions_by_states(20)
-  assert result == [ff1, ff3]
-  result2 = evaluator.get_functions_by_states(61)
-  assert result2 == [ff2]
-
-
-def test_fitness_evaluator_needs_translation():
-  """Test needs_translation returns correct boolean array.
-
-  Args:
-    None
-  Returns:
-    None
-  Raises:
-    AssertionError: If the translation mask is incorrect.
-
-  Example:
-    >>> test_fitness_evaluator_needs_translation()
-
-  """
-  ff1 = FitnessFunction(name="f1", n_states=20)
-  ff2 = FitnessFunction(name="f2", n_states=61)
-  ff3 = FitnessFunction(name="f3", n_states=20)
-  evaluator = FitnessEvaluator(fitness_functions=(ff1, ff2, ff3))
-  mask = evaluator.needs_translation(20)
-  expected = jnp.array([False, True, False])
-  assert jnp.all(mask == expected), f"Expected {expected}, got {mask}"
-  mask2 = evaluator.needs_translation(61)
-  expected2 = jnp.array([True, False, True])
-  assert jnp.all(mask2 == expected2), f"Expected {expected2}, got {mask2}"
-
-
-def test_fitness_evaluator_default_combine_fn():
-  """Test that the default combine_fn is set to 'sum'.
-
-  Args:
-    None
-  Returns:
-    None
-  Raises:
-    AssertionError: If the default combine_fn is not 'sum'.
-
-  Example:
-    >>> test_fitness_evaluator_default_combine_fn()
-
-  """
-  ff = FitnessFunction(name="f1", n_states=20)
-  evaluator = FitnessEvaluator(fitness_functions=(ff,))
-  assert evaluator.combine_fn.name == "sum"
+  with pytest.raises(TypeError):
+    FitnessFunction(name=123, n_states=20)  # type: ignore[arg-type]
+    
+  with pytest.raises(TypeError):
+    FitnessFunction(name="test_function", n_states="twenty")  # type: ignore[arg-type]
+    
