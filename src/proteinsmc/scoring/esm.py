@@ -94,8 +94,8 @@ def make_esm_pll_score(
 
         return total_log_prob / sequence.shape[0]
     case "bayes":
-      PLL_ALPHA = method_kwargs.get("alpha", PLL_ALPHA)
-      PLL_BETA = method_kwargs.get("beta", PLL_BETA)
+      PLL_ALPHA = method_kwargs.get("alpha", 0.15)
+      PLL_BETA = method_kwargs.get("beta", 0.85)
 
       @partial(jax.jit, static_argnames=("_key", "_context"))
       def esm_pll_score(
