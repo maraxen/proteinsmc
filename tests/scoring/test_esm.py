@@ -63,10 +63,11 @@ def test_esm_pll_score_vs_iterative_pll_multiple_sequences(esm_model):
 
   sequences = jax.random.randint(
     key, (5, 50), 0, 20, dtype=jnp.int8
-  ) 
+  )
+  
+  @jax.jit
   def get_scores(sequence):
     """Helper function to get scores for a single sequence."""
-    # Use a different key for each sequence for reproducibility
     per_pos_score = per_pos_score_fn(sequence, None, None)
     bayes_score = bayes_score_fn(sequence, None, None)
     return per_pos_score, bayes_score
@@ -74,6 +75,6 @@ def test_esm_pll_score_vs_iterative_pll_multiple_sequences(esm_model):
   scores = jax.vmap(get_scores)(sequences)
   per_pos_scores, bayes_scores = scores
 
-  assert jnp.allclose(per_pos_scores, bayes_scores, rtol=5e-1, atol=5e-1), (
+  assert jnp.allclose(per_pos_scores, bayes_scores, rtol=1e-2, atol=1e-2), (
       f"Scores do not align: proxy={bayes_scores}, iterative={per_pos_scores}"
     )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import partial
 from typing import TYPE_CHECKING, Literal
 
 import equinox as eqx
@@ -20,8 +21,9 @@ if TYPE_CHECKING:
   from proteinsmc.models.types import ProteinSequence
 
 
-PLL_ALPHA = 0.15
-PLL_BETA = 0.85
+PLL_ALPHA = 0.25
+PLL_BETA = 0.75
+PLL_EPSILON = 1e-6
 
 
 def make_esm_pll_score(
@@ -35,6 +37,7 @@ def make_esm_pll_score(
 
   Args:
       model_name: The name of the ESM model to load.
+      pll_method: The method to use for calculating the PLL score.
 
   Returns:
       A FitnessFn that takes a protein sequence and returns its PLL score.
@@ -50,14 +53,17 @@ def make_esm_pll_score(
       raise NotImplementedError(msg)
     case "per_position":
 
+      @partial(jax.jit, static_argnames=("_key", "_context"))
       def esm_pll_score(
         sequence: ProteinSequence,
         _key: PRNGKeyArray | None = None,
         _context: Array | None = None,
       ) -> Float:
-        """Calculate the O(1) PLL proxy for a protein sequence using an ESM model.
+        """Calculate the standard per-position masking PLL score for a protein sequence.
 
-        This method uses the per-position PLL calculation.
+        This method uses the per-position PLL calculation standard of masking each
+        position in the sequence and computing the likelihood of the original token
+        given the masked context.
 
         Args:
             _key: JAX PRNG key (unused).
@@ -71,6 +77,7 @@ def make_esm_pll_score(
         sequence = sequence.astype(jnp.int16)
         original_esm_ids, _ = remap_sequences(sequence)
 
+        @jax.jit
         def pll_for_position(i: Int) -> Float:
           # Mask the i-th position
           masked_sequence = sequence.at[i].set(ESM_MASK_ID)
@@ -87,6 +94,7 @@ def make_esm_pll_score(
         return total_log_prob / sequence.shape[0]
     case "bayes":
 
+      @partial(jax.jit, static_argnames=("_key", "_context"))
       def esm_pll_score(
         sequence: ProteinSequence,
         _key: PRNGKeyArray | None = None,
@@ -94,12 +102,13 @@ def make_esm_pll_score(
       ) -> Float:
         """Calculate the O(1) PLL proxy for a protein sequence using an ESM model.
 
-        This method leverages Bayes' theorem to correct the output logits,
-        accounting for the model's masking strategy during training.
+        This method leverages Theorem 4.1 from Gordon et al. 2025
+        to correct the output probabilities, accounting for the model's masking strategy
+        during training.
 
         Args:
-            _key: JAX PRNG key (unused).
             sequence: The protein sequence to score.
+            _key: JAX PRNG key (unused).
             _context: Additional context (unused).
 
         Returns:
@@ -109,54 +118,30 @@ def make_esm_pll_score(
         sequence = sequence.astype(jnp.int16)
         tokens, _ = remap_sequences(sequence)
         logits = eqx_model(tokens[None]).logits[0, 1:-1, :]
-        log_likelihood = jax.nn.log_softmax(logits)
-        e_dist = jnp.ones(logits.shape[-1], dtype=jnp.float32) / logits.shape[-1]
-        factor1 = (PLL_ALPHA + PLL_BETA) / PLL_ALPHA
-        factor2 = PLL_BETA / PLL_ALPHA
-        p_prime = jnp.maximum((factor1 * log_likelihood) - (factor2 * e_dist), 1e-6)
-        row_sums = jnp.sum(p_prime, axis=-1, keepdims=True)
-        row_sums = jnp.where(row_sums < 1e-6,
-                              jnp.ones_like(row_sums),
-                              row_sums)
-        p_prime_normalized = p_prime / row_sums
-        
 
-        pll = (log_likelihood - jnp.log(PLL_ALPHA * jnp.exp(log_likelihood) + PLL_BETA)) / (
-          1 - PLL_ALPHA
-        )
-        return jnp.mean(pll) / sequence.shape[0]
+        # Get the model's probabilities P(yi = xi | x, θ)
+        model_probs = jax.nn.softmax(logits)
+
+        # Apply Theorem 4.1: P(yi = xi | x\i, θ) = ((α + β)/α) P(yi = xi | x, θ) - (β/α)
+        # where α = PLL_ALPHA and β = PLL_BETA
+        uniform_prob = 1.0 / logits.shape[-1]
+        corrected_probs = ((PLL_ALPHA + PLL_BETA) / PLL_ALPHA) * model_probs - (
+          PLL_BETA / PLL_ALPHA
+        ) * uniform_prob
+
+        # Ensure probabilities are valid (clamp to epsilon for numerical stability)
+        corrected_probs = jnp.maximum(corrected_probs, PLL_EPSILON)
+
+        # Get the corrected probabilities for the actual sequence tokens
+        idx = jnp.arange(sequence.shape[0])
+        token_probs = corrected_probs[idx, sequence]
+
+        # Calculate log-likelihood and normalize by sequence length
+        log_probs = jnp.log(jnp.maximum(token_probs, PLL_EPSILON))
+        total_log_prob = jnp.sum(log_probs)
+
+        return total_log_prob / sequence.shape[0]
     case _:
       msg = f"Unknown PLL method: {pll_method}"
       raise ValueError(msg)
   return esm_pll_score
-
-
-  """ Calculates the O(1) PLL proxy based on Algorithm 2. """
-    if logits is None or sequence_string is None:
-        return 0.0
-    L, A = logits.shape
-    if A != ALPHABET_SIZE or L != len(sequence_string):
-        return 0.0
-    alpha, beta, epsilon = PLL_ALPHA, PLL_BETA, PLL_EPSILON
-    if alpha <= 0:
-        raise ValueError("PLL_ALPHA must be positive.")
-    p = softmax(logits.astype(np.float64), axis=-1)
-    e_dist = np.ones(A, dtype=np.float64) / A
-    factor1 = (alpha + beta) / alpha
-    factor2 = beta / alpha
-    p_prime = np.maximum((factor1 * p) - (factor2 * e_dist[np.newaxis, :]), epsilon)
-    row_sums = np.sum(p_prime, axis=-1, keepdims=True)
-    row_sums[row_sums < epsilon] = 1.0 # Avoid division by near zero
-    p_prime_normalized = p_prime / row_sums
-    pll = 0.0
-    valid_len = 0
-    for i in range(L):
-        native_aa = sequence_string[i]
-        if native_aa in AA_TO_IDX:
-            native_idx_0_19 = AA_TO_IDX[native_aa]
-            prob_native = p_prime_normalized[i, native_idx_0_19]
-            pll += np.log(np.maximum(prob_native, epsilon)) # Use epsilon floor
-            valid_len += 1
-        else:
-            warnings.warn(f"Non-standard AA '{native_aa}' at pos {i}.")
-    return pll / valid_len if valid_len > 0 else 0.0
