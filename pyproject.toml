@@ -1,12 +1,28 @@
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "proteinsmc"
 version = "0.1.0"
 description = "A package for protein sequence Monte Carlo."
-requires-python = ">=3.9"
+requires-python = ">=3.11"
+dependencies = [
+    "jax",
+    "blackjax",
+    "dill",
+    "flax",
+    "chex",
+    "jaxtyping",
+    "polars",
+    "equinox",
+    "httpx",
+    "uuid-utils",
+    "safetensors",
+    "ColabDesign @ git+https://github.com/maraxen/ColabDesign.git",
+    "esm @ git+https://github.com/maraxen/esm.git",
+    "esmj @ git+https://github.com/maraxen/esmj.git",
+]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
@@ -14,7 +30,9 @@ classifiers = [
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-packages = ["proteinsmc"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
