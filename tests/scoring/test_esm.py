@@ -62,7 +62,7 @@ def test_esm_pll_score_vs_iterative_pll_multiple_sequences(esm_model):
   key = jax.random.PRNGKey(0)
 
   sequences = jax.random.randint(
-    key, (5, 50), 0, 20, dtype=jnp.int8
+    key, (5, 200), 0, 20, dtype=jnp.int8
   )
   
   @jax.jit

@@ -21,14 +21,15 @@ if TYPE_CHECKING:
   from proteinsmc.models.types import ProteinSequence
 
 
-PLL_ALPHA = 0.25
-PLL_BETA = 0.75
+# PLL_ALPHA = 0.25
+# PLL_BETA = 0.75
 PLL_EPSILON = 1e-6
 
 
 def make_esm_pll_score(
   model_name: Literal["esmc_300m", "esmc_600m"],
   pll_method: Literal["ofs", "per_position", "bayes"],
+  method_kwargs: dict[str, float] | None = None,
 ) -> FitnessFn:
   """Create an ESM-based protein sequence scoring function.
 
@@ -93,6 +94,8 @@ def make_esm_pll_score(
 
         return total_log_prob / sequence.shape[0]
     case "bayes":
+      PLL_ALPHA = method_kwargs.get("alpha", PLL_ALPHA)
+      PLL_BETA = method_kwargs.get("beta", PLL_BETA)
 
       @partial(jax.jit, static_argnames=("_key", "_context"))
       def esm_pll_score(
