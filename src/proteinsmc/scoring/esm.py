@@ -20,15 +20,12 @@ if TYPE_CHECKING:
   from proteinsmc.models.fitness import FitnessFn
   from proteinsmc.models.types import ProteinSequence
 
-
-# PLL_ALPHA = 0.25
-# PLL_BETA = 0.75
-PLL_EPSILON = 1e-6
+PLL_EPSILON = 1e-6  # Small value to avoid log(0) issues
 
 
 def make_esm_pll_score(
   model_name: Literal["esmc_300m", "esmc_600m"],
-  pll_method: Literal["ofs", "per_position", "bayes"],
+  pll_method: Literal["ofs", "per_position", "per_masked_chunk", "whole"],
   method_kwargs: dict[str, float] | None = None,
 ) -> FitnessFn:
   """Create an ESM-based protein sequence scoring function.
@@ -44,6 +41,8 @@ def make_esm_pll_score(
       A FitnessFn that takes a protein sequence and returns its PLL score.
 
   """
+  if method_kwargs is None:
+    method_kwargs = {}
   client = ESMC.from_pretrained(model_name)
   eqx_model = esmj.from_torch(client)
   eqx_model = eqx.filter_jit(eqx_model)
@@ -93,9 +92,7 @@ def make_esm_pll_score(
         total_log_prob = jnp.sum(log_probs)
 
         return total_log_prob / sequence.shape[0]
-    case "bayes":
-      PLL_ALPHA = method_kwargs.get("alpha", 0.15)
-      PLL_BETA = method_kwargs.get("beta", 0.85)
+    case "whole":
 
       @partial(jax.jit, static_argnames=("_key", "_context"))
       def esm_pll_score(
@@ -125,15 +122,8 @@ def make_esm_pll_score(
         # Get the model's probabilities P(yi = xi | x, θ)
         model_probs = jax.nn.softmax(logits)
 
-        # Apply Theorem 4.1: P(yi = xi | x\i, θ) = ((α + β)/α) P(yi = xi | x, θ) - (β/α)
-        # where α = PLL_ALPHA and β = PLL_BETA
-        uniform_prob = 1.0 / logits.shape[-1]
-        corrected_probs = ((PLL_ALPHA + PLL_BETA) / PLL_ALPHA) * model_probs - (
-          PLL_BETA / PLL_ALPHA
-        ) * uniform_prob
-
         # Ensure probabilities are valid (clamp to epsilon for numerical stability)
-        corrected_probs = jnp.maximum(corrected_probs, PLL_EPSILON)
+        corrected_probs = jnp.maximum(model_probs, PLL_EPSILON)
 
         # Get the corrected probabilities for the actual sequence tokens
         idx = jnp.arange(sequence.shape[0])
@@ -142,6 +132,38 @@ def make_esm_pll_score(
         # Calculate log-likelihood and normalize by sequence length
         log_probs = jnp.log(jnp.maximum(token_probs, PLL_EPSILON))
         total_log_prob = jnp.sum(log_probs)
+
+        return total_log_prob / sequence.shape[0]
+    case "per_masked_chunk":
+      masking_ratio = method_kwargs.get("masking_ratio", 0.15)
+
+      @partial(jax.jit, static_argnames=("_context"))
+      def esm_pll_score(
+        sequence: ProteinSequence,
+        _key: PRNGKeyArray,
+        _context: Array | None = None,
+      ) -> Float:
+        """Calculate the PLL score using per-masked-chunk method."""
+        chunk_size = int(sequence.shape[0] * masking_ratio)
+        num_chunks = (sequence.shape[0] + chunk_size - 1) // chunk_size
+        chunk_idxs = jax.random.permutation(
+          _key,
+          jnp.arange(sequence.shape[0]),
+          independent=True,
+        )
+        sequence_chunks = chunk_idxs.reshape(num_chunks, chunk_size)
+
+        @jax.jit
+        def process_chunk(chunk: Int) -> Float:
+          # Mask the chunk
+          masked_sequence = sequence.at[chunk].set(ESM_MASK_ID)
+          tokens, _ = remap_sequences(masked_sequence)
+          logits = eqx_model(tokens[None]).logits[0, 1:-1, :]
+          return jax.nn.log_softmax(logits)
+
+        all_chunk_log_probs = jax.vmap(process_chunk)(sequence_chunks)
+        # Combine chunk log probs
+        total_log_prob = jnp.sum(all_chunk_log_probs)
 
         return total_log_prob / sequence.shape[0]
     case _:

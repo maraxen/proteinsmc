@@ -13,7 +13,3 @@ ignore = [
   "D213",
 ]
 
-[lint.per-file-ignores]
-"src/proteinsmc/utils/parquet_io.py" = [
-  "ANN401",
-]

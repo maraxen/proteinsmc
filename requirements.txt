@@ -8,6 +8,7 @@ polars
 equinox
 httpx
 git+https://github.com/maraxen/ColabDesign.git
+git+https://github.com/maraxen/prxteinmpnn.git
 uuid-utils
 safetensors
 git+https://github.com/maraxen/esm.git

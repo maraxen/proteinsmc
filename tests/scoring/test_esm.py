@@ -28,15 +28,15 @@ def esm_model():
     return eqx.filter_jit(eqx_model)
 
 def test_make_esm_pll_score_factory(esm_model):
-    """
-    Tests that the factory function returns a valid, callable scoring function.
-    """
+    """Tests that the factory function returns a valid, callable scoring function."""
     # We pass the loaded model to avoid re-loading
     score_fn = make_esm_pll_score(model_name="esmc_300m", pll_method="per_position")
+    score_fn = make_esm_pll_score(model_name="esmc_300m", pll_method="whole")
+    score_fn = make_esm_pll_score(model_name="esmc_300m", pll_method="per_masked_chunk")
     assert callable(score_fn), "The factory did not return a callable function."
 
 @pytest.mark.slow  # Mark this as a slow test
-def test_esm_pll_score_vs_iterative_pll_multiple_sequences(esm_model):
+def test_compare_pll_scores(esm_model):
   """
   Compares the O(1) PLL proxy score against a manually calculated,
   iterative single-position-masking PLL score for multiple input sequences.
@@ -57,24 +57,44 @@ def test_esm_pll_score_vs_iterative_pll_multiple_sequences(esm_model):
     >>> test_esm_pll_score_vs_iterative_pll_multiple_sequences(esm_model)
   """
   per_pos_score_fn = make_esm_pll_score(model_name="esmc_300m", pll_method="per_position")
-  bayes_score_fn = make_esm_pll_score(model_name="esmc_300m", pll_method="bayes")
+  whole_score_fn = make_esm_pll_score(model_name="esmc_300m", pll_method="whole")
+  per_masked_chunk_score_fn = make_esm_pll_score(model_name="esmc_300m", pll_method="per_masked_chunk")
 
   key = jax.random.PRNGKey(0)
+  seq_key, score_key = jax.random.split(key)
 
   sequences = jax.random.randint(
-    key, (5, 200), 0, 20, dtype=jnp.int8
+    seq_key, (5, 50), 0, 20, dtype=jnp.int8
   )
   
   @jax.jit
   def get_scores(sequence):
     """Helper function to get scores for a single sequence."""
     per_pos_score = per_pos_score_fn(sequence, None, None)
-    bayes_score = bayes_score_fn(sequence, None, None)
-    return per_pos_score, bayes_score
+    whole_score = whole_score_fn(sequence, None, None)
+    per_masked_chunk_score = per_masked_chunk_score_fn(sequence, score_key, None)
+    return per_pos_score, whole_score, per_masked_chunk_score
 
   scores = jax.vmap(get_scores)(sequences)
-  per_pos_scores, bayes_scores = scores
+  per_pos_scores, whole_scores, per_masked_chunk_scores = scores
 
-  assert jnp.allclose(per_pos_scores, bayes_scores, rtol=1e-2, atol=1e-2), (
-      f"Scores do not align: proxy={bayes_scores}, iterative={per_pos_scores}"
-    )
+  assert all(
+    jnp.allclose(
+      score_a,
+      score_b,
+      rtol=1e-2,
+      atol=1e-2,
+      ) for score_a, score_b in zip(
+        (per_pos_scores,
+          per_pos_scores,
+          per_masked_chunk_scores,
+          ), 
+        (
+          whole_scores,
+          per_masked_chunk_scores,
+          whole_scores
+        )
+      )
+  ), ("PLL scores do not match across methods within tolerance. "
+    f"Per-position scores: {per_pos_scores}, Whole scores: {whole_scores}, "
+    f"Per-masked-chunk scores: {per_masked_chunk_scores}")

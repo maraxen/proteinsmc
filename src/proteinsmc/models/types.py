@@ -11,7 +11,6 @@ import enum
 from typing import Protocol, TypeVar
 
 import jax.numpy as jnp
-from colabdesign.mpnn import mk_mpnn_model
 from jaxtyping import Array, Int
 
 NucleotideSequence = Int[Array, "sequence_length 4"]
@@ -24,7 +23,6 @@ The integers correspond to the amino acids in the protein alphabet.
 """
 EvoSequence = Int[NucleotideSequence | ProteinSequence, "sequence_length alphabet_size"]
 BatchEvoSequence = Int[Array, "batch_size sequence_length alphabet_size"]
-MPNNModel = mk_mpnn_model
 
 
 class SequenceType(enum.Enum):
