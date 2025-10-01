@@ -7,7 +7,7 @@ from .hmc import HMCConfig, HMCState
 from .mcmc import MCMCConfig, MCMCState
 from .memory import AutoTuningConfig, MemoryConfig
 from .nuts import NUTSConfig, NUTSState
-from .parallel_replica import ParallelReplicaConfig, PRSMCOutput, PRSMCState, PRSMCStepConfig
+from .parallel_replica import ParallelReplicaConfig, PRSMCOutput, PRSMCState
 from .sampler_base import BaseSamplerConfig, SamplerOutputProtocol
 from .smc import (
   PopulationBools,
@@ -37,7 +37,6 @@ __all__ = [
   "AutoTuningConfig",
   "ParallelReplicaConfig",
   "PRSMCState",
-  "PRSMCStepConfig",
   "SMCConfig",
   "SMCOutput",
   "SMCState",

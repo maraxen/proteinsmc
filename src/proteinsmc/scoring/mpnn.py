@@ -10,7 +10,7 @@ import jax
 import jax.numpy as jnp
 from prxteinmpnn.mpnn import get_mpnn_model
 from prxteinmpnn.scoring.score import make_score_sequence
-from prxteinmpnn.utils.data_structures import ModelInputs
+from prxteinmpnn.utils.data_structures import Protein
 from prxteinmpnn.utils.decoding_order import (
   DecodingOrder,
   random_decoding_order,
@@ -36,14 +36,14 @@ class DecodingOrderEnum(enum.Enum):
 
 def make_mpnn_score(
   mpnn_model_params: ModelParameters,
-  model_inputs: ModelInputs,
+  protein_inputs: Protein,
   decoding_order_enum: DecodingOrderEnum,
 ) -> FitnessFn:
   """Create a scoring function for the MPNN model.
 
   Args:
       mpnn_model_params (ModelParameters): Parameters for the MPNN model.
-      model_inputs (ScoringInputs): Inputs required for scoring, including sequence, structure,
+      protein_inputs (Protein): Inputs required for scoring, including sequence, structure,
         and other necessary data.
       decoding_order_enum (DecodingOrderEnum): Enum specifying the decoding order type.
 
@@ -53,7 +53,12 @@ def make_mpnn_score(
   """
   match decoding_order_enum:
     case DecodingOrderEnum.KEY_RANDOM:
-      input_args = astuple(model_inputs)[2:]
+      input_args = (
+        protein_inputs.coordinates,
+        protein_inputs.atom_mask,
+        protein_inputs.residue_index,
+        protein_inputs.chain_index,
+      )
       score_fn = make_score_sequence(
         model_parameters=mpnn_model_params,
         decoding_order_fn=random_decoding_order,
@@ -70,11 +75,16 @@ def make_mpnn_score(
           key,
           protein_sequence,
           *input_args,
-        )
+        )[0]
 
       return mpnn_score
     case DecodingOrderEnum.SAME_RANDOM | DecodingOrderEnum.SEQUENTIAL:
-      input_args = astuple(model_inputs)[2:]
+      input_args = (
+        protein_inputs.coordinates,
+        protein_inputs.atom_mask,
+        protein_inputs.residue_index,
+        protein_inputs.chain_index,
+      )
       if decoding_order_enum == DecodingOrderEnum.SEQUENTIAL:
 
         def sequential_decode_order(
@@ -104,7 +114,7 @@ def make_mpnn_score(
           _key,
           protein_sequence,
           *input_args,
-        )
+        )[0]
 
       return mpnn_score
     case _:

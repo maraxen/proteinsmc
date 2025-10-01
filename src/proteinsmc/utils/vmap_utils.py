@@ -48,9 +48,6 @@ def chunked_vmap(  # noqa: PLR0913
     return jax.tree_util.tree_map(lambda x: jnp.array([], dtype=x.dtype), data)
 
   num_entries = jax.tree_util.tree_leaves(data)[0].shape[0]
-  if num_entries == 0:
-    return jax.tree_util.tree_map(lambda x: jnp.array([], dtype=x.dtype), data)
-
   num_chunks = (num_entries + chunk_size - 1) // chunk_size
   padded_size = num_chunks * chunk_size
 

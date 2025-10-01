@@ -22,7 +22,7 @@ from .constants import (
 from .vmap_utils import chunked_vmap
 
 
-@partial(jit, static_argnames=("n_states", "mutation_rate"))
+@partial(jit, static_argnames=("q_states", "mutation_rate"))
 def mutate(
   key: PRNGKeyArray,
   sequence: EvoSequence,
