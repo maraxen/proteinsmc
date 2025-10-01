@@ -1,0 +1,4 @@
+# file: /app/src/proteinsmc/utils/mutation.py
+# hypothesis_version: 6.140.2
+
+['mutation_rate', 'n_states', 'nucleotide', 'protein', 'q_states']

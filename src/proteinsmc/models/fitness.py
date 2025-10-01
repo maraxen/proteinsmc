@@ -30,12 +30,34 @@ class FitnessFunction:
   kwargs: dict[str, Any] = field(default_factory=dict)
 
 
+  def __post_init__(self) -> None:
+    """Validate the fitness function configuration."""
+    if not isinstance(self.name, str):
+      msg = "name must be a string."
+      raise TypeError(msg)
+    if not isinstance(self.n_states, int):
+      msg = "n_states must be an integer."
+      raise TypeError(msg)
+    if not isinstance(self.kwargs, dict):
+      msg = "kwargs must be a dict."
+      raise TypeError(msg)
+
+
 @dataclass(frozen=True)
 class CombineFunction:
   """Represents a function to combine fitness scores."""
 
   name: str
   kwargs: dict[str, Any] = field(default_factory=dict)
+
+  def __post_init__(self) -> None:
+    """Validate the combine function configuration."""
+    if not isinstance(self.name, str):
+      msg = "name must be a string."
+      raise TypeError(msg)
+    if not isinstance(self.kwargs, dict):
+      msg = "kwargs must be a dict."
+      raise TypeError(msg)
 
 
 @dataclass(frozen=True)

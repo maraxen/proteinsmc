@@ -3,19 +3,19 @@
 Tests cover initialization and edge cases for BaseSamplerConfig.
 """
 import pytest
-from proteinsmc.models import sampler_base
+from proteinsmc.models import sampler_base, FitnessEvaluator
 
 
-def test_base_sampler_config_initialization():
+def test_base_sampler_config_initialization(fitness_evaluator_mock: FitnessEvaluator):
   """Test BaseSamplerConfig initialization with valid arguments.
   Args:
-    None
+    fitness_evaluator_mock: A mock fitness evaluator.
   Returns:
     None
   Raises:
     AssertionError: If the config fields do not match expected values.
   Example:
-    >>> test_base_sampler_config_initialization()
+    >>> test_base_sampler_config_initialization(fitness_evaluator_mock)
   """
   config = sampler_base.BaseSamplerConfig(
     prng_seed=123,
@@ -26,9 +26,7 @@ def test_base_sampler_config_initialization():
     mutation_rate=0.05,
     diversification_ratio=0.2,
     sequence_type="protein",
-    fitness_evaluator=None,
-    memory_config=None,
-    annealing_config=None,
+    fitness_evaluator=fitness_evaluator_mock,
   )
   assert config.prng_seed == 123
   assert config.sampler_type == "smc"
@@ -38,3 +36,6 @@ def test_base_sampler_config_initialization():
   assert config.mutation_rate == 0.05
   assert config.diversification_ratio == 0.2
   assert config.sequence_type == "protein"
+  assert config.sequence_type == "protein"
+  assert isinstance(config.fitness_evaluator, FitnessEvaluator)
+  assert isinstance(config.memory_config, MemoryConfig)

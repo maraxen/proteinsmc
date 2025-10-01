@@ -3,19 +3,27 @@
 Tests cover initialization, type checking, and edge cases for SMCConfig.
 """
 import pytest
-from proteinsmc.models import SMCConfig, FitnessEvaluator, MemoryConfig, AnnealingConfig
+from proteinsmc.models import SMCConfig, FitnessEvaluator, MemoryConfig, AnnealingConfig, AutoTuningConfig
+from proteinsmc.models import (
+    SMCConfig,
+    FitnessEvaluator,
+    MemoryConfig,
+    AnnealingConfig,
+    FitnessFunction,
+    AutoTuningConfig,
+)
 
 
-def test_smc_config_initialization():
+def test_smc_config_initialization(fitness_evaluator_mock: FitnessEvaluator):
   """Test SMCConfig initialization with valid arguments.
   Args:
-    None
+    fitness_evaluator_mock: A mock fitness evaluator.
   Returns:
     None
   Raises:
     AssertionError: If the config fields do not match expected values.
   Example:
-    >>> test_smc_config_initialization()
+    >>> test_smc_config_initialization(fitness_evaluator_mock)
   """
   config = SMCConfig(
     prng_seed=42,
@@ -25,12 +33,12 @@ def test_smc_config_initialization():
     mutation_rate=0.1,
     diversification_ratio=0.5,
     sequence_type="protein",
-    fitness_evaluator=FitnessEvaluator(fitness_functions=()),
+    fitness_evaluator=fitness_evaluator_mock,
     memory_config=MemoryConfig(
-      population_chunk_size=16,
-      enable_chunked_vmap=True,
+      batch_size=16,
+      enable_batched_computation=True,
       device_memory_fraction=0.8,
-      auto_tuning_config=None,
+      auto_tuning_config=AutoTuningConfig(),
     ),
     annealing_config=AnnealingConfig(
       annealing_fn="linear",

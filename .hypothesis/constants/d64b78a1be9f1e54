@@ -1,0 +1,4 @@
+# file: /app/src/proteinsmc/sampling/hmc.py
+# hypothesis_version: 6.140.2
+
+['_mutation_fn', 'config', 'fitness_fn', 'initialize_hmc_state', 'run_hmc_loop']

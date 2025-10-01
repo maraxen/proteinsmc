@@ -1,0 +1,4 @@
+# file: /app/src/proteinsmc/models/sampler_base.py
+# hypothesis_version: 6.140.2
+
+[0.0, 0.1, 1.0, 100, 'SamplerOutput', 'SamplerState', 'nucleotide', 'protein', 'unknown']

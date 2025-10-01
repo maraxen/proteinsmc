@@ -1,0 +1,4 @@
+# file: /app/src/proteinsmc/models/types.py
+# hypothesis_version: 6.140.2
+
+['T', 'nucleotide', 'protein', 'sequence_length 4']

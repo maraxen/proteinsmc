@@ -1,0 +1,4 @@
+# file: /app/src/proteinsmc/utils/annealing.py
+# hypothesis_version: 6.140.2
+
+[1e-09, 0.5, 1.0, 5.0, 700.0, '_context', 'cosine', 'exponential', 'linear', 'rate', 'static']

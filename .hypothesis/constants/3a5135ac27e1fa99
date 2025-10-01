@@ -1,0 +1,4 @@
+# file: /app/src/proteinsmc/utils/memory.py
+# hypothesis_version: 6.140.2
+
+[0.5, 1.0, 2.0, 3.0, 1024, 'bytes_limit', 'cpu', 'gpu', 'inf', 'memory_stats', 'tpu']

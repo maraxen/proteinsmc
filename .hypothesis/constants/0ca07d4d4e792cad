@@ -1,0 +1,4 @@
+# file: /app/src/proteinsmc/sampling/gibbs.py
+# hypothesis_version: 6.140.2
+
+[0.0, 'config', 'fitness_fn', 'run_gibbs_loop', 'update_fns']
