@@ -3,23 +3,24 @@
 Tests cover initialization and edge cases for MCMC sampler config/model.
 """
 import pytest
-from proteinsmc.models import mcmc
+from proteinsmc.models import mcmc, FitnessEvaluator
 
 
-def test_mcmc_config_initialization():
+def test_mcmc_config_initialization(fitness_evaluator_mock: FitnessEvaluator):
   """Test MCMCConfig initialization with valid arguments.
   Args:
-    None
+    fitness_evaluator_mock: A mock fitness evaluator.
   Returns:
     None
   Raises:
     AssertionError: If the config fields do not match expected values.
   Example:
-    >>> test_mcmc_config_initialization()
+    >>> test_mcmc_config_initialization(fitness_evaluator_mock)
   """
   config = mcmc.MCMCConfig(
-    n_steps=15,
-    proposal_std=0.05
+    num_samples=15,
+    step_size=0.05,
+    fitness_evaluator=fitness_evaluator_mock
   )
-  assert config.n_steps == 15
-  assert config.proposal_std == 0.05
+  assert config.num_samples == 15
+  assert config.step_size == 0.05

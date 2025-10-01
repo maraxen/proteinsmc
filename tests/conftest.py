@@ -1,7 +1,7 @@
 import pytest
 import jax
 from typing import Tuple
-from src.proteinsmc.sampling.particle_systems.smc import SMCConfig
+from proteinsmc.models import SMCConfig, FitnessEvaluator, FitnessFunction
 
 import jax.numpy as jnp
 
@@ -35,23 +35,13 @@ def sample_sequences() -> Tuple[str, str]:
   return protein_sequence, nucleotide_sequence
 
 @pytest.fixture(scope="session")
-def fitness_evaluator_mock():
-  """Provides a mock fitness evaluator for testing purposes.
-  Args:
-    None
-  Returns:
-    Callable[[jax.Array], jax.Array]: A mock fitness evaluator function.
-  Example:
-    >>> evaluator = fitness_evaluator_mock()
-    >>> fitness = evaluator(jax.random.uniform(jax.random.PRNGKey(0), (10,)))
-  """
-  def mock_evaluator(x: jax.Array) -> jax.Array:
-    return jnp.sum(x)
-
-  return mock_evaluator
+def fitness_evaluator_mock() -> FitnessEvaluator:
+  """Provides a mock FitnessEvaluator instance for testing purposes."""
+  mock_fitness_function = FitnessFunction(name="mock_fitness", n_states=20)
+  return FitnessEvaluator(fitness_functions=(mock_fitness_function,))
 
 @pytest.fixture(scope="session")
-def default_smc_config() -> SMCConfig:
+def default_smc_config(fitness_evaluator_mock: FitnessEvaluator) -> SMCConfig:
   """Provides a basic default SMCConfig object for SMC tests.
   Args:
     None
@@ -72,5 +62,5 @@ def default_smc_config() -> SMCConfig:
     diversification_ratio=0.1,
     sampler_type="smc",
     algorithm="AdaptiveTemperedSMC",
-    fitness_evaluator=fitness_evaluator_mock(),
+    fitness_evaluator=fitness_evaluator_mock,
   )
