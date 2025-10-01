@@ -3,23 +3,15 @@
 Tests cover initialization and edge cases for NUTS sampler config/model.
 """
 import pytest
-from proteinsmc.models import nuts
+from proteinsmc.models import nuts, FitnessEvaluator
 
 
-def test_nuts_config_initialization():
-  """Test NUTSConfig initialization with valid arguments.
-  Args:
-    None
-  Returns:
-    None
-  Raises:
-    AssertionError: If the config fields do not match expected values.
-  Example:
-    >>> test_nuts_config_initialization()
-  """
+def test_nuts_config_initialization(basic_fitness_evaluator: FitnessEvaluator):
+  """Test NUTSConfig initialization with valid arguments."""
   config = nuts.NUTSConfig(
-    n_steps=25,
-    max_tree_depth=10
+    num_samples=25,
+    max_num_doublings=10,
+    fitness_evaluator=basic_fitness_evaluator,
   )
-  assert config.n_steps == 25
-  assert config.max_tree_depth == 10
+  assert config.num_samples == 25
+  assert config.max_num_doublings == 10

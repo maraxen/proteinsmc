@@ -33,3 +33,21 @@ class AnnealingConfig:
   beta_max: float = 1.0
   n_steps: int = 1000
   kwargs: dict[str, Any] = field(default_factory=dict)
+
+  def __post_init__(self) -> None:
+    """Validate the annealing configuration."""
+    if not isinstance(self.annealing_fn, str):
+      msg = "annealing_fn must be a string."
+      raise TypeError(msg)
+    if not isinstance(self.beta_min, (int, float)):
+        msg = "beta_min must be a float."
+        raise TypeError(msg)
+    if not isinstance(self.beta_max, (int, float)):
+      msg = "beta_max must be a float."
+      raise TypeError(msg)
+    if not isinstance(self.n_steps, int):
+      msg = "n_steps must be an integer."
+      raise TypeError(msg)
+    if not isinstance(self.kwargs, dict):
+        msg = "kwargs must be a dict."
+        raise TypeError(msg)
