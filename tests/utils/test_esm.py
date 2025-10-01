@@ -1,5 +1,7 @@
 import jax.numpy as jnp
 import numpy as np
+import chex
+
 
 from proteinsmc.utils.esm import remap_sequences
 from proteinsmc.utils.constants import (

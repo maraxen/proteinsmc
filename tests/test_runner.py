@@ -113,7 +113,7 @@ class TestRunExperiment:
   @patch("proteinsmc.runner.get_fitness_function")
   @patch("proteinsmc.runner.get_annealing_function")
   @patch("proteinsmc.runner.RunManager")
-  def test_successful_run_with_auto_tuning(
+  def test_successful_run_with__auto_tuning(
     self,
     mock_run_manager: Mock,
     mock_get_annealing_function: Mock,
