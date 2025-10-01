@@ -55,15 +55,18 @@ def make_esm_score(
 
     """
     sequence = remap_sequences(sequence)
-    sequence = sequence[None, :]  # Add batch dimension
+    sequence = sequence[None, :]  # Add batch dimension: (1, seq_len)
     output = eqx_model(sequence)
-    log_probs = jax.nn.log_softmax(output.logits, axis=-1)
+    log_probs = jax.nn.log_softmax(output.logits, axis=-1)  # (1, seq_len, vocab_size)
+    # Index log_probs with ESM token IDs for each position in the sequence
+    seq_indices = sequence[..., None]  # (1, seq_len, 1)
     seq_log_probs = jnp.take_along_axis(
       log_probs,
-      sequence[:, jnp.newaxis],
+      seq_indices,
       axis=-1,
-    ).squeeze(-1)
-    pll_score = jnp.sum(seq_log_probs) / (sequence.shape[0] + EPSILON)
+    ).squeeze(-1)  # (1, seq_len)
+    # PLL score: sum over sequence length, normalize by length
+    pll_score = jnp.sum(seq_log_probs) / (sequence.shape[1] + EPSILON)
     return pll_score.astype(jnp.float32)
 
   return score
