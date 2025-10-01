@@ -60,10 +60,10 @@ def make_esm_score(
     log_probs = jax.nn.log_softmax(output.logits, axis=-1)
     seq_log_probs = jnp.take_along_axis(
       log_probs,
-      sequence[:, :, jnp.newaxis],
+      sequence[:, jnp.newaxis],
       axis=-1,
     ).squeeze(-1)
-    pll_score = jnp.sum(seq_log_probs) / (sequence.shape[1] + EPSILON)
+    pll_score = jnp.sum(seq_log_probs) / (sequence.shape[0] + EPSILON)
     return pll_score.astype(jnp.float32)
 
   return score
