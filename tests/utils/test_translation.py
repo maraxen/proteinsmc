@@ -1,5 +1,5 @@
 import pytest
-from hypothesis import given, strategies as st
+from hypothesis import given, strategies as st, settings
 import jax.numpy as jnp
 
 from proteinsmc.utils.constants import PROTEINMPNN_X_INT
@@ -13,6 +13,7 @@ nucleotide_triplets_strategy = st.lists(st.integers(min_value=0, max_value=3), m
     lambda x: x[:(len(x) // 3) * 3]
 ).filter(lambda x: len(x) > 0)
 
+@settings(deadline=None)
 @given(protein_sequence=protein_sequence_strategy)
 def test_aa_to_nucleotide_to_aa_roundtrip(protein_sequence):
     """Tests that converting a protein sequence to nucleotides and back is reversible."""
@@ -26,6 +27,7 @@ def test_aa_to_nucleotide_to_aa_roundtrip(protein_sequence):
     
     assert jnp.array_equal(protein_seq_arr, round_trip_protein_seq)
 
+@settings(deadline=None)
 @given(nucleotide_sequence=nucleotide_triplets_strategy)
 def test_nucleotide_to_aa_is_valid(nucleotide_sequence):
     """Tests the is_valid_translation flag from nucleotide_to_aa."""

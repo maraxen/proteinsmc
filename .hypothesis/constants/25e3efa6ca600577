@@ -1,0 +1,4 @@
+# file: /app/src/proteinsmc/utils/initiate.py
+# hypothesis_version: 6.140.2
+
+['nucleotide', 'protein']

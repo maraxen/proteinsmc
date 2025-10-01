@@ -1,0 +1,4 @@
+# file: /app/src/proteinsmc/runner.py
+# hypothesis_version: 6.140.2
+
+['annealing_config', 'config_cls', 'gibbs', 'hmc', 'initialize_fn', 'mcmc', 'nuts', 'parallel_replica', 'run_fn', 'sequence_type', 'smc', 'step']

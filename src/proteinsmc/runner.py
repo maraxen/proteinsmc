@@ -122,10 +122,12 @@ def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int 
       "Auto-tuning is enabled. This may affect performance and memory usage. "
       "Ensure that the auto-tuning configuration is set correctly.",
     )
+    key, tune_key = jax.random.split(key)
     chunk_size = auto_tune_chunk_size(
       func=fitness_fn,
       test_data=(
-        jax.random.key(key),
+        tune_key,
+        jax.random.split(key)[0],
         jnp.zeros(
           (
             max(config.memory_config.auto_tuning_config.probe_chunk_sizes),

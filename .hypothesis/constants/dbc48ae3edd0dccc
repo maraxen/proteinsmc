@@ -1,0 +1,4 @@
+# file: /app/src/proteinsmc/models/fitness.py
+# hypothesis_version: 6.140.2
+
+['n_fitness_functions', 'sum']

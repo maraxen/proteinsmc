@@ -233,6 +233,7 @@ class MultiHeadAttention(AbstractFromTorch):
       einops.rearrange(k, "b s h d -> b s (h d)")
     )
 
+
   def __call__(self, x: InternalProjection) -> InternalProjection:
     """Apply multi-head attention with RoPE."""
     qkv = self.layernorm_qkv(x)

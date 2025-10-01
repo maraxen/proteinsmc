@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import enum
-from dataclasses import astuple
 from typing import TYPE_CHECKING
 
 import jax
@@ -17,10 +16,20 @@ from prxteinmpnn.utils.decoding_order import (
 )
 
 if TYPE_CHECKING:
-  from prxteinmpnn.utils.types import Array, Float, ModelParameters, PRNGKeyArray
+  from prxteinmpnn.utils.types import (
+    Array,
+    AtomMask,
+    ChainIndex,
+    Float,
+    ModelParameters,
+    PRNGKeyArray,
+    ResidueIndex,
+    StructureAtomicCoordinates,
+  )
 
   from proteinsmc.models.fitness import FitnessFn
   from proteinsmc.models.types import ProteinSequence
+
 
 DEFAULT_MPNN_MODEL = get_mpnn_model()
 
@@ -41,17 +50,25 @@ def make_mpnn_score(
 
   Args:
       mpnn_model_params (ModelParameters): Parameters for the MPNN model.
-      model_inputs (ScoringInputs): Inputs required for scoring, including sequence, structure,
-        and other necessary data.
+      coordinates (StructureAtomicCoordinates): Atomic coordinates of the protein.
+      atom_mask (AtomMask): Mask for atoms.
+      residue_index (ResidueIndex): Index of each residue.
+      chain_index (ChainIndex): Index of the chain for each residue.
       decoding_order_enum (DecodingOrderEnum): Enum specifying the decoding order type.
 
   Returns:
       A function that scores a protein sequence using the MPNN model.
 
   """
+  input_args = (
+    coordinates,
+    atom_mask,
+    residue_index,
+    chain_index,
+  )
+
   match decoding_order_enum:
     case DecodingOrderEnum.KEY_RANDOM:
-      input_args = astuple(model_inputs)[2:]
       score_fn = make_score_sequence(
         model_parameters=mpnn_model_params,
         decoding_order_fn=random_decoding_order,
@@ -68,11 +85,11 @@ def make_mpnn_score(
           key,
           protein_sequence,
           *input_args,
-        )
+        )[0]
 
       return mpnn_score
+
     case DecodingOrderEnum.SAME_RANDOM | DecodingOrderEnum.SEQUENTIAL:
-      input_args = astuple(model_inputs)[2:]
       if decoding_order_enum == DecodingOrderEnum.SEQUENTIAL:
 
         def sequential_decode_order(
@@ -102,9 +119,10 @@ def make_mpnn_score(
           _key,
           protein_sequence,
           *input_args,
-        )
+        )[0]
 
       return mpnn_score
+
     case _:
       msg = f"Unsupported decoding order enum: {decoding_order_enum}"
       raise ValueError(msg)
