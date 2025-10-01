@@ -9,19 +9,19 @@ from dataclasses import dataclass, field
 class MemoryConfig:
   """Configuration for memory efficiency and performance optimization."""
 
-  population_chunk_size: int = field(default=64)
-  """Size of the population chunk for processing."""
-  enable_chunked_vmap: bool = field(default=True)
+  batch_size: int = field(default=64)
+  """Size of the batch for processing."""
+  enable_batched_computation: bool = field(default=True)
   device_memory_fraction: float = field(default=0.8)
   auto_tuning_config: AutoTuningConfig = field(default_factory=lambda: AutoTuningConfig())
 
   def _validate_types(self) -> None:
     """Validate the types of the fields."""
-    if not isinstance(self.population_chunk_size, int):
-      msg = "population_chunk_size must be an integer."
+    if not isinstance(self.batch_size, int):
+      msg = "batch_size must be an integer."
       raise TypeError(msg)
-    if not isinstance(self.enable_chunked_vmap, bool):
-      msg = "enable_chunked_vmap must be a boolean."
+    if not isinstance(self.enable_batched_computation, bool):
+      msg = "enable_batched_computation must be a boolean."
       raise TypeError(msg)
     if not isinstance(self.device_memory_fraction, float):
       msg = "device_memory_fraction must be a float."
@@ -36,8 +36,8 @@ class MemoryConfig:
     if not (0.0 < self.device_memory_fraction <= 1.0):
       msg = "device_memory_fraction must be in (0.0, 1.0]."
       raise ValueError(msg)
-    if self.population_chunk_size <= 0:
-      msg = "population_chunk_size must be positive."
+    if self.batch_size <= 0:
+      msg = "batch_size must be positive."
       raise ValueError(msg)
 
 

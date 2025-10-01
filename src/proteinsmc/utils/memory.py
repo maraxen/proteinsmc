@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING, Callable
 import jax
 import jax.numpy as jnp
 
+from proteinsmc.utils.jax_utils import chunked_map
+
 if TYPE_CHECKING:
   from jaxtyping import Array, PRNGKeyArray, PyTree
 
@@ -129,15 +131,13 @@ def benchmark_chunk_size(
     Benchmark results
 
   """
-  from proteinsmc.utils.vmap_utils import chunked_vmap
-
   try:
-    _ = chunked_vmap(func, test_data, chunk_size, static_args)
+    _ = chunked_map(func, test_data, chunk_size, static_args=static_args)
 
     times = []
     for _ in range(num_trials):
       start_time = time.time()
-      result = chunked_vmap(func, test_data, chunk_size, static_args)
+      result = chunked_map(func, test_data, chunk_size, static_args=static_args)
       jax.block_until_ready(result)
       end_time = time.time()
       times.append(end_time - start_time)

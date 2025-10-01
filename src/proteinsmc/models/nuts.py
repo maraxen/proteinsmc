@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import field
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from flax.struct import PyTreeNode
@@ -35,6 +35,7 @@ class NUTSState(PyTreeNode):
   blackjax_state: BlackjaxState
 
 
+@dataclass(frozen=True)
 class NUTSConfig(BaseSamplerConfig):
   """Configuration for the NUTS sampler.
 
