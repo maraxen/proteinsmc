@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
+from dataclasses import dataclass
 
 from flax.struct import PyTreeNode
 
@@ -18,6 +21,7 @@ if TYPE_CHECKING:
 DEFAULT_STEP_SIZE = 1e-1
 
 
+@dataclass(frozen=True)
 class MCMCConfig(BaseSamplerConfig):
   """Configuration for the MCMC sampler using a Random Walk Metropolis kernel.
 

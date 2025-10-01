@@ -29,6 +29,12 @@ class FitnessFunction:
   n_states: int
   kwargs: dict[str, Any] = field(default_factory=dict)
 
+  def __post_init__(self):
+    if not isinstance(self.name, str):
+      raise TypeError("name must be a string.")
+    if not isinstance(self.n_states, int):
+      raise TypeError("n_states must be an integer.")
+
 
 @dataclass(frozen=True)
 class CombineFunction:

@@ -1,0 +1,4 @@
+# file: /app/src/proteinsmc/scoring/mpnn.py
+# hypothesis_version: 6.140.2
+
+['random_each', 'same_random', 'sequential']

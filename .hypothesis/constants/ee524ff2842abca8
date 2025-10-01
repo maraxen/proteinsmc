@@ -1,0 +1,4 @@
+# file: /app/src/proteinsmc/sampling/particle_systems/parallel_replica.py
+# hypothesis_version: 6.140.2
+
+[0.0, 1e-38, 1e-09, 1.0, 'annealing_fn', 'beta', 'config', 'ess_per_island', 'fitness_fn', 'fitness_fn_partial', 'lineage', 'meta_beta', 'mutation_rate', 'nucleotide', 'num_accepted_swaps', 'num_attempted_swaps', 'p_step', 'population', 'protein', 'q_states', 'step_config']
