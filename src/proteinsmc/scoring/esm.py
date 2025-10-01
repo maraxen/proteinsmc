@@ -55,6 +55,7 @@ def make_esm_score(
 
     """
     sequence = remap_sequences(sequence)
+    sequence = sequence[None, :]  # Add batch dimension
     output = eqx_model(sequence)
     log_probs = jax.nn.log_softmax(output.logits, axis=-1)
     seq_log_probs = jnp.take_along_axis(
