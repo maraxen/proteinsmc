@@ -13,7 +13,7 @@ def test_parallel_replica_config_initialization(
   """Test ParallelReplicaConfig initialization with valid arguments.
   Args:
     fitness_evaluator_mock: A mock fitness evaluator.
-    basic_smc_config: A default SMCConfig.
+    basic_smc_config: A basic SMCConfig.
   Returns:
     None
   Raises:
@@ -21,7 +21,7 @@ def test_parallel_replica_config_initialization(
   Example:
     >>> test_parallel_replica_config_initialization(fitness_evaluator_mock, basic_smc_config)
   """
-  annealing_config = AnnealingConfig(annealing_fn="linear")
+  annealing_config = AnnealingConfig(annealing_fn="linear", n_steps=10)
   n_islands = 4
 
   config = parallel_replica.ParallelReplicaConfig(
@@ -33,5 +33,6 @@ def test_parallel_replica_config_initialization(
     island_betas=[0.25, 0.5, 0.75, 1.0]
   )
   assert config.n_islands == 4
-
   assert config.exchange_frequency == 5
+  assert config.smc_config == basic_smc_config
+  assert config.meta_annealing_schedule == annealing_config
