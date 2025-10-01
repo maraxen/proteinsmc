@@ -5,16 +5,19 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from blackjax.base import State as BlackjaxState
 from flax import struct
-from jaxtyping import Array, Float, Int, PRNGKeyArray
 
-from .annealing import AnnealingConfig
 from .sampler_base import BaseSamplerConfig, SamplerOutputProtocol
-from .smc import PopulationSequences
 
 if TYPE_CHECKING:
+  from blackjax.smc.base import SMCInfo
+  from blackjax.smc.base import SMCState as BlackjaxSMCState
+  from jaxtyping import Array, Float, Int, PRNGKeyArray
+
   from proteinsmc.models.fitness import FitnessEvaluator
+
+  from .annealing import AnnealingConfig
+  from .smc import Lineage, SMCConfig
 
 
 @dataclass(frozen=True)
@@ -28,30 +31,21 @@ class ExchangeConfig:
   exchange_frequency: int = field(default=5)
   fitness_evaluator: FitnessEvaluator = field(kw_only=True)
   sequence_type: str = field(default="protein")
-
-
-@dataclass(frozen=True)
-class PRSMCStepConfig:
-  """Configuration for a single step of the Parallel Replica SMC algorithm."""
-
-  population_size_per_island: int = field(default=64)
-  mutation_rate: float = field(default=0.1)
-  sequence_type: str = field(default="protein")
-  fitness_evaluator: FitnessEvaluator = field(kw_only=True)
-  exchange_config: ExchangeConfig = field(kw_only=True)
-  meta_beta_annealing_schedule: AnnealingConfig = field(kw_only=True)
+  meta_annealing_schedule: AnnealingConfig = field(kw_only=True)
+  track_lineage: bool = field(default=False)
 
 
 @dataclass(frozen=True)
 class ParallelReplicaConfig(BaseSamplerConfig):
   """Configuration for the Parallel Replica SMC sampler."""
 
+  smc_config: SMCConfig = field(kw_only=True)
   n_islands: int = field(default=1)
-  population_size_per_island: int = field(default=64)
   n_exchange_attempts: int = field(default=10)
   exchange_frequency: int = field(default=5)
   island_betas: list[float] = field(default_factory=list)
-  meta_beta_annealing_schedule: AnnealingConfig = field(kw_only=True)
+  meta_annealing_schedule: AnnealingConfig = field(kw_only=True)
+  track_lineage: bool = field(default=False)
   sampler_type: str = field(default="parallel_replica", init=False)
 
   def __post_init__(self) -> None:
@@ -60,8 +54,8 @@ class ParallelReplicaConfig(BaseSamplerConfig):
     if self.n_islands <= 0:
       msg = "n_islands must be positive."
       raise ValueError(msg)
-    if self.population_size_per_island <= 0:
-      msg = "population_size_per_island must be positive."
+    if self.smc_config.population_size <= 0:
+      msg = "population_size must be positive."
       raise ValueError(msg)
     if self.n_exchange_attempts < 0:
       msg = "n_exchange_attempts must be non-negative."
@@ -74,27 +68,15 @@ class ParallelReplicaConfig(BaseSamplerConfig):
       raise ValueError(msg)
 
   @property
-  def step_config(self) -> PRSMCStepConfig:
-    """Return the step configuration."""
-    return PRSMCStepConfig(
-      population_size_per_island=self.population_size_per_island,
-      mutation_rate=self.mutation_rate,
-      sequence_type=self.sequence_type,
-      fitness_evaluator=self.fitness_evaluator,
-      exchange_config=self.exchange_config,
-      meta_beta_annealing_schedule=self.meta_beta_annealing_schedule,
-    )
-
-  @property
   def exchange_config(self) -> ExchangeConfig:
     """Return the exchange configuration."""
     return ExchangeConfig(
       n_islands=self.n_islands,
-      population_size_per_island=self.population_size_per_island,
       n_exchange_attempts=self.n_exchange_attempts,
       exchange_frequency=self.exchange_frequency,
       fitness_evaluator=self.fitness_evaluator,
       sequence_type=self.sequence_type,
+      meta_annealing_schedule=self.meta_annealing_schedule,
     )
 
 
@@ -102,13 +84,14 @@ class IslandState(struct.PyTreeNode):
   """State of a single island in the Parallel Replica SMC sampler."""
 
   key: PRNGKeyArray
-  population: PopulationSequences
-  blackjax_initial_state: BlackjaxState
+  blackjax_state: BlackjaxSMCState
   beta: Float
   logZ_estimate: Float  # noqa: N815
   mean_fitness: Float
   ess: Float
   step: Int = 0
+  lineage: Lineage | None = None
+  smc_info: SMCInfo | None = None
 
 
 class PRSMCState(struct.PyTreeNode):
@@ -128,6 +111,7 @@ class PRSMCOutput(SamplerOutputProtocol):
   mean_fitness_per_island: Array
   max_fitness_per_island: Array
   logZ_increment_per_island: Array  # noqa: N815
+  lineage_per_island: Array | None
   meta_beta: Array
   num_accepted_swaps: Array
   num_attempted_swaps: Array

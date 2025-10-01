@@ -74,10 +74,10 @@ def _validate_component_fields(config: SMCConfig) -> None:
     )
     raise TypeError(msg)
 
-  if not isinstance(config.annealing_schedule, AnnealingConfig):
+  if not isinstance(config.annealing_config, AnnealingConfig):
     msg = (
-      f"Expected annealing_schedule to be an instance of "
-      f"AnnealingScheduleConfig, got {type(config.annealing_schedule)}"
+      f"Expected annealing_config to be an instance of "
+      f"AnnealingConfig, got {type(config.annealing_config)}"
     )
     raise TypeError(msg)
 

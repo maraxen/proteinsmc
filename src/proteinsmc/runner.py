@@ -28,11 +28,11 @@ from proteinsmc.sampling.gibbs import initialize_gibbs_state
 from proteinsmc.sampling.hmc import initialize_hmc_state
 from proteinsmc.sampling.mcmc import initialize_mcmc_state
 from proteinsmc.sampling.nuts import initialize_nuts_state
-from proteinsmc.sampling.smc.parallel_replica import (
+from proteinsmc.sampling.particle_systems.parallel_replica import (
   initialize_prsmc_state,
   run_prsmc_loop,
 )
-from proteinsmc.sampling.smc.smc import initialize_smc_state, run_smc_loop
+from proteinsmc.sampling.particle_systems.smc import initialize_smc_state, run_smc_loop
 from proteinsmc.utils.annealing import get_annealing_function
 from proteinsmc.utils.constants import NUCLEOTIDES_NUM_STATES
 from proteinsmc.utils.fitness import get_fitness_function

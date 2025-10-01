@@ -20,6 +20,7 @@ from .sampler_base import BaseSamplerConfig, SamplerOutputProtocol
 PopulationNucleotideSequences = Int[Array, "population_size nucleotide_sequence_length"]
 PopulationProteinSequences = Int[Array, "population_size protein_sequence_length"]
 PopulationSequences = PopulationNucleotideSequences | PopulationProteinSequences
+Lineage = Int[Array, "population_size 2"]  # [Global_ID, Parent_Global_ID] for each particle
 PopulationMetrics = Float[Array, "population_size"]
 PopulationBools = Bool[Array, "population_size"]
 StackedPopulationMetrics = Float[PopulationMetrics, "population_size combine_funcs"]

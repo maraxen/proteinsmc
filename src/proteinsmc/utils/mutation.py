@@ -27,7 +27,7 @@ def mutate(
   key: PRNGKeyArray,
   sequence: EvoSequence,
   mutation_rate: float,
-  n_states: int,
+  q_states: int,
 ) -> EvoSequence:
   """Apply random mutations to a population of nucleotide sequences.
 
@@ -36,15 +36,15 @@ def mutate(
       sequence: JAX array of nucleotide sequences
                   (shape: (n, nuc_len)).
       mutation_rate: Mutation rate for nucleotides.
-      n_states: Number of states. e.g., nucleotide types (4 for A, C, G, T).
+      q_states: Number of states. e.g., nucleotide types (4 for A, C, G, T).
 
   Returns: JAX array of mutated nucleotide sequences.
 
   """
   key_mutate, key_offsets = random.split(key)
   mutation_mask = random.uniform(key_mutate, shape=sequence.shape) < mutation_rate
-  offsets = random.randint(key_offsets, shape=sequence.shape, minval=1, maxval=n_states)
-  proposed_mutations = (sequence + offsets) % n_states
+  offsets = random.randint(key_offsets, shape=sequence.shape, minval=1, maxval=q_states)
+  proposed_mutations = (sequence + offsets) % q_states
   mutated_sequences = jnp.where(mutation_mask, proposed_mutations, sequence)
   return mutated_sequences.astype(jnp.int8)
 
