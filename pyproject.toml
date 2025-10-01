@@ -19,9 +19,8 @@ dependencies = [
   "httpx",
   "uuid-utils",
   "safetensors",
-  "ColabDesign @ git+https://github.com/maraxen/ColabDesign.git",
-  "esm @ git+https://github.com/maraxen/esm.git",
   "esmj @ git+https://github.com/maraxen/esmj.git",
+  "ColabDesign @ git+https://github.com/maraxen/ColabDesign.git",
 ]
 classifiers = [
   "Programming Language :: Python :: 3",
@@ -32,6 +31,7 @@ classifiers = [
 dev = [
   "pytest",
   "pytest-cov",
+  "hypothesis"
 ]
 
 [tool.setuptools]
