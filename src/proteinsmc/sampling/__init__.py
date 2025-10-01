@@ -5,6 +5,7 @@ from .hmc import run_hmc_loop
 from .mcmc import run_mcmc_loop
 from .nuts import run_nuts_loop
 from .particle_systems.parallel_replica import run_prsmc_loop
+from . import nk_landscape
 from .particle_systems.smc import run_smc_loop
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
   "run_nuts_loop",
   "run_prsmc_loop",
   "run_smc_loop",
+  "nk_landscape",
 ]

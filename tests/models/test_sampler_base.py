@@ -3,7 +3,7 @@
 Tests cover initialization and edge cases for BaseSamplerConfig.
 """
 import pytest
-from proteinsmc.models import sampler_base, FitnessEvaluator
+from proteinsmc.models import sampler_base, FitnessEvaluator, MemoryConfig
 
 
 def test_base_sampler_config_initialization(fitness_evaluator_mock: FitnessEvaluator):
@@ -35,7 +35,6 @@ def test_base_sampler_config_initialization(fitness_evaluator_mock: FitnessEvalu
   assert config.n_states == 20
   assert config.mutation_rate == 0.05
   assert config.diversification_ratio == 0.2
-  assert config.sequence_type == "protein"
   assert config.sequence_type == "protein"
   assert isinstance(config.fitness_evaluator, FitnessEvaluator)
   assert isinstance(config.memory_config, MemoryConfig)
