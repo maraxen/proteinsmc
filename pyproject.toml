@@ -8,29 +8,35 @@ version = "0.1.0"
 description = "A package for protein sequence Monte Carlo."
 requires-python = ">=3.11"
 dependencies = [
-    "jax",
-    "blackjax",
-    "dill",
-    "flax",
-    "chex",
-    "jaxtyping",
-    "polars",
-    "equinox",
-    "httpx",
-    "uuid-utils",
-    "safetensors",
-    "ColabDesign @ git+https://github.com/maraxen/ColabDesign.git",
-    "esm @ git+https://github.com/maraxen/esm.git",
-    "esmj @ git+https://github.com/maraxen/esmj.git",
+  "jax",
+  "blackjax",
+  "dill",
+  "flax",
+  "chex",
+  "jaxtyping",
+  "polars",
+  "equinox",
+  "httpx",
+  "uuid-utils",
+  "safetensors",
+  "ColabDesign @ git+https://github.com/maraxen/ColabDesign.git",
+  "esm @ git+https://github.com/maraxen/esm.git",
+  "esmj @ git+https://github.com/maraxen/esmj.git",
 ]
 classifiers = [
-    "Programming Language :: Python :: 3",
-    "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "pytest-cov",
 ]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-    
+  
 [tool.setuptools.packages.find]
 where = ["src"]
 
