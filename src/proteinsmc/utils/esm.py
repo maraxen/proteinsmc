@@ -185,7 +185,7 @@ class RotaryEmbedding(AbstractFromTorch):
   @staticmethod
   def rotate_half(x: RotateHalfIO) -> RotateHalfIO:
     """Rotate the last dimension of the input tensor by half."""
-    x1, x2 = np.split(x, 2, axis=-1)
+    x1, x2 = jnp.split(x, 2, axis=-1)
     return jnp.concatenate((-x2, x1), axis=-1)
 
   @staticmethod
