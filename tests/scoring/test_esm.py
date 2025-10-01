@@ -1,100 +1,67 @@
 import pytest
 import jax
 import jax.numpy as jnp
-import equinox as eqx
-from esm.models.esmc import ESMC
-import esmj
-import chex
-from proteinsmc.scoring.esm import make_esm_pll_score
+from unittest.mock import patch, MagicMock
+
+from proteinsmc.scoring.esm import make_esm_score
 from proteinsmc.utils.esm import remap_sequences
-from proteinsmc.utils.constants import (
-    PROTEINMPNN_TO_ESM_AA_MAP_JAX,
-    ESM_BOS_ID,
-    ESM_EOS_ID,
-    ESM_PAD_ID,
-    ESM_MASK_ID, # Assuming ESM_MASK_ID is defined in your constants
-)
 
-@pytest.fixture(scope="module")
-def esm_model():
-    """
-    Pytest fixture to load the ESM model once for all tests in this module.
-    This avoids downloading and loading the model repeatedly.
-    """
-    # Using the smallest model for faster testing
-    model_name = "esmc_300m"
-    client = ESMC.from_pretrained(model_name)
-    eqx_model = esmj.from_torch(client)
-    return eqx.filter_jit(eqx_model)
-
-def test_make_esm_pll_score_factory(esm_model):
+@patch("proteinsmc.scoring.esm.load_model")
+def test_make_esm_score_factory(mock_load_model):
     """Tests that the factory function returns a valid, callable scoring function."""
-    # We pass the loaded model to avoid re-loading
-    score_fn = make_esm_pll_score(model_name="esmc_300m", pll_method="per_position")
-    score_fn = make_esm_pll_score(model_name="esmc_300m", pll_method="whole")
-    score_fn = make_esm_pll_score(model_name="esmc_300m", pll_method="per_masked_chunk")
-    assert callable(score_fn), "The factory did not return a callable function."
+    # Arrange
+    mock_model = MagicMock()
+    mock_load_model.return_value = mock_model
 
-@pytest.mark.slow  # Mark this as a slow test
-def test_compare_pll_scores(esm_model):
-  """
-  Compares the O(1) PLL proxy score against a manually calculated,
-  iterative single-position-masking PLL score for multiple input sequences.
+    # Act
+    score_fn = make_esm_score(model_name="esmc_300m")
 
-  This test does NOT use a mock and relies on the actual model outputs
-  to ensure the mathematical equivalence holds in practice.
+    # Assert
+    assert callable(score_fn)
+    mock_load_model.assert_called_once()
 
-  Args:
-    esm_model: The ESM model loaded via the pytest fixture.
+@patch("proteinsmc.scoring.esm.load_model")
+def test_esm_score_calculation(mock_load_model):
+    """
+    Tests the logic of the scoring function by comparing its output
+    to a manual calculation.
+    """
+    # Arrange
+    key = jax.random.PRNGKey(42)
+    seq_len = 10
+    vocab_size = 33  # ESM vocab size, includes special tokens
 
-  Returns:
-    None
+    # Define a known sequence
+    sequence = jnp.arange(seq_len, dtype=jnp.int8)
 
-  Raises:
-    AssertionError: If the scores for any sequence do not match within tolerance.
+    # Manually remap sequence to what the score function will use internally
+    remapped_sequence = remap_sequences(sequence)
+    remapped_sequence_with_batch = remapped_sequence[None, :]
 
-  Example:
-    >>> test_esm_pll_score_vs_iterative_pll_multiple_sequences(esm_model)
-  """
-  per_pos_score_fn = make_esm_pll_score(model_name="esmc_300m", pll_method="per_position")
-  whole_score_fn = make_esm_pll_score(model_name="esmc_300m", pll_method="whole")
-  per_masked_chunk_score_fn = make_esm_pll_score(model_name="esmc_300m", pll_method="per_masked_chunk")
+    # Create mock logits that the model will return
+    mock_logits = jax.random.normal(key, (1, seq_len + 2, vocab_size))
 
-  key = jax.random.PRNGKey(0)
-  seq_key, score_key = jax.random.split(key)
+    # Set up the mock model
+    mock_model = MagicMock()
+    mock_output = MagicMock()
+    mock_output.logits = mock_logits
+    mock_model.return_value = mock_output
+    mock_load_model.return_value = mock_model
 
-  sequences = jax.random.randint(
-    seq_key, (5, 50), 0, 20, dtype=jnp.int8
-  )
-  
-  @jax.jit
-  def get_scores(sequence):
-    """Helper function to get scores for a single sequence."""
-    per_pos_score = per_pos_score_fn(sequence, None, None)
-    whole_score = whole_score_fn(sequence, None, None)
-    per_masked_chunk_score = per_masked_chunk_score_fn(sequence, score_key, None)
-    return per_pos_score, whole_score, per_masked_chunk_score
+    # Create the scoring function
+    score_fn = make_esm_score(model_name="esmc_300m", seed=42)
 
-  scores = jax.vmap(get_scores)(sequences)
-  per_pos_scores, whole_scores, per_masked_chunk_scores = scores
+    # Act
+    # Call the scoring function with the original sequence
+    actual_score = score_fn(key, sequence)
 
-  assert all(
-    jnp.allclose(
-      score_a,
-      score_b,
-      rtol=1e-2,
-      atol=1e-2,
-      ) for score_a, score_b in zip(
-        (per_pos_scores,
-          per_pos_scores,
-          per_masked_chunk_scores,
-          ), 
-        (
-          whole_scores,
-          per_masked_chunk_scores,
-          whole_scores
-        )
-      )
-  ), ("PLL scores do not match across methods within tolerance. "
-    f"Per-position scores: {per_pos_scores}, Whole scores: {whole_scores}, "
-    f"Per-masked-chunk scores: {per_masked_chunk_scores}")
+    # Manually calculate the expected score based on the mocked logits
+    log_probs = jax.nn.log_softmax(mock_logits, axis=-1)
+    seq_indices = remapped_sequence_with_batch[..., None]
+    seq_log_probs = jnp.take_along_axis(log_probs, seq_indices, axis=-1).squeeze(-1)
+    expected_score = jnp.sum(seq_log_probs) / (remapped_sequence_with_batch.shape[1] + 1e-8)
+
+    # Assert
+    assert isinstance(actual_score, jnp.ndarray)
+    assert actual_score.shape == ()
+    assert jnp.allclose(actual_score, expected_score.astype(jnp.float32))
