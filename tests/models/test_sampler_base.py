@@ -3,32 +3,23 @@
 Tests cover initialization and edge cases for BaseSamplerConfig.
 """
 import pytest
-from proteinsmc.models import sampler_base
+from proteinsmc.models import sampler_base, FitnessEvaluator, MemoryConfig
 
 
-def test_base_sampler_config_initialization():
-  """Test BaseSamplerConfig initialization with valid arguments.
-  Args:
-    None
-  Returns:
-    None
-  Raises:
-    AssertionError: If the config fields do not match expected values.
-  Example:
-    >>> test_base_sampler_config_initialization()
-  """
+def test_base_sampler_config_initialization(
+    basic_fitness_evaluator: FitnessEvaluator,
+):
+  """Test BaseSamplerConfig initialization with valid arguments."""
   config = sampler_base.BaseSamplerConfig(
-    prng_seed=123,
-    sampler_type="smc",
-    seed_sequence="ACDEFGHIKLMNPQRSTVWY",
-    num_samples=10,
-    n_states=20,
-    mutation_rate=0.05,
-    diversification_ratio=0.2,
-    sequence_type="protein",
-    fitness_evaluator=None,
-    memory_config=None,
-    annealing_config=None,
+      prng_seed=123,
+      sampler_type="smc",
+      seed_sequence="ACDEFGHIKLMNPQRSTVWY",
+      num_samples=10,
+      n_states=20,
+      mutation_rate=0.05,
+      diversification_ratio=0.2,
+      sequence_type="protein",
+      fitness_evaluator=basic_fitness_evaluator,
   )
   assert config.prng_seed == 123
   assert config.sampler_type == "smc"
@@ -38,3 +29,5 @@ def test_base_sampler_config_initialization():
   assert config.mutation_rate == 0.05
   assert config.diversification_ratio == 0.2
   assert config.sequence_type == "protein"
+  assert isinstance(config.fitness_evaluator, FitnessEvaluator)
+  assert isinstance(config.memory_config, MemoryConfig)

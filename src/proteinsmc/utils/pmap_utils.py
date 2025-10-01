@@ -11,7 +11,7 @@ if TYPE_CHECKING:
   from jaxtyping import Array, PyTree
 
 
-from proteinsmc.utils import vmap_utils
+from proteinsmc.utils import jax_utils
 
 
 def distribute(
@@ -46,7 +46,7 @@ def distribute(
 
   @partial(jax.pmap, axis_name="devices")
   def pmapped_worker(data: PyTree[Array]) -> Array:
-    return vmap_utils.chunked_vmap(core_fn, data, chunk_size, static_args=static_args)
+    return jax_utils.chunked_map(core_fn, data, chunk_size, static_args=static_args)
 
   sharded_results = pmapped_worker(sharded_data)
 
