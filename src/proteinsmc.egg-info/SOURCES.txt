@@ -55,4 +55,5 @@ src/proteinsmc/utils/mpnn.py
 src/proteinsmc/utils/mutation.py
 src/proteinsmc/utils/pmap_utils.py
 src/proteinsmc/utils/translation.py
+src/proteinsmc/utils/vmap_utils.py
 tests/test_runner.py

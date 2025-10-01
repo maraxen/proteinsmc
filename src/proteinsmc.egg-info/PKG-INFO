@@ -11,13 +11,12 @@ Requires-Dist: dill
 Requires-Dist: flax
 Requires-Dist: chex
 Requires-Dist: jaxtyping
-Requires-Dist: polars
 Requires-Dist: equinox
-Requires-Dist: httpx
 Requires-Dist: uuid-utils
 Requires-Dist: safetensors
-Requires-Dist: esmj@ git+https://github.com/maraxen/esmj.git
-Requires-Dist: ColabDesign@ git+https://github.com/maraxen/ColabDesign.git
+Requires-Dist: prxteinmpnn@ git+https://github.com/maraxen/prxteinmpnn.git
+Requires-Dist: einops>=0.8.1
+Requires-Dist: huggingface-hub>=0.35.3
 Provides-Extra: dev
 Requires-Dist: pytest; extra == "dev"
 Requires-Dist: pytest-cov; extra == "dev"
