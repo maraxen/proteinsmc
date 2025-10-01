@@ -184,9 +184,6 @@ def valid_config_kwargs(monkeypatch):
     n_states=20,
     mutation_rate=0.05,
     sequence_type="protein",
-    seed_sequence="MKTFFVAGVIL",
-    diversification_ratio=0.1,
-    sampler_type="smc",
     algorithm="AdaptiveTemperedSMC",
     fitness_evaluator=DummyFitnessEvaluator(
       fitness_functions=()),
