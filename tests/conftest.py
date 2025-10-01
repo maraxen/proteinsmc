@@ -180,12 +180,9 @@ def valid_config_kwargs(monkeypatch):
 
   return dict(
     prng_seed=123,
-    sampler_type="smc",
-    seed_sequence="ACDEFGHIKLMNPQRSTVWY",
     num_samples=10,
     n_states=20,
     mutation_rate=0.05,
-    diversification_ratio=0.2,
     sequence_type="protein",
     algorithm="AdaptiveTemperedSMC",
     fitness_evaluator=DummyFitnessEvaluator(
