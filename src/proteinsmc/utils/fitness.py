@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 FITNESS_FUNCTIONS: dict[str, Callable[..., FitnessFn]] = {
   "cai": cai.make_cai_score,
   "mpnn": mpnn.make_mpnn_score,
-  "esm": esm.make_esm_pll_score,
+  "esm": esm.make_esm_score,
 }
 
 COMBINE_FUNCTIONS: dict[str, Callable[..., CombineFn]] = {
