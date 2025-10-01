@@ -44,7 +44,6 @@ class DecodingOrderEnum(enum.Enum):
 
 def make_mpnn_score(
   mpnn_model_params: ModelParameters,
-  model_inputs: ModelInputs,
   decoding_order_enum: DecodingOrderEnum,
 ) -> FitnessFn:
   """Create a scoring function for the MPNN model.
