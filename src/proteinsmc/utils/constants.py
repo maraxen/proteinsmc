@@ -6,12 +6,36 @@ import collections
 from venv import logger
 
 import jax.numpy as jnp
-from colabdesign.mpnn.model import (  # type: ignore[import]
-  aa_order as colabdesign_aa_order,
-)
-from colabdesign.mpnn.model import (
-  order_aa as colabdesign_order_aa,
-)
+
+restypes = [
+  "A",
+  "R",
+  "N",
+  "D",
+  "C",
+  "Q",
+  "E",
+  "G",
+  "H",
+  "I",
+  "L",
+  "K",
+  "M",
+  "F",
+  "P",
+  "S",
+  "T",
+  "W",
+  "Y",
+  "V",
+]
+restype_order = {restype: i for i, restype in enumerate(restypes)}
+restype_num = len(restypes)  # := 20.
+unk_restype_index = restype_num  # Catch-all index for unknown restypes.
+
+restypes_with_x = [*restypes, "X"]
+restype_order_with_x = {restype: i for i, restype in enumerate(restypes_with_x)}
+order_aa = {v: k for k, v in restype_order.items()}
 
 NUCLEOTIDES_CHAR = ["A", "C", "G", "T"]
 NUCLEOTIDES_INT_MAP = {n: i for i, n in enumerate(NUCLEOTIDES_CHAR)}
@@ -86,11 +110,11 @@ CODON_TO_RES_CHAR = {
   "GGT": "G",
 }
 
-AA_CHAR_TO_INT_MAP = colabdesign_aa_order
-INT_TO_AA_CHAR_MAP = dict(enumerate(colabdesign_order_aa.values()))
-COLABDESIGN_X_INT = 21
-STOP_INT = COLABDESIGN_X_INT
-UNKNOWN_AA_INT = COLABDESIGN_X_INT
+AA_CHAR_TO_INT_MAP = restype_order
+INT_TO_AA_CHAR_MAP = dict(enumerate(restypes))
+PROTEINMPNN_X_INT = 21
+STOP_INT = PROTEINMPNN_X_INT
+UNKNOWN_AA_INT = PROTEINMPNN_X_INT
 MAX_NUC_INT = len(NUCLEOTIDES_CHAR) - 1
 AMINO_ACIDS_NUM_STATES = 20
 
@@ -184,9 +208,8 @@ for codon_str, res_char in CODON_TO_RES_CHAR.items():
   if res_char != "X":
     RES_TO_CODON_CHAR[res_char].append(codon_str)
 
-num_colabdesign_aas = len(colabdesign_order_aa)
-ECOLI_MAX_FREQS_JAX_list = [0.0] * num_colabdesign_aas
-for aa_char, aa_int_colabdesign in colabdesign_aa_order.items():
+ECOLI_MAX_FREQS_JAX_list = [0.0] * (len(AA_CHAR_TO_INT_MAP) + 1)
+for aa_char, aa_int_colabdesign in restype_order.items():
   if aa_char == "X":
     ECOLI_MAX_FREQS_JAX_list[aa_int_colabdesign] = 1.0
     continue
@@ -246,7 +269,7 @@ ESM_PAD_ID = ESM_AA_CHAR_TO_INT_MAP["<pad>"]
 ESM_EOS_ID = ESM_AA_CHAR_TO_INT_MAP["<eos>"]
 ESM_UNK_ID = ESM_AA_CHAR_TO_INT_MAP["<unk>"]
 ESM_MASK_ID = ESM_AA_CHAR_TO_INT_MAP["<mask>"]
-COLABDESIGN_TO_ESM_AA_MAP_JAX = jnp.full(
+PROTEINMPNN_TO_ESM_AA_MAP_JAX = jnp.full(
   AMINO_ACIDS_NUM_STATES,  # Size is based on ColabDesign's max AA int
   ESM_UNK_ID,
   dtype=jnp.int32,
@@ -256,7 +279,7 @@ COLABDESIGN_TO_ESM_AA_MAP_JAX = jnp.full(
 for cd_char, cd_int in AA_CHAR_TO_INT_MAP.items():
   if cd_char in ESM_AA_CHAR_TO_INT_MAP:
     esm_int = ESM_AA_CHAR_TO_INT_MAP[cd_char]
-    COLABDESIGN_TO_ESM_AA_MAP_JAX = COLABDESIGN_TO_ESM_AA_MAP_JAX.at[cd_int].set(esm_int)
+    PROTEINMPNN_TO_ESM_AA_MAP_JAX = PROTEINMPNN_TO_ESM_AA_MAP_JAX.at[cd_int].set(esm_int)
   else:
     msg = (
       f"ColabDesign character '{cd_char}' (int {cd_int}) not found in "
@@ -265,11 +288,11 @@ for cd_char, cd_int in AA_CHAR_TO_INT_MAP.items():
     logger.warning(msg)
 
 if "X" in AA_CHAR_TO_INT_MAP and "X" in ESM_AA_CHAR_TO_INT_MAP:
-  COLABDESIGN_TO_ESM_AA_MAP_JAX = COLABDESIGN_TO_ESM_AA_MAP_JAX.at[AA_CHAR_TO_INT_MAP["X"]].set(
+  PROTEINMPNN_TO_ESM_AA_MAP_JAX = PROTEINMPNN_TO_ESM_AA_MAP_JAX.at[AA_CHAR_TO_INT_MAP["X"]].set(
     ESM_AA_CHAR_TO_INT_MAP["X"],
   )
 elif "X" in AA_CHAR_TO_INT_MAP:
   # If ESM doesn't have 'X' as a regular token, map to UNK
-  COLABDESIGN_TO_ESM_AA_MAP_JAX = COLABDESIGN_TO_ESM_AA_MAP_JAX.at[AA_CHAR_TO_INT_MAP["X"]].set(
+  PROTEINMPNN_TO_ESM_AA_MAP_JAX = PROTEINMPNN_TO_ESM_AA_MAP_JAX.at[AA_CHAR_TO_INT_MAP["X"]].set(
     ESM_UNK_ID,
   )

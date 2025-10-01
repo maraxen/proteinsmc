@@ -8,9 +8,9 @@ import jax.numpy as jnp
 from jax import jit
 
 from proteinsmc.utils.constants import (
-  COLABDESIGN_X_INT,
   ECOLI_CODON_FREQ_JAX,
   ECOLI_MAX_FREQS_JAX,
+  PROTEINMPNN_X_INT,
 )
 
 if TYPE_CHECKING:
@@ -62,7 +62,7 @@ def cai_score(sequence: NucleotideSequence, aa_seq: ProteinSequence) -> Float:
   codon_frequencies = ECOLI_CODON_FREQ_JAX[codons_int[:, 0], codons_int[:, 1], codons_int[:, 2]]
   max_aa_frequencies = ECOLI_MAX_FREQS_JAX[aa_seq]
   wi = codon_frequencies / jnp.maximum(max_aa_frequencies, 1e-9)
-  valid_codon_mask = aa_seq != COLABDESIGN_X_INT
+  valid_codon_mask = aa_seq != PROTEINMPNN_X_INT
   log_wi = jnp.log(jnp.maximum(wi, 1e-12))
   sum_log_wi = jnp.sum(log_wi * valid_codon_mask)
   num_valid_codons = jnp.sum(valid_codon_mask)
