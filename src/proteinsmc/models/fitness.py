@@ -29,6 +29,7 @@ class FitnessFunction:
   n_states: int
   kwargs: dict[str, Any] = field(default_factory=dict)
 
+
   def __post_init__(self) -> None:
     """Validate the fitness function configuration."""
     if not isinstance(self.name, str):

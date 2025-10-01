@@ -20,3 +20,4 @@ def test_types_initialization():
   # Example: types.SequenceType
   seq_type = proteinsmc_types.SequenceType.PROTEIN
   assert seq_type.value == "protein"
+

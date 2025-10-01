@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+from dataclasses import dataclass
 
 from flax.struct import PyTreeNode
 

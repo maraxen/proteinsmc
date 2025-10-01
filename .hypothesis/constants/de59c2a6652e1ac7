@@ -1,0 +1,4 @@
+# file: /app/src/proteinsmc/io.py
+# hypothesis_version: 6.140.2
+
+[100, 'a', 'config', 'run_id', 'w']

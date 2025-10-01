@@ -1,0 +1,4 @@
+# file: /app/src/proteinsmc/scoring/esm.py
+# hypothesis_version: 6.140.2
+
+[1e-06, 0.15, '_context', '_key', 'esmc_300m', 'esmc_600m', 'masking_ratio', 'ofs', 'per_masked_chunk', 'per_position', 'whole']

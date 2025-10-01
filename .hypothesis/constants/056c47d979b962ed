@@ -1,0 +1,4 @@
+# file: /app/src/proteinsmc/sampling/particle_systems/distribution.py
+# hypothesis_version: 6.140.2
+
+[0.8, 4.0, 1024, 'batched', 'direct', 'edge', 'estimated_memory_mb', 'feasible', 'islands_per_device', 'recommendation', 'safe_limit_mb', 'strategy']

@@ -1,0 +1,4 @@
+# file: /app/src/proteinsmc/models/parallel_replica.py
+# hypothesis_version: 6.140.2
+
+['ParallelReplicaSMC', 'ess_per_island', 'meta_beta', 'num_accepted_swaps', 'num_attempted_swaps', 'parallel_replica', 'protein']

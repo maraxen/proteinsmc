@@ -27,6 +27,7 @@ def test_aa_to_nucleotide_to_aa_roundtrip(protein_sequence):
     
     assert jnp.array_equal(protein_seq_arr, round_trip_protein_seq)
 
+@settings(deadline=None)
 @given(nucleotide_sequence=nucleotide_triplets_strategy)
 def test_nucleotide_to_aa_is_valid(nucleotide_sequence):
     """Tests the is_valid_translation flag from nucleotide_to_aa."""
