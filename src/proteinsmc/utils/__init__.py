@@ -50,7 +50,7 @@ from .mutation import (
 )
 from .pmap_utils import distribute
 from .translation import aa_to_nucleotide, nucleotide_to_aa
-from .vmap_utils import chunked_vmap
+from .jax_utils import chunked_map
 
 __all__ = [
   "AA_CHAR_TO_INT_MAP",
@@ -90,7 +90,7 @@ __all__ = [
   "calculate_logZ_increment",
   "generate_template_population",
   "distribute",
-  "chunked_vmap",
+  "chunked_map",
   "safe_weighted_mean",
   "chunked_mutation_step",
   "get_fitness_function",

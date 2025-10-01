@@ -1,0 +1,18 @@
+jax
+blackjax
+dill
+flax
+chex
+jaxtyping
+polars
+equinox
+httpx
+uuid-utils
+safetensors
+esmj@ git+https://github.com/maraxen/esmj.git
+ColabDesign@ git+https://github.com/maraxen/ColabDesign.git
+
+[dev]
+pytest
+pytest-cov
+hypothesis

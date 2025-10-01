@@ -33,7 +33,7 @@ def test_remap_sequences():
 
     # 3. Check remapped sequence content
     expected_esm_ids = COLABDESIGN_TO_ESM_AA_MAP_JAX[colab_design_sequence]
-    chex.assert_equal(ids[1:seq_len + 1], expected_esm_ids, err_msg="Sequence content was not remapped correctly")
+    assert jnp.array_equal(ids[1:seq_len + 1], expected_esm_ids)
 
     # 4. Check padding
     assert jnp.all(ids[seq_len + 2:] == ESM_PAD_ID), "Padding is incorrect"
@@ -43,6 +43,4 @@ def test_remap_sequences():
         jnp.ones(seq_len + 2, dtype=jnp.int32),
         jnp.zeros(8 - (seq_len + 2), dtype=jnp.int32)
     ])
-    chex.assert_equal(attention_mask, expected_mask, err_msg="Attention mask is incorrect")
-
-
+    assert jnp.array_equal(attention_mask, expected_mask)

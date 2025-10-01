@@ -4,9 +4,7 @@ Tests cover initialization and edge cases for HMC sampler config/model.
 """
 import pytest
 from proteinsmc.models.hmc import HMCConfig
-from .conftest import basic_fitness_evaluator
 
-@pytest.mark.parametrize("basic_fitness_evaluator", [basic_fitness_evaluator])
 def test_hmc_config_initialization(basic_fitness_evaluator):
   """Test HMCConfig initialization with valid arguments.
   Args:

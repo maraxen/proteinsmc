@@ -10,7 +10,7 @@ from jax import jit, vmap
 from jaxtyping import Array, PRNGKeyArray
 
 from proteinsmc.scoring import cai, combine, esm, mpnn
-from proteinsmc.utils.vmap_utils import chunked_vmap
+from proteinsmc.utils.jax_utils import chunked_map
 
 if TYPE_CHECKING:
   from jaxtyping import Array, PRNGKeyArray
@@ -72,25 +72,29 @@ def get_fitness_function(
       i: int,
       carry: tuple[list[Array], EvoSequence],
     ) -> tuple[list[Array], EvoSequence]:
-      all_scores, sequence = carry
-      score_fn = score_fns[i]
-      seq = (
-        translate_func(sequence=sequence, _key=keys[i], _context=_context)  # type: ignore[call-arg]
-        if needs_translation[i]
-        else sequence
-      )
-      if chunk_size is not None:
-        vmapped_scorer = chunked_vmap(
-          score_fn,
-          (seq, keys[i], _context),
-          in_axes=(0, 0, None),
-          chunk_size=chunk_size,
+        all_scores, sequence = carry
+        score_fn = score_fns[i]
+        seq = (
+            translate_func(sequence=sequence, _key=keys[i], _context=_context)
+            if needs_translation[i]
+            else sequence
         )
-      else:
-        vmapped_scorer = vmap(score_fn, in_axes=(0, 0, None))
-      scores = vmapped_scorer(jax.random.split(keys[i], seq.shape[0]), seq, _context)  # type: ignore[arg-type]
-      all_scores = [*all_scores, scores]
-      return all_scores, sequence
+
+        keys_i = jax.random.split(keys[i], seq.shape[0])
+
+        if chunk_size is not None:
+            scores = chunked_map(
+                score_fn,
+                (seq, keys_i),
+                chunk_size=chunk_size,
+                static_args={'_context': _context} if _context is not None else None
+            )
+        else:
+            vmapped_scorer = vmap(score_fn, in_axes=(0, 0, None))
+            scores = vmapped_scorer(seq, keys_i, _context)
+
+        all_scores = [*all_scores, scores]
+        return all_scores, sequence
 
     all_scores, _ = jax.lax.fori_loop(
       0,
@@ -101,16 +105,18 @@ def get_fitness_function(
 
     fitness_components = jnp.stack(all_scores, axis=0)
 
+    keys_for_combiner = jax.random.split(keys[-1], fitness_components.shape[1])
+
     if chunk_size is not None:
-      vmapped_combiner = chunked_vmap(
-        combine_fn,
-        (keys[-1], fitness_components.T, _context),
-        in_axes=(0, 0, None),
-        chunk_size=chunk_size,
-      )
+        combined_fitness = chunked_map(
+            combine_fn,
+            (fitness_components.T, keys_for_combiner),
+            chunk_size=chunk_size,
+            static_args={'_context': _context} if _context is not None else None
+        )
     else:
-      vmapped_combiner = vmap(combine_fn, in_axes=(0, 0, 0))
-    combined_fitness = vmapped_combiner(keys[-1], fitness_components.T, _context)  # type: ignore[arg-type]
+        vmapped_combiner = vmap(combine_fn, in_axes=(0, 0, None))
+        combined_fitness = vmapped_combiner(fitness_components.T, keys_for_combiner, _context)
 
     if (
       _context is not None
