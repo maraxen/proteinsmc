@@ -224,11 +224,14 @@ class MultiHeadAttention(AbstractFromTorch):
   q_ln: LayerNorm
   k_ln: LayerNorm
 
-  def _apply_rotary(self, q: Array, k: Array) -> Generator[Array, None, None]:
+  def _apply_rotary(self, q: Array, k: Array) -> tuple[Array, Array]:
     q = einops.rearrange(q, "b s (h d) -> b s h d", h=self.n_heads)
     k = einops.rearrange(k, "b s (h d) -> b s h d", h=self.n_heads)
     q, k = self.rotary(q, k)
-    return (einops.rearrange(t, "b s h d -> b s (h d)") for t in (q, k))
+    return (
+      einops.rearrange(q, "b s h d -> b s (h d)"),
+      einops.rearrange(k, "b s h d -> b s (h d)")
+    )
 
   def __call__(self, x: InternalProjection) -> InternalProjection:
     """Apply multi-head attention with RoPE."""
