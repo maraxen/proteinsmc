@@ -1,0 +1,4 @@
+# file: /app/src/proteinsmc/utils/fitness.py
+# hypothesis_version: 6.140.2
+
+['cai', 'esm', 'mpnn', 'sum', 'weighted_sum']

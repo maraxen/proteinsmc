@@ -1,0 +1,4 @@
+# file: /app/src/proteinsmc/scoring/__init__.py
+# hypothesis_version: 6.140.2
+
+['make_cai_score', 'make_esm_pll_score', 'make_mpnn_score']

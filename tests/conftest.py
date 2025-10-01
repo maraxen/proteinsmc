@@ -28,6 +28,12 @@ def rng_key() -> PRNGKeyArray:
   return jax.random.PRNGKey(42)
 
 
+@pytest.fixture(scope="session")
+def fitness_evaluator_mock() -> FitnessEvaluator:
+  """Provides a mock FitnessEvaluator instance for testing purposes."""
+  mock_fitness_function = FitnessFunction(name="mock_fitness", n_states=20)
+  return FitnessEvaluator(fitness_functions=(mock_fitness_function,))
+
 @pytest.fixture
 def sample_nucleotide_sequence() -> jnp.ndarray:
   """Provide a sample nucleotide sequence for testing."""
@@ -181,6 +187,10 @@ def valid_config_kwargs(monkeypatch):
     mutation_rate=0.05,
     diversification_ratio=0.2,
     sequence_type="protein",
+    seed_sequence="MKTFFVAGVIL",
+    diversification_ratio=0.1,
+    sampler_type="smc",
+    algorithm="AdaptiveTemperedSMC",
     fitness_evaluator=DummyFitnessEvaluator(
       fitness_functions=()),
     memory_config=DummyMemoryConfig(),

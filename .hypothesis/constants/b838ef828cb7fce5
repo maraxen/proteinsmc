@@ -1,0 +1,4 @@
+# file: /app/src/proteinsmc/sampling/nuts.py
+# hypothesis_version: 6.140.2
+
+['config', 'fitness_fn', 'run_nuts_loop']

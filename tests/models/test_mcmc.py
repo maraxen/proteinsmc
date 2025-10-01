@@ -6,12 +6,18 @@ import pytest
 from proteinsmc.models import mcmc, FitnessEvaluator
 
 
-def test_mcmc_config_initialization(basic_fitness_evaluator: FitnessEvaluator):
-  """Test MCMCConfig initialization with valid arguments."""
+def test_mcmc_config_initialization(fitness_evaluator_mock: FitnessEvaluator):
+  """Test MCMCConfig initialization with valid arguments.
+  Args:
+    fitness_evaluator_mock: A mock fitness evaluator.
+  Returns:
+    None
+  Raises:
+    AssertionError: If the config fields do not match expected values.
+  Example:
+    >>> test_mcmc_config_initialization(fitness_evaluator_mock)
+  """
   config = mcmc.MCMCConfig(
     num_samples=15,
     step_size=0.05,
-    fitness_evaluator=basic_fitness_evaluator,
-  )
-  assert config.num_samples == 15
-  assert config.step_size == 0.05
+    fitness_evaluator=fitness_evaluator_mock

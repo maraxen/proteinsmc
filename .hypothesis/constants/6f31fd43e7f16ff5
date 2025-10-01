@@ -1,0 +1,4 @@
+# file: /app/src/proteinsmc/models/smc.py
+# hypothesis_version: 6.140.2
+
+[1.0, 'AdaptiveTemperedSMC', 'AnnealedSMC', 'BaseSMC', 'CustomSMC', 'FromMCMC', 'InnerMCMC', 'ParallelReplicaSMC', 'PartialPosteriors', 'PretuningSMC', 'SMC', 'TemperedSMC', 'beta', 'beta_per_gen', 'entropy', 'entropy_per_gen', 'ess', 'ess_per_gen', 'final_logZhat', 'fitness_components', 'max_fitness', 'mean_fitness', 'multinomial', 'population_size', 'population_size 2', 'residual', 'smc', 'stratified', 'systematic']
