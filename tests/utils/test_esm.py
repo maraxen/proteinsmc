@@ -3,7 +3,7 @@ import chex
 
 from proteinsmc.utils.esm import remap_sequences
 from proteinsmc.utils.constants import (
-    COLABDESIGN_TO_ESM_AA_MAP_JAX,
+    PROTEINMPNN_TO_ESM_AA_MAP_JAX,
     ESM_BOS_ID,
     ESM_EOS_ID,
     ESM_PAD_ID,
@@ -32,7 +32,7 @@ def test_remap_sequences():
     assert ids[seq_len + 1] == ESM_EOS_ID, "EOS token is missing or incorrect"
 
     # 3. Check remapped sequence content
-    expected_esm_ids = COLABDESIGN_TO_ESM_AA_MAP_JAX[colab_design_sequence]
+    expected_esm_ids = PROTEINMPNN_TO_ESM_AA_MAP_JAX[colab_design_sequence]
     chex.assert_equal(ids[1:seq_len + 1], expected_esm_ids, err_msg="Sequence content was not remapped correctly")
 
     # 4. Check padding

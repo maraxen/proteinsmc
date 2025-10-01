@@ -2,7 +2,7 @@ import pytest
 from hypothesis import given, strategies as st
 import jax.numpy as jnp
 
-from proteinsmc.utils.constants import COLABDESIGN_X_INT
+from proteinsmc.utils.constants import PROTEINMPNN_X_INT
 from proteinsmc.utils.translation import aa_to_nucleotide, nucleotide_to_aa
 
 # Hypothesis strategy for generating a valid protein sequence
@@ -35,7 +35,7 @@ def test_nucleotide_to_aa_is_valid(nucleotide_sequence):
     
     # The generated sequence should be valid unless it contains a stop codon.
     # We check this by seeing if any amino acid is 'X'.
-    assert is_valid == (not jnp.any(aa_seq == COLABDESIGN_X_INT))
+    assert is_valid == (not jnp.any(aa_seq == PROTEINMPNN_X_INT))
 
 def test_nucleotide_to_aa_empty_sequence():
     """Tests nucleotide_to_aa with an empty sequence."""
@@ -56,7 +56,7 @@ def test_nucleotide_to_aa_stop_codon():
     nuc_seq = jnp.array([3, 0, 0], dtype=jnp.int8)  # T = 3, A = 0
     aa_seq, is_valid = nucleotide_to_aa(nuc_seq)
     assert not is_valid
-    assert aa_seq[0] == COLABDESIGN_X_INT
+    assert aa_seq[0] == PROTEINMPNN_X_INT
 
 def test_aa_to_nucleotide_empty_sequence():
     """Tests aa_to_nucleotide with an empty sequence."""
@@ -67,6 +67,6 @@ def test_aa_to_nucleotide_empty_sequence():
 
 def test_aa_to_nucleotide_invalid_aa():
     """Tests aa_to_nucleotide with a sequence containing an invalid amino acid ('X')."""
-    aa_seq = jnp.array([0, 1, COLABDESIGN_X_INT], dtype=jnp.int8)  # A, C, X
+    aa_seq = jnp.array([0, 1, PROTEINMPNN_X_INT], dtype=jnp.int8)  # A, C, X
     nuc_seq, is_valid = aa_to_nucleotide(aa_seq)
     assert not is_valid

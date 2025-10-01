@@ -8,7 +8,7 @@ import chex
 from proteinsmc.scoring.esm import make_esm_pll_score
 from proteinsmc.utils.esm import remap_sequences
 from proteinsmc.utils.constants import (
-    COLABDESIGN_TO_ESM_AA_MAP_JAX,
+    PROTEINMPNN_TO_ESM_AA_MAP_JAX,
     ESM_BOS_ID,
     ESM_EOS_ID,
     ESM_PAD_ID,

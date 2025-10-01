@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 from .constants import (
   CODON_INT_TO_RES_INT_JAX,
-  COLABDESIGN_X_INT,
+  PROTEINMPNN_X_INT,
 )
 from .vmap_utils import chunked_vmap
 
@@ -93,7 +93,7 @@ def _revert_x_codons_if_mutated(
   translated_aa = CODON_INT_TO_RES_INT_JAX[n1, n2, n3]
 
   codon_was_mutated = jnp.any(codons_template != codons_candidate, axis=1)
-  codon_is_x = translated_aa == COLABDESIGN_X_INT
+  codon_is_x = translated_aa == PROTEINMPNN_X_INT
   revert_mask = codon_was_mutated & codon_is_x
 
   codons_final = jnp.where(revert_mask[:, None], codons_template, codons_candidate)

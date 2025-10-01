@@ -9,7 +9,7 @@ from jax import jit, vmap
 
 from .constants import (
   CODON_INT_TO_RES_INT_JAX,
-  COLABDESIGN_X_INT,
+  PROTEINMPNN_X_INT,
 )
 
 if TYPE_CHECKING:
@@ -45,7 +45,7 @@ def nucleotide_to_aa(
     raise TypeError(msg)
   codons_int = sequence[: protein_len * 3].reshape((protein_len, 3))
   aa_seq = CODON_INT_TO_RES_INT_JAX[codons_int[:, 0], codons_int[:, 1], codons_int[:, 2]]
-  is_valid_translation = jnp.all(aa_seq != COLABDESIGN_X_INT)
+  is_valid_translation = jnp.all(aa_seq != PROTEINMPNN_X_INT)
   return aa_seq, is_valid_translation
 
 
@@ -67,7 +67,7 @@ def aa_to_nucleotide(
   codons = vmap(find_first_codon)(sequence)
   nuc_seq = codons.flatten().astype(jnp.int8)
 
-  is_valid_input = jnp.all(sequence != COLABDESIGN_X_INT)
+  is_valid_input = jnp.all(sequence != PROTEINMPNN_X_INT)
   is_successful_lookup = jnp.all(nuc_seq != -1)
   is_valid_translation = is_valid_input & is_successful_lookup
 

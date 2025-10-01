@@ -10,7 +10,6 @@ import jax
 import jax.numpy as jnp
 from prxteinmpnn.mpnn import get_mpnn_model
 from prxteinmpnn.scoring.score import make_score_sequence
-from prxteinmpnn.utils.data_structures import ModelInputs
 from prxteinmpnn.utils.decoding_order import (
   DecodingOrder,
   random_decoding_order,
@@ -36,7 +35,6 @@ class DecodingOrderEnum(enum.Enum):
 
 def make_mpnn_score(
   mpnn_model_params: ModelParameters,
-  model_inputs: ModelInputs,
   decoding_order_enum: DecodingOrderEnum,
 ) -> FitnessFn:
   """Create a scoring function for the MPNN model.
