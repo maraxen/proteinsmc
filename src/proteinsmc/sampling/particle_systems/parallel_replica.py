@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Callable
 import jax
 import jax.numpy as jnp
 from blackjax.smc.base import SMCState as BlackjaxSMCState
-from blackjax.smc.base import step as blackjax_smc_step  # <-- Use native Blackjax step
+from blackjax.smc.base import step as blackjax_smc_step
 from jax import jit, lax, vmap
 
 if TYPE_CHECKING:
@@ -35,10 +35,11 @@ def initialize_parallel_replica_state(
   _fitness_function: StackedFitnessFn,
   key: PRNGKeyArray,
 ) -> PRSMCState:
-  """Initialize the state for a parallel replica."""
+  """Initialize the state for a parallel replica in a JAX-idiomatic way."""
+  total_pop_size = config.smc_config.population_size * config.n_islands
   template_population = generate_template_population(
     config.seed_sequence,
-    config.smc_config.population_size * config.n_islands,
+    total_pop_size,
     config.sequence_type,
     config.sequence_type,
   )
@@ -48,55 +49,55 @@ def initialize_parallel_replica_state(
     mutation_rate=config.diversification_ratio,
     sequence_type=config.sequence_type,
   )
-  template_population = jnp.split(
-    template_population,
+  template_population_stacked = template_population.reshape(
     config.n_islands,
-    axis=0,
+    config.smc_config.population_size,
+    -1,
   )
+
   island_keys = jax.random.split(key, config.n_islands)
-  lineage_arrays = []
-  for i in range(config.n_islands):
-    if config.track_lineage:
-      island_pop_size = config.smc_config.population_size
-      global_ids = jnp.arange(i * island_pop_size, (i + 1) * island_pop_size, dtype=jnp.int32)
-      parent_ids = jnp.full(island_pop_size, -1, dtype=jnp.int32)  # -1 indicates the root/no parent
-      lineage_arrays.append(jnp.stack([global_ids, parent_ids], axis=1))
-    else:
-      lineage_arrays.append(None)
+
+  if config.track_lineage:
+    island_pop_size = config.smc_config.population_size
+    island_indices = jnp.arange(config.n_islands)[:, None]
+    particle_indices = jnp.arange(island_pop_size)[None, :]
+    global_ids = island_indices * island_pop_size + particle_indices
+    parent_ids = jnp.full_like(global_ids, -1)  # -1 indicates the root
+
+    lineage_arrays = jnp.transpose(jnp.stack([global_ids, parent_ids], axis=1), (0, 2, 1))
+  else:
+    lineage_arrays = None
 
   initial_weights = jnp.full(
     config.smc_config.population_size,
     1.0 / config.smc_config.population_size,
     dtype=jnp.float32,
   )
-
-  initial_blackjax_states = [
-    BlackjaxSMCState(
-      particles=template_population[i],
-      weights=initial_weights,
+  initial_blackjax_states = vmap(
+    lambda p: BlackjaxSMCState(
+      particles=p,
+      weights=initial_weights,  # `initial_weights` is broadcasted
       update_parameters=jnp.zeros(0, dtype=jnp.float32),
-    )
-    for i in range(config.n_islands)
-  ]
+    ),
+  )(template_population_stacked)
+
+  # --- Refactored: Direct Batched State Construction ---
+  # Construct the batched IslandState Pytree directly.
+  # Each field will have a leading dimension of size `n_islands`.
+  initial_island_states = IslandState(
+    key=island_keys,
+    blackjax_state=initial_blackjax_states,
+    beta=jnp.array(config.island_betas, dtype=jnp.float32),
+    logZ_estimate=jnp.zeros(config.n_islands, dtype=jnp.float32),
+    mean_fitness=jnp.zeros(config.n_islands, dtype=jnp.float32),
+    ess=jnp.zeros(config.n_islands, dtype=jnp.float32),
+    step=jnp.zeros(config.n_islands, dtype=jnp.int32),
+    lineage=lineage_arrays,
+  )
 
   return PRSMCState(
     prng_key=key,
-    current_overall_state=jax.tree_util.tree_map(
-      lambda *xs: jnp.stack(xs, axis=0),
-      *[
-        IslandState(
-          key=island_keys[i],
-          blackjax_state=initial_blackjax_states[i],
-          beta=config.island_betas[i],
-          logZ_estimate=jnp.array(0.0, dtype=jnp.float32),
-          mean_fitness=jnp.array(0.0, dtype=jnp.float32),
-          ess=jnp.array(0.0, dtype=jnp.float32),
-          step=jnp.array(0, dtype=jnp.int32),
-          lineage=lineage_arrays[i],
-        )
-        for i in range(config.n_islands)
-      ],
-    ),
+    current_overall_state=initial_island_states,
     total_swaps_attempted=jnp.array(0, dtype=jnp.int32),
     total_swaps_accepted=jnp.array(0, dtype=jnp.int32),
   )
@@ -126,7 +127,6 @@ def island_smc_step(
 
   p_step = island_state.step
 
-  # --- 1. Define Blackjax Update (Mutation) Function ---
   @partial(
     jit,
     static_argnames=("p_step", "mutation_rate", "q_states"),
@@ -143,7 +143,7 @@ def island_smc_step(
     mutated_particles = jax.lax.cond(
       (p_step > 0),
       lambda x: mutate(
-        keys,  # Blackjax provides a key for the whole particle batch
+        keys,
         x,
         mutation_rate,
         q_states,
@@ -154,7 +154,6 @@ def island_smc_step(
 
     return mutated_particles, None
 
-  # --- 2. Define Blackjax Weight Function ---
   @partial(jit, static_argnames=("fitness_fn_partial", "beta"))
   def weight_fn(
     sequence: Array,
@@ -216,7 +215,7 @@ def island_smc_step(
 
   fitness_values, _ = fitness_fn(
     jnp.asarray(next_blackjax_state.particles),
-    key_smc_weight,  # Reuse key
+    key_smc_weight,
     None,
   )
 
@@ -226,7 +225,7 @@ def island_smc_step(
   if isinstance(normalized_weights, jax.Array) and isinstance(finite_fitness_mask, jax.Array):
     weighted_finite_fitness = jnp.where(
       finite_fitness_mask,
-      fitness_values * normalized_weights,  # Use the new normalized weights
+      fitness_values * normalized_weights,
       0.0,
     )
     sum_weights_for_finite = jnp.sum(jnp.where(finite_fitness_mask, normalized_weights, 0.0))
@@ -339,11 +338,11 @@ def migrate(
     tuple containing updated island states and total number of accepted swaps.
 
   """
-  all_population_stacked = island_states.blackjax_state.particles  # (n_islands, pop_size, seq_len)
+  all_population_stacked = island_states.blackjax_state.particles
   all_betas = island_states.beta
   mean_fitness_per_island = island_states.mean_fitness
 
-  all_lineage_stacked = island_states.lineage  # (n_islands, pop_size, 2)
+  all_lineage_stacked = island_states.lineage
 
   num_swaps_accepted_total = jnp.array(0, dtype=jnp.int32)
 
@@ -483,10 +482,9 @@ def migrate(
 
 
 def initialize_prsmc_state(config: ParallelReplicaConfig, key: PRNGKeyArray) -> PRSMCState:
-  """Initialize the state for the Parallel Replica SMC sampler."""
+  """Initialize the state for the Parallel Replica SMC sampler in a JAX-idiomatic way."""
   key_init_islands, key_smc_loop = jax.random.split(key)
 
-  # Create simple template population based on n_states
   from proteinsmc.utils.constants import AA_CHAR_TO_INT_MAP, NUCLEOTIDES_INT_MAP
 
   if config.sequence_type == "protein":
@@ -517,10 +515,10 @@ def initialize_prsmc_state(config: ParallelReplicaConfig, key: PRNGKeyArray) -> 
     mutation_rate=config.diversification_ratio,
     sequence_type=config.sequence_type,  # type: ignore[arg-type]
   )
-  initial_populations = jnp.split(
-    initial_population,
+  initial_populations_stacked = initial_population.reshape(
     config.n_islands,
-    axis=0,
+    config.smc_config.population_size,
+    -1,
   )
 
   island_keys = jax.random.split(key_init_islands, config.n_islands)
@@ -531,43 +529,33 @@ def initialize_prsmc_state(config: ParallelReplicaConfig, key: PRNGKeyArray) -> 
     1.0 / config.smc_config.population_size,
     dtype=jnp.float32,
   )
-  initial_blackjax_states_list = [
-    BlackjaxSMCState(
-      particles=initial_populations[i],
+  initial_blackjax_states = vmap(
+    lambda p: BlackjaxSMCState(
+      particles=p,
       weights=initial_weights,
       update_parameters=jnp.array(0.0, dtype=jnp.float32),
-    )
-    for i in range(config.n_islands)
-  ]
+    ),
+  )(initial_populations_stacked)
 
-  initial_island_states_list = []
-  for i in range(config.n_islands):
+  if config.track_lineage:
     island_pop_size = config.smc_config.population_size
+    island_indices = jnp.arange(config.n_islands)[:, None]
+    particle_indices = jnp.arange(island_pop_size)[None, :]
+    global_ids = island_indices * island_pop_size + particle_indices
+    parent_ids = jnp.full_like(global_ids, -1)
+    initial_lineage_arrays = jnp.transpose(jnp.stack([global_ids, parent_ids], axis=1), (0, 2, 1))
+  else:
+    initial_lineage_arrays = None
 
-    if config.track_lineage:
-      global_ids = jnp.arange(i * island_pop_size, (i + 1) * island_pop_size, dtype=jnp.int32)
-      parent_ids = jnp.full(island_pop_size, -1, dtype=jnp.int32)
-      initial_lineage_array = jnp.stack([global_ids, parent_ids], axis=1)
-    else:
-      initial_lineage_array = None
-    # --------------------------------------------------------------------------
-
-    initial_island_states_list.append(
-      IslandState(
-        key=island_keys[i],
-        beta=island_betas[i],
-        logZ_estimate=jnp.array(0.0, dtype=jnp.float32),
-        mean_fitness=jnp.array(0.0, dtype=jnp.float32),
-        ess=jnp.array(0.0, dtype=jnp.float32),
-        blackjax_state=initial_blackjax_states_list[i],
-        lineage=initial_lineage_array,
-        step=0,
-      ),
-    )
-
-  initial_island_states = jax.tree_util.tree_map(
-    lambda *xs: jnp.stack(xs, axis=0),
-    *initial_island_states_list,
+  initial_island_states = IslandState(
+    key=island_keys,
+    beta=island_betas,
+    logZ_estimate=jnp.zeros(config.n_islands, dtype=jnp.float32),
+    mean_fitness=jnp.zeros(config.n_islands, dtype=jnp.float32),
+    ess=jnp.zeros(config.n_islands, dtype=jnp.float32),
+    blackjax_state=initial_blackjax_states,
+    lineage=initial_lineage_arrays,
+    step=jnp.zeros(config.n_islands, dtype=jnp.int32),
   )
 
   return PRSMCState(
@@ -635,7 +623,6 @@ def run_prsmc_loop(
       total_swaps_accepted=carry_state.total_swaps_accepted + num_accepted_this_cycle,
     )
 
-    # --- CRITICAL CHANGE 7: Collect population and lineage history ---
     collected_metrics = {
       "ess_per_island": ess_p,
       "mean_fitness_per_island": mean_fit_p,
@@ -647,7 +634,6 @@ def run_prsmc_loop(
       "population": current_overall_state.population,  # Sequences for this step
       "lineage": current_overall_state.lineage,  # Lineage metadata for this step
     }
-    # ------------------------------------------------------------------
     return next_carry_state, collected_metrics
 
   final_carry_state, collected_outputs_scan = lax.scan(
