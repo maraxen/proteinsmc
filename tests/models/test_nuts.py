@@ -25,4 +25,5 @@ def test_nuts_config_initialization(fitness_evaluator_mock: FitnessEvaluator):
   )
   assert config.num_samples == 25
   assert config.step_size == 0.1
+
   assert config.max_num_doublings == 10

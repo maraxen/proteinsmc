@@ -127,6 +127,7 @@ def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int 
       func=fitness_fn,
       test_data=(
         tune_key,
+        jax.random.split(key)[0],
         jnp.zeros(
           (
             max(config.memory_config.auto_tuning_config.probe_chunk_sizes),

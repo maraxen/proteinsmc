@@ -19,7 +19,7 @@ from .constants import (
   CODON_INT_TO_RES_INT_JAX,
   COLABDESIGN_X_INT,
 )
-from .vmap_utils import chunked_vmap
+from .jax_utils import chunked_map
 
 
 @partial(jit, static_argnames=("q_states", "mutation_rate"))
@@ -214,9 +214,9 @@ def chunked_mutation_step(
   n_states: int,
   chunk_size: int,
 ) -> EvoSequence:
-  """Apply mutation to population using chunked vmap processing.
+  """Apply mutation to population using chunked map processing.
 
-  This function demonstrates how to use `chunked_vmap` with a function
+  This function demonstrates how to use `chunked_map` with a function
   that operates on a single item (`mutate_single`).
 
   Args:
@@ -240,11 +240,9 @@ def chunked_mutation_step(
 
   mutation_keys = random.split(key, population.shape[0])
 
-  mutated_population = chunked_vmap(
+  mutated_population = chunked_map(
     func=fn,
     data=(mutation_keys, population),
     chunk_size=chunk_size,
-    in_axes=(0, 0),
-    static_args=None,
   )
   return mutated_population.astype(jnp.int8)

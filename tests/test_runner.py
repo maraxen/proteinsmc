@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 from dataclasses import replace
 
+
 import pytest
 import jax.numpy as jnp
 
@@ -85,7 +86,13 @@ class TestRunExperiment:
     # Mock the sampler functions
     mock_initial_state = Mock()
     mock_final_state = Mock()
-    mock_outputs = {"metric1": jnp.ones(10), "metric2": jnp.ones(10)}
+    mock_metric = MagicMock()
+    mock_metric.shape = (10,)
+    mock_item = Mock()
+    mock_item.ndim = 0
+    mock_item.__float__ = lambda self: 0.0
+    mock_metric.__getitem__.return_value = mock_item
+    mock_outputs = {"metric1": mock_metric, "metric2": mock_metric}
     
     with patch.dict(SAMPLER_REGISTRY, {
       "smc": {
@@ -134,7 +141,14 @@ class TestRunExperiment:
     # Mock the sampler functions
     mock_initial_state = Mock()
     mock_final_state = Mock()
-    mock_outputs = {"metric1": jnp.ones(10), "metric2": jnp.ones(10)}
+
+    mock_metric = MagicMock()
+    mock_metric.shape = (10,)
+    mock_item = Mock()
+    mock_item.ndim = 0
+    mock_item.__float__ = lambda self: 0.0
+    mock_metric.__getitem__.return_value = mock_item
+    mock_outputs = {"metric1": mock_metric, "metric2": mock_metric}
     
     with patch.dict(SAMPLER_REGISTRY, {
       "smc": {
@@ -157,11 +171,19 @@ class TestRunExperiment:
       output_dir = Path(tmpdir) / "nonexistent_dir"
       assert not output_dir.exists()
       
+      mock_metric = MagicMock()
+      mock_metric.shape = (10,)
+      mock_item = Mock()
+      mock_item.ndim = 0
+      mock_item.__float__ = lambda self: 0.0
+      mock_metric.__getitem__.return_value = mock_item
+
       with patch.dict(SAMPLER_REGISTRY, {
         "smc": {
           "config_cls": SMCConfig,
           "initialize_fn": Mock(),
-          "run_fn": Mock(return_value=(Mock(), {"metric": jnp.ones(10)})),
+
+          "run_fn": Mock(return_value=(Mock(), {"metric": mock_metric})),
         }
       }), patch("proteinsmc.runner.RunManager"), \
          patch("proteinsmc.runner.get_fitness_function"), \
