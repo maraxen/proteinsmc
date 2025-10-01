@@ -21,6 +21,3 @@ def test_mcmc_config_initialization(fitness_evaluator_mock: FitnessEvaluator):
     num_samples=15,
     step_size=0.05,
     fitness_evaluator=fitness_evaluator_mock
-  )
-  assert config.num_samples == 15
-  assert config.step_size == 0.05

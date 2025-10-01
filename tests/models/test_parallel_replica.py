@@ -33,4 +33,5 @@ def test_parallel_replica_config_initialization(
     island_betas=[0.25, 0.5, 0.75, 1.0]
   )
   assert config.n_islands == 4
+
   assert config.exchange_frequency == 5

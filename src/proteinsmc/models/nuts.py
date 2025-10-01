@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import field, dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from flax.struct import PyTreeNode

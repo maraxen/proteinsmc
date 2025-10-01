@@ -36,3 +36,6 @@ def test_base_sampler_config_initialization(fitness_evaluator_mock: FitnessEvalu
   assert config.mutation_rate == 0.05
   assert config.diversification_ratio == 0.2
   assert config.sequence_type == "protein"
+  assert config.sequence_type == "protein"
+  assert isinstance(config.fitness_evaluator, FitnessEvaluator)
+  assert isinstance(config.memory_config, MemoryConfig)

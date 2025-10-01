@@ -18,8 +18,8 @@ def test_memory_config_initialization():
     >>> test_memory_config_initialization()
   """
   config = MemoryConfig(
-    population_chunk_size=16,
-    enable_chunked_vmap=True,
+    batch_size=16,
+    enable_batched_computation=True,
     device_memory_fraction=0.8,
     auto_tuning_config=AutoTuningConfig(
       enable_auto_tuning=False,
@@ -29,7 +29,7 @@ def test_memory_config_initialization():
       performance_tolerance=0.1,
     ),
   )
-  assert config.population_chunk_size == 16
-  assert config.enable_chunked_vmap is True
+  assert config.batch_size == 16
+  assert config.enable_batched_computation is True
   assert config.device_memory_fraction == 0.8
   assert isinstance(config.auto_tuning_config, AutoTuningConfig)
