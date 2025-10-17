@@ -38,7 +38,8 @@ def with_config(func: F) -> F:
   param_names = set(sig.parameters.keys()) - {"sampler_config"}
 
   @functools.wraps(func)
-  def wrapper(sampler_config: BaseSamplerConfig, *args: Any, **kwargs: Any) -> Any:
+  def wrapper(sampler_config: BaseSamplerConfig, *args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
+    """Unpack config attributes into function arguments."""
     # Extract matching attributes from config
     config_kwargs = {
       name: getattr(sampler_config, name)

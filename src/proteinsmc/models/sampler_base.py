@@ -18,6 +18,7 @@ if TYPE_CHECKING:
   from proteinsmc.models.mcmc import MCMCState
   from proteinsmc.models.nuts import NUTSState
   from proteinsmc.models.smc import SMCState
+  from proteinsmc.utils.annealing import AnnealingConfig
 from proteinsmc.utils.fitness import FitnessEvaluator
 
 
@@ -64,6 +65,8 @@ class BaseSamplerConfig:
   combinations_mode: Literal["zip", "product"] | Sequence[Literal["zip", "product"]] = field(
     default="zip",
   )
+  annealing_config: AnnealingConfig | None = field(default=None, kw_only=True)
+  track_lineage: bool = field(default=False)
 
   def _validate_types(self) -> None:
     """Check types of the fields."""
@@ -180,3 +183,17 @@ SamplerState = TypeVar(
   "SamplerState",
   bound="GibbsState | HMCState | MCMCState | NUTSState | SMCState",
 )
+
+
+def config_to_jax(config: BaseSamplerConfig) -> dict[str, jax.Array]:
+  """Convert configuration fields to JAX arrays for JIT compatibility."""
+  jax_config = {}
+  for field_name, field_value in config.__dict__.items():
+    if isinstance(
+      field_value,
+      (int, float, str, bool),
+    ):
+      jax_config[field_name] = jax.numpy.array(field_value)
+    else:
+      jax_config[field_name] = field_value
+  return jax_config
