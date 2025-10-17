@@ -20,17 +20,11 @@ dependencies = [
   "prxteinmpnn @ git+https://github.com/maraxen/prxteinmpnn.git",
   "einops>=0.8.1",
   "huggingface-hub>=0.35.3",
+  "array-record>=0.8.1",
 ]
 classifiers = [
   "Programming Language :: Python :: 3",
   "Operating System :: OS Independent",
-]
-
-[project.optional-dependencies]
-dev = [
-  "pytest",
-  "pytest-cov",
-  "hypothesis"
 ]
 
 [tool.setuptools]
@@ -44,5 +38,9 @@ pythonpath = ["src"]
 
 [dependency-groups]
 dev = [
+    "hypothesis>=6.140.2",
+    "pytest>=8.4.2",
+    "pytest-cov>=7.0.0",
+    "ruff>=0.14.1",
     "ty>=0.0.1a21",
 ]

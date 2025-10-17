@@ -17,7 +17,4 @@ Requires-Dist: safetensors
 Requires-Dist: prxteinmpnn@ git+https://github.com/maraxen/prxteinmpnn.git
 Requires-Dist: einops>=0.8.1
 Requires-Dist: huggingface-hub>=0.35.3
-Provides-Extra: dev
-Requires-Dist: pytest; extra == "dev"
-Requires-Dist: pytest-cov; extra == "dev"
-Requires-Dist: hypothesis; extra == "dev"
+Requires-Dist: array-record>=0.8.1

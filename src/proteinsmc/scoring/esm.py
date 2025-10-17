@@ -11,7 +11,7 @@ import jax.numpy as jnp
 from proteinsmc.utils.esm import load_model, remap_sequences
 
 if TYPE_CHECKING:
-  from jaxtyping import Float, PRNGKeyArray
+  from jaxtyping import Array, Float, PRNGKeyArray
 
   from proteinsmc.models.fitness import FitnessFn
   from proteinsmc.models.types import ProteinSequence
@@ -43,12 +43,17 @@ def make_esm_score(
   eqx_model = eqx.filter_jit(eqx_model)
 
   @jax.jit
-  def score(_key: PRNGKeyArray, sequence: ProteinSequence) -> Float:
+  def score(
+    sequence: ProteinSequence,
+    _key: PRNGKeyArray | None = None,
+    _context: Array | None = None,
+  ) -> Float:
     """Score a protein sequence using the ESM model.
 
     Args:
-        key: JAX PRNG key (not used in this function).
-        sequence: Protein sequence as a string.
+        sequence: Protein sequence as an array.
+        _key: JAX PRNG key (not used in this function).
+        _context: Additional context (not used in this function).
 
     Returns:
         The PLL score of the sequence.

@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, BinaryIO, Callable, Generator
+from typing import TYPE_CHECKING, Any, BinaryIO, Callable
 
 import einops
 import equinox as eqx
@@ -230,7 +230,7 @@ class MultiHeadAttention(AbstractFromTorch):
     q, k = self.rotary(q, k)
     return (
       einops.rearrange(q, "b s h d -> b s (h d)"),
-      einops.rearrange(k, "b s h d -> b s (h d)")
+      einops.rearrange(k, "b s h d -> b s (h d)"),
     )
 
 
