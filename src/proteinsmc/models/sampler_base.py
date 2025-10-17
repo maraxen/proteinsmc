@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal, Protocol, TypeVar
+from typing import TYPE_CHECKING, Literal, Protocol, Sequence, TypeVar
 
-from proteinsmc.models.fitness import FitnessEvaluator
+import jax
+import numpy as np
+from jax.sharding import Mesh
+
 from proteinsmc.models.memory import MemoryConfig
 
 if TYPE_CHECKING:
@@ -14,6 +18,7 @@ if TYPE_CHECKING:
   from proteinsmc.models.mcmc import MCMCState
   from proteinsmc.models.nuts import NUTSState
   from proteinsmc.models.smc import SMCState
+from proteinsmc.utils.fitness import FitnessEvaluator
 
 
 @dataclass(frozen=True)
@@ -24,98 +29,151 @@ class BaseSamplerConfig:
   """
 
   prng_seed: int = field(default=42)
-  """Random seed for reproducibility."""
   sampler_type: str = field(default="unknown")
-  """Type of the sampler (e.g., 'gibbs', 'smc', etc.)."""
-  """This is used to identify the sampler type in the registry."""
-  seed_sequence: str = field(default="")
-  """Initial sequence to start the sampling process."""
-  num_samples: int = field(default=100)
-  """Number of generations to run the sampler."""
-  """This is used to control the number of iterations in the sampling process."""
-  n_states: int = field(default=20)
-  """Number of possible states for each position in the sequence."""
-  """This is used to define the state space of the sequences."""
-  mutation_rate: float = field(default=0.1)
-  """Rate of mutation applied to the sequences during sampling."""
-  """This is used to control the diversity of the sampled sequences."""
-  diversification_ratio: float = field(default=0.0)
-  """Ratio of diversification applied to the sequences."""
-  sequence_type: Literal["protein", "nucleotide"] = field(default="protein")
-  fitness_evaluator: FitnessEvaluator = field(kw_only=True)
+
+  device_mesh_shape: tuple[int, ...] | None = field(default=None)
+  """Shape of the device mesh (e.g., (8,) for 1D, (4, 2) for 2D).
+  If None, autodetects all available devices and creates a 1D mesh.
+  """
+  axis_names: tuple[str, ...] | None = field(default=None)
+  """Names for the mesh axes (e.g., ('devices',)). Must match the length
+  of device_mesh_shape if provided.
+  """
+
+  mesh: Mesh = field(init=False, repr=False, compare=False, metadata={"pytree_node": False})
+  """The live JAX device mesh. Created in __post_init__."""
+
   memory_config: MemoryConfig = field(default_factory=MemoryConfig)
 
+  fitness_evaluator: FitnessEvaluator = field(
+    kw_only=True,
+  )
+  """Fitness evaluator to assess the quality of sampled sequences."""
+
+  seed_sequence: str | Sequence[str] = field(default="")
+  num_samples: int | Sequence[int] = field(default=100)
+  n_states: int = field(default=20)
+  mutation_rate: float | Sequence[float] = field(default=0.1)
+  diversification_ratio: float | Sequence[float] = field(default=0.0)
+  sequence_type: Literal["protein", "nucleotide"] | Sequence[Literal["protein", "nucleotide"]] = (
+    field(
+      default="protein",
+    )
+  )
+
+  combinations_mode: Literal["zip", "product"] | Sequence[Literal["zip", "product"]] = field(
+    default="zip",
+  )
+
   def _validate_types(self) -> None:
-    """Validate the types of the fields."""
-    if not isinstance(self.seed_sequence, str):
-      msg = "seed_sequence must be a string."
+    """Check types of the fields."""
+    if self.fitness_evaluator is not None and not isinstance(
+      self.fitness_evaluator,
+      FitnessEvaluator,
+    ):
+      msg = "fitness_evaluator must be a FitnessEvaluator instance or None."
       raise TypeError(msg)
-    if not isinstance(self.n_states, int):
-      msg = "n_states must be an integer."
+    if not isinstance(self.seed_sequence, (str, Sequence)):
+      msg = "seed_sequence must be a string or a sequence of strings."
       raise TypeError(msg)
-    if not isinstance(self.num_samples, int):
-      msg = "generations must be an integer."
+    if not isinstance(self.num_samples, (int, Sequence)):
+      msg = "num_samples must be an integer or a sequence of integers."
       raise TypeError(msg)
-    if not isinstance(self.mutation_rate, float):
-      msg = "mutation_rate must be a float."
+    if not isinstance(self.n_states, (int, Sequence)):
+      msg = "n_states must be an integer or a sequence of integers."
       raise TypeError(msg)
-    if not isinstance(self.diversification_ratio, float):
-      msg = "diversification_ratio must be a float."
+    if not isinstance(self.mutation_rate, (float, Sequence)):
+      msg = "mutation_rate must be a float or a sequence of floats."
       raise TypeError(msg)
-    if not isinstance(self.fitness_evaluator, FitnessEvaluator):
-      msg = "fitness_evaluator must be a FitnessEvaluator instance."
+    if not isinstance(self.diversification_ratio, (float, Sequence)):
+      msg = "diversification_ratio must be a float or a sequence of floats."
+      raise TypeError(msg)
+    if not isinstance(
+      self.sequence_type,
+      (str, Sequence),
+    ) or (
+      isinstance(self.sequence_type, str) and self.sequence_type not in ("protein", "nucleotide")
+    ):
+      msg = "sequence_type must be 'protein', 'nucleotide', or a sequence of these."
+      raise TypeError(msg)
+    if not isinstance(
+      self.combinations_mode,
+      (str, Sequence),
+    ) or (
+      isinstance(self.combinations_mode, str) and self.combinations_mode not in ("zip", "product")
+    ):
+      msg = "combinations_mode must be 'zip', 'product', or a sequence of these."
       raise TypeError(msg)
     if not isinstance(self.memory_config, MemoryConfig):
       msg = "memory_config must be a MemoryConfig instance."
       raise TypeError(msg)
 
-  def __post_init__(self) -> None:
-    """Validate the common configuration fields."""
-    self._validate_types()
-    if self.n_states <= 0:
+  def _check_values(self) -> None:
+    """Check values of the fields."""
+    if isinstance(self.num_samples, int) and self.num_samples <= 0:
+      msg = "num_samples must be positive."
+      raise ValueError(msg)
+    if isinstance(self.n_states, int) and self.n_states <= 0:
       msg = "n_states must be positive."
       raise ValueError(msg)
-    if self.num_samples <= 0:
-      msg = "generations must be positive."
-      raise ValueError(msg)
-    if not (0.0 <= self.mutation_rate <= 1.0):
+    if isinstance(self.mutation_rate, float) and not (0.0 <= self.mutation_rate <= 1.0):
       msg = "mutation_rate must be in [0.0, 1.0]."
       raise ValueError(msg)
-    if not (0.0 <= self.diversification_ratio <= 1.0):
+    if isinstance(self.diversification_ratio, float) and not (
+      0.0 <= self.diversification_ratio <= 1.0
+    ):
       msg = "diversification_ratio must be in [0.0, 1.0]."
       raise ValueError(msg)
-    if self.sequence_type not in ("protein", "nucleotide"):
-      msg = "sequence_type must be 'protein' or 'nucleotide'."
+
+  def __post_init__(self) -> None:
+    """Validate the experiment configuration."""
+    self._validate_types()
+    self._check_values()
+    object.__setattr__(self, "mesh", self._initialize_device_mesh())
+
+  def _initialize_device_mesh(self) -> Mesh:
+    """Create the JAX device mesh based on the configuration."""
+    devices = jax.devices()
+    n_devices = len(devices)
+
+    # 1. Autodetect case
+    if self.device_mesh_shape is None:
+      shape = (n_devices,)
+      names = self.axis_names or ("devices",)
+      if len(names) != 1:
+        msg = "Default mesh is 1D, so axis_names must have one element if provided."
+        raise ValueError(msg)
+      return Mesh(devices, axis_names=names)
+
+    # 2. User-provided shape case
+    if math.prod(self.device_mesh_shape) != n_devices:
+      msg = (
+        f"Mesh shape {self.device_mesh_shape} requires {math.prod(self.device_mesh_shape)} "
+        f"devices, but {n_devices} are available."
+      )
       raise ValueError(msg)
+
+    names = self.axis_names
+    if names is None:
+      msg = "You must provide axis_names if you specify a device_mesh_shape."
+      raise ValueError(msg)
+    if len(names) != len(self.device_mesh_shape):
+      msg = (
+        f"Length of axis_names {names} must match length of device_mesh_shape "
+        f"{self.device_mesh_shape}."
+      )
+      raise ValueError(msg)
+
+    return Mesh(np.array(devices).reshape(self.device_mesh_shape), axis_names=names)
 
   @property
   def additional_config_fields(self) -> dict[str, str]:
     """Return additional fields for the configuration that are not part of the PyTree."""
     return {}
 
-  @property
-  def generations(self) -> int:
-    """Alias for num_samples for backward compatibility."""
-    return self.num_samples
-
 
 class SamplerOutputProtocol(Protocol):
-  """Protocol for sampler output objects, for generic data extraction."""
-
-  @property
-  def per_gen_stats_metrics(self) -> dict[str, str]:
-    """Return a mapping from generic metric name to attribute name for per-generation stats."""
-    return {}
-
-  @property
-  def summary_stats_metrics(self) -> dict[str, str]:
-    """Return a mapping from generic metric name to attribute name for summary stats."""
-    return {}
-
-  @property
-  def output_type_name(self) -> str:
-    """Return the string name of the output type (e.g., 'SMC', 'ParallelReplicaSMC')."""
-    return "SamplerOutput"
+  """Protocol for sampler output dataclasses."""
 
 
 SamplerState = TypeVar(

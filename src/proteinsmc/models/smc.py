@@ -102,9 +102,9 @@ class SMCState(PyTreeNode):
   """State for the blackjax SMC algorithm."""
   key: PRNGKeyArray
   """JAX PRNG key for random number generation."""
-  beta: float = 1.0
+  beta: Float
   """Current inverse temperature (beta) for the SMC algorithm."""
-  step: int = 0
+  step: Int
   """Current step in the SMC algorithm."""
 
 

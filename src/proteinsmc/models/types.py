@@ -7,8 +7,7 @@ maintaining clarity and correctness in a JAX-based codebase.
 
 from __future__ import annotations
 
-import enum
-from typing import Protocol, TypeVar
+from typing import Literal, Protocol, TypeVar
 
 from jaxtyping import Array, Int
 
@@ -24,14 +23,8 @@ EvoSequence = Int[NucleotideSequence | ProteinSequence, "sequence_length alphabe
 BatchEvoSequence = Int[Array, "batch_size sequence_length alphabet_size"]
 
 
-class SequenceType(enum.Enum):
-  """Enumeration for sequence types.
-
-  This is used to specify the type of sequence being processed.
-  """
-
-  NUCLEOTIDE = "nucleotide"
-  PROTEIN = "protein"
+SequenceType = Literal["nucleotide", "protein"]
+"""Type of biological sequence, either nucleotide or protein."""
 
 
 class Vmapped(Protocol):

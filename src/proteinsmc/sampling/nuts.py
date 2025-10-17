@@ -13,11 +13,10 @@ from typing import TYPE_CHECKING
 
 import blackjax
 import jax
-import jax.numpy as jnp
 from jax import jit
 
-from proteinsmc.models.nuts import NUTSConfig, NUTSState
-from proteinsmc.utils.initiate import generate_template_population
+from proteinsmc.models.nuts import NUTSState
+from proteinsmc.utils.config_unpacker import with_config
 
 if TYPE_CHECKING:
   from jaxtyping import PRNGKeyArray
@@ -25,48 +24,15 @@ if TYPE_CHECKING:
   from proteinsmc.models.fitness import StackedFitnessFn
   from proteinsmc.models.mutation import MutationFn
 
-__all__ = ["initialize_nuts_state", "run_nuts_loop"]
+__all__ = ["run_nuts_loop"]
 
 
-def initialize_nuts_state(
-  config: NUTSConfig,
-  fitness_fn: StackedFitnessFn,
-  key: PRNGKeyArray,
-) -> NUTSState:
-  """Initialize the state of the NUTS sampler.
-
-  Args:
-      config: Configuration for the NUTS sampler.
-      fitness_fn: Fitness function to evaluate sequences.
-      key: JAX PRNG key.
-
-  Returns:
-      An initial NUTSState.
-
-  """
-  initial_sequence = generate_template_population(
-    initial_sequence=config.seed_sequence,
-    population_size=1,
-    input_sequence_type=config.sequence_type,
-    output_sequence_type=config.sequence_type,
-  )
-  blackjax_initial_state = blackjax.nuts.init(
-    initial_sequence,
-    fitness_fn,
-    step_size=config.step_size,
-    max_tree_depth=config.max_num_doublings,
-  )
-  return NUTSState(
-    sequence=initial_sequence,
-    fitness=jnp.array(blackjax_initial_state.logdensity, dtype=jnp.float32),
-    key=key,
-    blackjax_state=blackjax_initial_state,
-  )
-
-
-@partial(jit, static_argnames=("config", "fitness_fn"))
+@with_config
+@partial(jit, static_argnames=("num_samples", "step_size", "num_doublings", "fitness_fn"))
 def run_nuts_loop(
-  config: NUTSConfig,
+  num_samples: int,
+  step_size: float,
+  num_doublings: int,
   initial_state: NUTSState,
   fitness_fn: StackedFitnessFn,
   _mutation_fn: MutationFn | None = None,
@@ -94,10 +60,10 @@ def run_nuts_loop(
       rng_key=key,
       state=state.blackjax_state,
       logdensity_fn=fitness_fn,
-      step_size=config.step_size,
-      max_num_doublings=config.max_num_doublings,
+      step_size=step_size,
+      max_num_doublings=num_doublings,
     )
-    new_state = state.replace(
+    new_state = NUTSState(
       sequence=new_blackjax_state.position,
       fitness=new_blackjax_state.logdensity,
       key=key,
@@ -105,6 +71,6 @@ def run_nuts_loop(
     )
     return new_state, new_state
 
-  keys = jax.random.split(initial_state.key, config.num_samples)
+  keys = jax.random.split(initial_state.key, num_samples)
   final_state, state_history = jax.lax.scan(one_step, initial_state, keys)
   return final_state, state_history

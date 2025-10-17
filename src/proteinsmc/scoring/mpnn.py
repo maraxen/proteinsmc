@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import enum
-from typing import TYPE_CHECKING
+from functools import partial
+from typing import IO, TYPE_CHECKING, Literal, Sequence
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 from prxteinmpnn.mpnn import get_mpnn_model
 from prxteinmpnn.scoring.score import make_score_sequence
 from prxteinmpnn.utils.decoding_order import (
@@ -16,113 +17,102 @@ from prxteinmpnn.utils.decoding_order import (
 )
 
 if TYPE_CHECKING:
+  from pathlib import Path
+
   from prxteinmpnn.utils.types import (
     Array,
-    AtomMask,
-    ChainIndex,
     Float,
     ModelParameters,
     PRNGKeyArray,
-    ResidueIndex,
-    StructureAtomicCoordinates,
   )
 
   from proteinsmc.models.fitness import FitnessFn
   from proteinsmc.models.types import ProteinSequence
 
+from prxteinmpnn.io.loaders import create_protein_dataset
 
 DEFAULT_MPNN_MODEL = get_mpnn_model()
 
 
-class DecodingOrderEnum(enum.Enum):
-  """Enum for decoding order types."""
+DecodingSettings = Literal["random", "same_random", "sequential", "full_ar"]
 
-  SAME_RANDOM = "same_random"
-  KEY_RANDOM = "random_each"
-  SEQUENTIAL = "sequential"
+
+def sequential_decode_order(
+  _key: PRNGKeyArray,
+  num_residues: int,
+) -> tuple[DecodingOrder, PRNGKeyArray]:
+  """Generate a sequential decoding order."""
+  return jnp.arange(num_residues, dtype=jnp.int32), _key
 
 
 def make_mpnn_score(
   mpnn_model_params: ModelParameters,
-  decoding_order_enum: DecodingOrderEnum,
+  inputs: str | Path | Sequence[str | Path | IO[str]],
+  decoding_settings: DecodingSettings,
 ) -> FitnessFn:
   """Create a scoring function for the MPNN model.
 
   Args:
-      mpnn_model_params (ModelParameters): Parameters for the MPNN model.
-      coordinates (StructureAtomicCoordinates): Atomic coordinates of the protein.
-      atom_mask (AtomMask): Mask for atoms.
-      residue_index (ResidueIndex): Index of each residue.
-      chain_index (ChainIndex): Index of the chain for each residue.
-      decoding_order_enum (DecodingOrderEnum): Enum specifying the decoding order type.
+      mpnn_model_params: Parameters of the MPNN model.
+      inputs: Input structure(s) for scoring.
+      decoding_settings: Decoding strategy to use.
 
   Returns:
       A function that scores a protein sequence using the MPNN model.
 
   """
-  input_args = (
-    coordinates,
-    atom_mask,
-    residue_index,
-    chain_index,
+  dataset = create_protein_dataset(
+    inputs,
+    batch_size=len(inputs) if isinstance(inputs, Sequence) else 1,
+  )
+  processed_inputs = next(iter(dataset))
+
+  decoding_order_fn = (
+    random_decoding_order
+    if decoding_settings == "random"
+    else sequential_decode_order
+    if decoding_settings == "sequential"
+    else single_decoding_order
+    if decoding_settings == "same_random"
+    else random_decoding_order
   )
 
-  match decoding_order_enum:
-    case DecodingOrderEnum.KEY_RANDOM:
-      score_fn = make_score_sequence(
-        model_parameters=mpnn_model_params,
-        decoding_order_fn=random_decoding_order,
-      )
+  ar_mask = (
+    1
+    - np.eye(
+      processed_inputs.residue_index.shape[0],
+      dtype=np.float32,
+    )
+    if decoding_settings == "full_ar"
+    else None
+  )
 
-      @jax.jit
-      def mpnn_score(
-        key: PRNGKeyArray,
-        protein_sequence: ProteinSequence,
-        _context: Array | None = None,
-      ) -> Float:
-        """Scores a protein sequence using the MPNN model."""
-        return score_fn(
-          key,
-          protein_sequence,
-          *input_args,
-        )[0]
+  score_sequence = make_score_sequence(
+    model_parameters=mpnn_model_params,
+    decoding_order_fn=decoding_order_fn,
+  )
 
-      return mpnn_score
+  score_fn = partial(score_sequence)(
+    structure_coordinates=processed_inputs.coordinates,  # pyright: ignore[reportCallIssue]
+    mask=processed_inputs.mask,
+    residue_index=processed_inputs.residue_index,
+    chain_index=processed_inputs.chain_index,
+    ar_mask=ar_mask,
+  )
 
-    case DecodingOrderEnum.SAME_RANDOM | DecodingOrderEnum.SEQUENTIAL:
-      if decoding_order_enum == DecodingOrderEnum.SEQUENTIAL:
+  @jax.jit
+  def mpnn_score(
+    key: PRNGKeyArray,
+    protein_sequence: ProteinSequence,
+    _context: Array | None = None,
+  ) -> Float:
+    """Scores a protein sequence using the MPNN model."""
+    return jnp.mean(
+      score_fn(
+        key,
+        protein_sequence,
+      )[:, 0],
+      axis=0,
+    )
 
-        def sequential_decode_order(
-          _key: PRNGKeyArray,
-          num_residues: int,
-        ) -> tuple[DecodingOrder, PRNGKeyArray]:
-          """Generate a sequential decoding order."""
-          return jnp.arange(num_residues, dtype=jnp.int32), _key
-
-        decoding_order_fn = sequential_decode_order
-      else:
-        decoding_order_fn = single_decoding_order
-
-      score_fn = make_score_sequence(
-        model_parameters=mpnn_model_params,
-        decoding_order_fn=decoding_order_fn,
-      )
-
-      @jax.jit
-      def mpnn_score(
-        _key: PRNGKeyArray,
-        protein_sequence: ProteinSequence,
-        _context: Array | None = None,
-      ) -> Float:
-        """Scores a protein sequence using the MPNN model."""
-        return score_fn(
-          _key,
-          protein_sequence,
-          *input_args,
-        )[0]
-
-      return mpnn_score
-
-    case _:
-      msg = f"Unsupported decoding order enum: {decoding_order_enum}"
-      raise ValueError(msg)
+  return mpnn_score

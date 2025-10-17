@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-from functools import partial
 from typing import TYPE_CHECKING, Literal
 
 import jax.numpy as jnp
 from jax import jit, random, vmap
 
 if TYPE_CHECKING:
-  from jaxtyping import PRNGKeyArray
+  from jaxtyping import Float, Int, PRNGKeyArray
 
-  from proteinsmc.models.mutation import MutationFn
-  from proteinsmc.models.sampler_base import BaseSamplerConfig
   from proteinsmc.models.types import EvoSequence, NucleotideSequence
 
 from .constants import (
@@ -22,12 +19,11 @@ from .constants import (
 from .jax_utils import chunked_map
 
 
-@partial(jit, static_argnames=("q_states", "mutation_rate"))
 def mutate(
   key: PRNGKeyArray,
   sequence: EvoSequence,
-  mutation_rate: float,
-  q_states: int,
+  mutation_rate: Float,
+  q_states: Int,
 ) -> EvoSequence:
   """Apply random mutations to a population of nucleotide sequences.
 
@@ -45,23 +41,7 @@ def mutate(
   mutation_mask = random.uniform(key_mutate, shape=sequence.shape) < mutation_rate
   offsets = random.randint(key_offsets, shape=sequence.shape, minval=1, maxval=q_states)
   proposed_mutations = (sequence + offsets) % q_states
-  mutated_sequences = jnp.where(mutation_mask, proposed_mutations, sequence)
-  return mutated_sequences.astype(jnp.int8)
-
-
-def make_mutation_fn(
-  config: BaseSamplerConfig,
-) -> MutationFn:
-  """Create a transition generator for mutating sequences."""
-
-  def mutation_fn(
-    key: PRNGKeyArray,
-    sequence: EvoSequence,
-  ) -> EvoSequence:
-    """Generate a mutated sequence."""
-    return mutate(key, sequence, mutation_rate=config.mutation_rate, n_states=config.n_states)
-
-  return mutation_fn
+  return jnp.asarray(jnp.where(mutation_mask, proposed_mutations, sequence), dtype=jnp.int8)
 
 
 @jit
@@ -103,12 +83,10 @@ def _revert_x_codons_if_mutated(
   return final_nucleotide_sequences.astype(jnp.int8)
 
 
-@partial(jit, static_argnames=("n_states",))
 def diversify_initial_nucleotide_sequences(
   key: PRNGKeyArray,
   seed_sequences: EvoSequence,
-  mutation_rate: float,
-  n_states: int,
+  mutation_rate: Float,
 ) -> EvoSequence:
   """Apply random nucleotide mutations to template sequences, ensuring no 'X' codons are introduced.
 
@@ -129,8 +107,8 @@ def diversify_initial_nucleotide_sequences(
   key_mask, key_offsets = random.split(key)
   mutation_mask_attempt = random.uniform(key_mask, shape=seed_sequences.shape) < mutation_rate
 
-  offsets = random.randint(key_offsets, shape=seed_sequences.shape, minval=1, maxval=n_states)
-  proposed_nucleotides = (seed_sequences + offsets) % n_states
+  offsets = random.randint(key_offsets, shape=seed_sequences.shape, minval=0, maxval=4)
+  proposed_nucleotides = (seed_sequences + offsets) % 4
 
   particles_with_all_proposed_mutations = jnp.where(
     mutation_mask_attempt,
@@ -147,12 +125,10 @@ def diversify_initial_nucleotide_sequences(
   return final_population.astype(jnp.int8)
 
 
-@partial(jit, static_argnames=("n_states",))
 def diversify_initial_protein_sequences(
   key: PRNGKeyArray,
   seed_sequences: EvoSequence,
-  mutation_rate: float,
-  n_states: int,
+  mutation_rate: Float,
 ) -> EvoSequence:
   """Apply random protein mutations to template sequences.
 
@@ -170,8 +146,8 @@ def diversify_initial_protein_sequences(
   key_mask, key_offsets = random.split(key)
   mutation_mask_attempt = random.uniform(key_mask, shape=seed_sequences.shape) < mutation_rate
 
-  offsets = random.randint(key_offsets, shape=seed_sequences.shape, minval=1, maxval=n_states)
-  proposed_amino_acids = (seed_sequences + offsets) % n_states
+  offsets = random.randint(key_offsets, shape=seed_sequences.shape, minval=0, maxval=20)
+  proposed_amino_acids = (seed_sequences + offsets) % 20
 
   final_population = jnp.where(
     mutation_mask_attempt,
@@ -185,7 +161,7 @@ def diversify_initial_protein_sequences(
 def diversify_initial_sequences(
   key: PRNGKeyArray,
   seed_sequences: EvoSequence,
-  mutation_rate: float,
+  mutation_rate: Float,
   sequence_type: Literal["nucleotide", "protein"],
 ) -> EvoSequence:
   """Diversify initial sequences based on the sequence type."""
@@ -194,14 +170,12 @@ def diversify_initial_sequences(
       key,
       seed_sequences,
       mutation_rate,
-      n_states=4,
     )
   if sequence_type == "protein":
     return diversify_initial_protein_sequences(
       key,
       seed_sequences,
       mutation_rate,
-      n_states=20,
     )
   msg = f"Unsupported sequence_type='{sequence_type}'"
   raise ValueError(msg)

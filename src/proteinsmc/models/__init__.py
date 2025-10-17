@@ -49,7 +49,6 @@ __all__ = [
   "NucleotideSequence",
   "ProteinSequence",
   "EvoSequence",
-  "MPNNModel",
   "GibbsConfig",
   "GibbsState",
   "GibbsUpdateFn",

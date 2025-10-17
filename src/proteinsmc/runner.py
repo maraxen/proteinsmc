@@ -25,19 +25,15 @@ from proteinsmc.sampling import (
   run_nuts_loop,
 )
 from proteinsmc.sampling.gibbs import initialize_gibbs_state
-from proteinsmc.sampling.hmc import initialize_hmc_state
-from proteinsmc.sampling.mcmc import initialize_mcmc_state
-from proteinsmc.sampling.nuts import initialize_nuts_state
 from proteinsmc.sampling.particle_systems.parallel_replica import (
-  initialize_prsmc_state,
   run_prsmc_loop,
 )
-from proteinsmc.sampling.particle_systems.smc import initialize_smc_state, run_smc_loop
+from proteinsmc.sampling.particle_systems.smc import run_smc_loop
 from proteinsmc.utils.annealing import get_annealing_function
 from proteinsmc.utils.constants import NUCLEOTIDES_NUM_STATES
 from proteinsmc.utils.fitness import get_fitness_function
 from proteinsmc.utils.memory import auto_tune_chunk_size
-from proteinsmc.utils.mutation import make_mutation_fn
+from proteinsmc.utils.mutation import mutate
 from proteinsmc.utils.translation import aa_to_nucleotide, nucleotide_to_aa
 
 if TYPE_CHECKING:
@@ -46,12 +42,10 @@ if TYPE_CHECKING:
 SAMPLER_REGISTRY = {
   "smc": {
     "config_cls": SMCConfig,
-    "initialize_fn": initialize_smc_state,
     "run_fn": run_smc_loop,
   },
   "parallel_replica": {
     "config_cls": ParallelReplicaConfig,
-    "initialize_fn": initialize_prsmc_state,
     "run_fn": run_prsmc_loop,
   },
   "gibbs": {
@@ -61,17 +55,14 @@ SAMPLER_REGISTRY = {
   },
   "mcmc": {
     "config_cls": MCMCConfig,
-    "initialize_fn": initialize_mcmc_state,
     "run_fn": run_mcmc_loop,
   },
   "hmc": {
     "config_cls": HMCConfig,
-    "initialize_fn": initialize_hmc_state,
     "run_fn": run_hmc_loop,
   },
   "nuts": {
     "config_cls": NUTSConfig,
-    "initialize_fn": initialize_nuts_state,
     "run_fn": run_nuts_loop,
   },
 }
@@ -148,11 +139,9 @@ def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int 
       chunk_size=chunk_size,
     )
 
-  initialize_fn = sampler_def["initialize_fn"]
+  initialize_fn = 
   run_fn = sampler_def["run_fn"]
-  mutation_fn = make_mutation_fn(
-    config=config,
-  )
+  mutation_fn = mutate
 
   with RunManager(Path(output_dir), config) as writer:
     logger.info(

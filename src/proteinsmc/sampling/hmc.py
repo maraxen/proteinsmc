@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-from functools import partial
 from typing import TYPE_CHECKING
 
 import blackjax
 import jax
-from jax import jit
 
-from proteinsmc.models.hmc import HMCConfig, HMCState
-from proteinsmc.utils.initiate import generate_template_population
+from proteinsmc.models.hmc import HMCState
+from proteinsmc.utils.config_unpacker import with_config
 
 if TYPE_CHECKING:
   from jaxtyping import PRNGKeyArray
@@ -18,48 +16,13 @@ if TYPE_CHECKING:
   from proteinsmc.models.fitness import StackedFitnessFn
   from proteinsmc.models.mutation import MutationFn
 
-__all__ = ["initialize_hmc_state", "run_hmc_loop"]
+
+__all__ = ["run_hmc_loop"]
 
 
-def initialize_hmc_state(
-  config: HMCConfig,
-  fitness_fn: StackedFitnessFn,
-  key: PRNGKeyArray,
-) -> HMCState:
-  """Initialize the state of the HMC sampler.
-
-  Args:
-      config: Configuration for the HMC sampler.
-      fitness_fn: Fitness function to evaluate sequences.
-      key: JAX PRNG key.
-
-  Returns:
-      An initial HMCState.
-
-  """
-  initial_sequence = generate_template_population(
-    initial_sequence=config.seed_sequence,
-    population_size=1,
-    input_sequence_type=config.sequence_type,
-    output_sequence_type=config.sequence_type,
-  )
-  blackjax_initial_state = blackjax.hmc.init(
-    initial_sequence,
-    fitness_fn,
-    step_size=config.step_size,
-    num_integration_steps=config.num_integration_steps,
-  )
-  return HMCState(
-    sequence=initial_sequence,
-    fitness=blackjax_initial_state.logdensity,
-    key=key,
-    blackjax_state=blackjax_initial_state,
-  )
-
-
-@partial(jit, static_argnames=("config", "fitness_fn", "_mutation_fn"))
+@with_config
 def run_hmc_loop(
-  config: HMCConfig,
+  num_samples: int,
   initial_state: HMCState,
   fitness_fn: StackedFitnessFn,
   _mutation_fn: MutationFn | None = None,
@@ -85,7 +48,7 @@ def run_hmc_loop(
       state=state.blackjax_state,
       logdensity_fn=fitness_fn,
     )
-    new_state = state.replace(
+    new_state = HMCState(
       sequence=new_blackjax_state.position,
       fitness=new_blackjax_state.logdensity,
       key=key,
@@ -93,6 +56,6 @@ def run_hmc_loop(
     )
     return new_state, new_state
 
-  keys = jax.random.split(initial_state.key, config.num_samples)
+  keys = jax.random.split(initial_state.key, num_samples)
   final_state, state_history = jax.lax.scan(one_step, initial_state, keys)
   return final_state, state_history

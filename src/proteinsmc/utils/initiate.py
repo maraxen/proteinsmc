@@ -10,12 +10,14 @@ from .constants import AA_CHAR_TO_INT_MAP, NUCLEOTIDES_INT_MAP
 from .translation import aa_to_nucleotide, nucleotide_to_aa
 
 if TYPE_CHECKING:
+  from jaxtyping import Int
+
   from proteinsmc.models.types import EvoSequence
 
 
 def generate_template_population(
-  initial_sequence: str,
-  population_size: int,
+  initial_sequence: EvoSequence,
+  population_size: Int | None,
   input_sequence_type: Literal["protein", "nucleotide"],
   output_sequence_type: Literal["protein", "nucleotide"] = "nucleotide",
 ) -> EvoSequence:
@@ -34,6 +36,8 @@ def generate_template_population(
       A JAX array of shape (population_size, sequence_length).
 
   """
+  if population_size is None:
+    population_size = jnp.array(1, dtype=jnp.int32)
   valid_types = ("protein", "nucleotide")
   if input_sequence_type not in valid_types:
     msg = "Invalid input_sequence_type"
@@ -43,19 +47,9 @@ def generate_template_population(
     raise ValueError(msg)
 
   if input_sequence_type == "protein":
-    try:
-      aa_seq = [AA_CHAR_TO_INT_MAP[res] for res in initial_sequence]
-    except KeyError as e:
-      msg = f"Invalid amino acid: {e.args[0]}"
-      raise ValueError(msg) from e
-    aa_seq = jnp.array(aa_seq, dtype=jnp.int8)
+    aa_seq = jnp.array(initial_sequence, dtype=jnp.int8)
   elif input_sequence_type == "nucleotide":
-    try:
-      nuc_seq = [NUCLEOTIDES_INT_MAP[nuc] for nuc in initial_sequence]
-    except KeyError as e:
-      msg = f"Invalid nucleotide: {e.args[0]}"
-      raise ValueError(msg) from e
-    nuc_seq = jnp.array(nuc_seq, dtype=jnp.int8)
+    nuc_seq = jnp.array(initial_sequence, dtype=jnp.int8)
     aa_seq, _ = nucleotide_to_aa(nuc_seq)
 
   if output_sequence_type == "protein":
