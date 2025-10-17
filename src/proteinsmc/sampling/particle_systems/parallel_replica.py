@@ -421,10 +421,9 @@ def migrate(
       -jnp.inf,
       log_acceptance_ratio,
     )
-    accept = (
-      jnp.log(jax.random.uniform(key_acceptance, shape=(), minval=1e-38, maxval=1.0))
-      < log_acceptance_ratio
-    )
+    accept = jnp.log(
+      jax.random.uniform(key_acceptance, shape=(), minval=1e-38, maxval=1.0),
+    ) < jnp.asarray(log_acceptance_ratio)
 
     new_population_state = jax.lax.cond(
       accept,
