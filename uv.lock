@@ -1079,13 +1079,6 @@ dependencies = [
     { name = "uuid-utils" },
 ]
 
-[package.optional-dependencies]
-dev = [
-    { name = "hypothesis" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-]
-
 [package.dev-dependencies]
 dev = [
     { name = "hypothesis" },
@@ -1105,16 +1098,12 @@ requires-dist = [
     { name = "equinox" },
     { name = "flax" },
     { name = "huggingface-hub", specifier = ">=0.35.3" },
-    { name = "hypothesis", marker = "extra == 'dev'" },
     { name = "jax" },
     { name = "jaxtyping" },
     { name = "prxteinmpnn", git = "https://github.com/maraxen/prxteinmpnn.git" },
-    { name = "pytest", marker = "extra == 'dev'" },
-    { name = "pytest-cov", marker = "extra == 'dev'" },
     { name = "safetensors" },
     { name = "uuid-utils" },
 ]
-provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
 dev = [

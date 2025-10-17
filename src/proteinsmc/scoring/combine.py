@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from functools import partial
 from typing import TYPE_CHECKING, Any
 
 import jax.numpy as jnp
-from jax import jit
 
 if TYPE_CHECKING:
   from jaxtyping import Array, Float, PRNGKeyArray
@@ -22,7 +20,6 @@ def make_sum_combine(**_kwargs: Any) -> CombineFn:
 
   """
 
-  @partial(jit, static_argnames=("_key", "_context"))
   def sum_combine(
     fitness_scores: Float,
     _key: PRNGKeyArray | None = None,
@@ -47,7 +44,6 @@ def make_weighted_combine(
 
   """
 
-  @partial(jit, static_argnames=("_context",))
   def weighted_combine(
     fitness_components: Float,
     _key: PRNGKeyArray | None = None,
