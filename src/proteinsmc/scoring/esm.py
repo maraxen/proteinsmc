@@ -65,7 +65,6 @@ def make_esm_score(
       seq_indices,
       axis=-1,
     ).squeeze(-1)  # (1, seq_len)
-    # PLL score: sum over sequence length, normalize by length
 
     pll_score = jnp.sum(seq_log_probs) / (sequence.shape[1] + EPSILON)
     return pll_score.astype(jnp.float32)

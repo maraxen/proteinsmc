@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Callable
 
 import jax
 import jax.numpy as jnp
-from blackjax.smc.base import SMCState as BlackjaxSMCState
 from blackjax.smc.base import step as blackjax_smc_step
 from jax import jit, lax, vmap
 
@@ -15,99 +14,27 @@ if TYPE_CHECKING:
   from jaxtyping import Array, Float, Int, PRNGKeyArray
 
   from proteinsmc.models.fitness import StackedFitnessFn
+  from proteinsmc.models.types import SequenceType
   from proteinsmc.utils.annealing import AnnealingFn
+
 from proteinsmc.models.parallel_replica import (
-  ExchangeConfig,
   IslandState,
-  ParallelReplicaConfig,
   PRSMCState,
 )
 from proteinsmc.sampling.particle_systems.smc import resample
-from proteinsmc.utils import (
-  diversify_initial_sequences,
-)
-from proteinsmc.utils.initiate import generate_template_population
 from proteinsmc.utils.mutation import mutate
 
 
-def initialize_parallel_replica_state(
-  config: ParallelReplicaConfig,
-  _fitness_function: StackedFitnessFn,
-  key: PRNGKeyArray,
-) -> PRSMCState:
-  """Initialize the state for a parallel replica in a JAX-idiomatic way."""
-  total_pop_size = config.smc_config.population_size * config.n_islands
-  template_population = generate_template_population(
-    config.seed_sequence,
-    total_pop_size,
-    config.sequence_type,
-    config.sequence_type,
-  )
-  template_population = diversify_initial_sequences(
-    key=key,
-    seed_sequences=template_population,
-    mutation_rate=config.diversification_ratio,
-    sequence_type=config.sequence_type,
-  )
-  template_population_stacked = template_population.reshape(
-    config.n_islands,
-    config.smc_config.population_size,
-    -1,
-  )
-
-  island_keys = jax.random.split(key, config.n_islands)
-
-  if config.track_lineage:
-    island_pop_size = config.smc_config.population_size
-    island_indices = jnp.arange(config.n_islands)[:, None]
-    particle_indices = jnp.arange(island_pop_size)[None, :]
-    global_ids = island_indices * island_pop_size + particle_indices
-    parent_ids = jnp.full_like(global_ids, -1)  # -1 indicates the root
-
-    lineage_arrays = jnp.transpose(jnp.stack([global_ids, parent_ids], axis=1), (0, 2, 1))
-  else:
-    lineage_arrays = None
-
-  initial_weights = jnp.full(
-    config.smc_config.population_size,
-    1.0 / config.smc_config.population_size,
-    dtype=jnp.float32,
-  )
-  initial_blackjax_states = vmap(
-    lambda p: BlackjaxSMCState(
-      particles=p,
-      weights=initial_weights,  # `initial_weights` is broadcasted
-      update_parameters=jnp.zeros(0, dtype=jnp.float32),
-    ),
-  )(template_population_stacked)
-
-  # --- Refactored: Direct Batched State Construction ---
-  # Construct the batched IslandState Pytree directly.
-  # Each field will have a leading dimension of size `n_islands`.
-  initial_island_states = IslandState(
-    key=island_keys,
-    blackjax_state=initial_blackjax_states,
-    beta=jnp.array(config.island_betas, dtype=jnp.float32),
-    logZ_estimate=jnp.zeros(config.n_islands, dtype=jnp.float32),
-    mean_fitness=jnp.zeros(config.n_islands, dtype=jnp.float32),
-    ess=jnp.zeros(config.n_islands, dtype=jnp.float32),
-    step=jnp.zeros(config.n_islands, dtype=jnp.int32),
-    lineage=lineage_arrays,
-  )
-
-  return PRSMCState(
-    prng_key=key,
-    current_overall_state=initial_island_states,
-    total_swaps_attempted=jnp.array(0, dtype=jnp.int32),
-    total_swaps_accepted=jnp.array(0, dtype=jnp.int32),
-  )
-
-
-@partial(jit, static_argnames=("config", "fitness_fn"))
 def island_smc_step(
   island_state: IslandState,
-  config: ParallelReplicaConfig,
+  sequence_type: SequenceType,
+  mutation_rate: Float,
+  resampling_approach: str,
+  population_size: Int,
+  n_islands: Int,
   fitness_fn: StackedFitnessFn,
+  *,
+  track_lineage: bool = False,
 ) -> IslandState:
   """Perform one SMC step (mutation, weighting, UNCONDITIONAL resampling) for a single island.
 
@@ -171,12 +98,12 @@ def island_smc_step(
       ),
     )
 
-  sequence_alphabet_size = 4 if config.sequence_type == "nucleotide" else 20
+  sequence_alphabet_size = 4 if sequence_type == "nucleotide" else 20
 
   mutation_partial = partial(
     mutation_update_fn,
     p_step=p_step,
-    mutation_rate=config.mutation_rate,
+    mutation_rate=mutation_rate,
     sequence_alphabet_size=sequence_alphabet_size,
   )
 
@@ -192,22 +119,22 @@ def island_smc_step(
     state=island_state.blackjax_state,
     update_fn=mutation_partial,
     weight_fn=weight_partial,
-    resample_fn=partial(resample, config.smc_config),
+    resample_fn=partial(resample, resampling_approach),
   )
 
   normalized_weights = next_blackjax_state.weights
   ess = 1.0 / jnp.sum(normalized_weights**2)
 
   next_lineage = None
-  if config.track_lineage and island_state.lineage is not None:
+  if track_lineage and island_state.lineage is not None:
     previous_lineage = island_state.lineage
 
     parent_global_ids = previous_lineage[info.ancestors, 0]
 
-    total_pop_size = config.smc_config.population_size * config.n_islands
+    total_pop_size = population_size * n_islands
     new_global_ids = jnp.arange(
       p_step * total_pop_size,
-      p_step * total_pop_size + config.smc_config.population_size,
+      p_step * total_pop_size + population_size,
       dtype=jnp.int32,
     )
 
@@ -275,10 +202,13 @@ def island_smc_step(
   )
 
 
-@partial(jit, static_argnames=("config", "fitness_fn"))
 def prsmc_step(
   island_states: IslandState,
-  config: ParallelReplicaConfig,
+  sequence_type: SequenceType,
+  mutation_rate: Float,
+  resampling_approach: str,
+  population_size: Int,
+  n_islands: Int,
   fitness_fn: StackedFitnessFn,
 ) -> tuple[IslandState, tuple[Float, Float, Float, Float]]:
   """Perform a single step of the PRSMC algorithm across all islands.
@@ -295,7 +225,15 @@ def prsmc_step(
 
   """
   updated_islands = vmap(
-    lambda state: island_smc_step(state, config, fitness_fn),
+    lambda state: island_smc_step(
+      state,
+      sequence_type,
+      mutation_rate,
+      resampling_approach,
+      population_size,
+      n_islands,
+      fitness_fn,
+    ),
     in_axes=0,
     out_axes=0,
   )(island_states)
@@ -317,13 +255,16 @@ def prsmc_step(
   return updated_islands, (ess, mean_fitness, max_fitness, logZ_increment)
 
 
-@partial(jit, static_argnames=("config", "fitness_fn"))
 def migrate(
   island_states: IslandState,
   meta_beta_current_value: Float,
   key_exchange: PRNGKeyArray,
-  config: ExchangeConfig,
+  n_islands: Int,
+  population_size_per_island: Int,
+  n_exchange_attempts: Int,
   fitness_fn: StackedFitnessFn,
+  *,
+  track_lineage: bool = False,
 ) -> tuple[IslandState, Int]:
   """Perform replica exchange attempts. Acceptance is scaled by meta_beta_current_value.
 
@@ -352,9 +293,9 @@ def migrate(
   sum_shifted_fitness = jnp.sum(shifted_fitness)
   eps = 1e-9
   probs_idx1 = jax.lax.cond(
-    (sum_shifted_fitness > eps) & (config.n_islands > 0),
+    (sum_shifted_fitness > eps) & (n_islands > 0),
     lambda: shifted_fitness / sum_shifted_fitness,
-    lambda: jnp.ones(config.n_islands, dtype=jnp.float32) / jnp.maximum(config.n_islands, 1.0),
+    lambda: jnp.ones(n_islands, dtype=jnp.float32) / jnp.maximum(n_islands, 1.0),
   )
 
   def attempt_exchange(_: int, loop_state: tuple) -> tuple:
@@ -369,15 +310,15 @@ def migrate(
       key_acceptance,
       key_next_attempt,
     ) = jax.random.split(key_attempt, 6)
-    idx1 = jax.random.choice(key_select_idx1, jnp.arange(config.n_islands), p=probs_idx1)
+    idx1 = jax.random.choice(key_select_idx1, jnp.arange(n_islands), p=probs_idx1)
     offset_for_idx2 = jax.random.randint(
       key_select_idx2,
       shape=(),
       minval=1,
-      maxval=jnp.maximum(config.n_islands, 2),
+      maxval=jnp.maximum(n_islands, 2),
     )
-    idx2 = (idx1 + offset_for_idx2) % config.n_islands
-    idx2 = jax.lax.cond(config.n_islands <= 1, lambda: idx1, lambda: idx2)
+    idx2 = (idx1 + offset_for_idx2) % n_islands
+    idx2 = jax.lax.cond(n_islands <= 1, lambda: idx1, lambda: idx2)
 
     island_a_population = current_population_state[idx1]
     island_b_population = current_population_state[idx2]
@@ -391,13 +332,13 @@ def migrate(
       key_particle_choice1,
       shape=(),
       minval=0,
-      maxval=config.population_size_per_island,
+      maxval=population_size_per_island,
     )
     sequence_idx_b = jax.random.randint(
       key_particle_choice2,
       shape=(),
       minval=0,
-      maxval=config.population_size_per_island,
+      maxval=population_size_per_island,
     )
     config_a = island_a_population[sequence_idx_a]
     config_b = island_b_population[sequence_idx_b]
@@ -436,7 +377,7 @@ def migrate(
     )
 
     new_lineage_state = jax.lax.cond(
-      accept & config.track_lineage,
+      accept & track_lineage,
       lambda lineage_parts: lineage_parts.at[idx1, sequence_idx_a]
       .set(island_b_lineage[sequence_idx_b])
       .at[idx2, sequence_idx_b]
@@ -457,8 +398,8 @@ def migrate(
   )
 
   final_population_state, final_lineage_state, total_accepted_swaps = jax.lax.cond(
-    (config.n_exchange_attempts > 0) & (config.n_islands > 1),
-    lambda: lax.fori_loop(0, config.n_exchange_attempts, attempt_exchange, initial_loop_state)[1:],
+    (n_exchange_attempts > 0) & (n_islands > 1),
+    lambda: lax.fori_loop(0, n_exchange_attempts, attempt_exchange, initial_loop_state)[1:],
     lambda: (all_population_stacked, all_lineage_stacked, num_swaps_accepted_total),
   )
 
@@ -480,95 +421,17 @@ def migrate(
   return updated_island_states, total_accepted_swaps
 
 
-def initialize_prsmc_state(config: ParallelReplicaConfig, key: PRNGKeyArray) -> PRSMCState:
-  """Initialize the state for the Parallel Replica SMC sampler in a JAX-idiomatic way."""
-  key_init_islands, key_smc_loop = jax.random.split(key)
-
-  from proteinsmc.utils.constants import AA_CHAR_TO_INT_MAP, NUCLEOTIDES_INT_MAP
-
-  if config.sequence_type == "protein":
-    try:
-      initial_seq = jnp.array(
-        [AA_CHAR_TO_INT_MAP[res] for res in config.seed_sequence],
-        dtype=jnp.int8,
-      )
-    except KeyError as e:
-      msg = f"Invalid amino acid: {e.args[0]}"
-      raise ValueError(msg) from e
-  else:  # nucleotide
-    try:
-      initial_seq = jnp.array(
-        [NUCLEOTIDES_INT_MAP[nuc] for nuc in config.seed_sequence],
-        dtype=jnp.int8,
-      )
-    except KeyError as e:
-      msg = f"Invalid nucleotide: {e.args[0]}"
-      raise ValueError(msg) from e
-
-  population_size = config.smc_config.population_size * config.n_islands
-  initial_population = jnp.tile(initial_seq, (population_size, 1))
-
-  initial_population = diversify_initial_sequences(
-    key=key_init_islands,
-    seed_sequences=initial_population,
-    mutation_rate=config.diversification_ratio,
-    sequence_type=config.sequence_type,  # type: ignore[arg-type]
-  )
-  initial_populations_stacked = initial_population.reshape(
-    config.n_islands,
-    config.smc_config.population_size,
-    -1,
-  )
-
-  island_keys = jax.random.split(key_init_islands, config.n_islands)
-  island_betas = jnp.array(config.island_betas, dtype=jnp.float32)
-
-  initial_weights = jnp.full(
-    config.smc_config.population_size,
-    1.0 / config.smc_config.population_size,
-    dtype=jnp.float32,
-  )
-  initial_blackjax_states = vmap(
-    lambda p: BlackjaxSMCState(
-      particles=p,
-      weights=initial_weights,
-      update_parameters=jnp.array(0.0, dtype=jnp.float32),
-    ),
-  )(initial_populations_stacked)
-
-  if config.track_lineage:
-    island_pop_size = config.smc_config.population_size
-    island_indices = jnp.arange(config.n_islands)[:, None]
-    particle_indices = jnp.arange(island_pop_size)[None, :]
-    global_ids = island_indices * island_pop_size + particle_indices
-    parent_ids = jnp.full_like(global_ids, -1)
-    initial_lineage_arrays = jnp.transpose(jnp.stack([global_ids, parent_ids], axis=1), (0, 2, 1))
-  else:
-    initial_lineage_arrays = None
-
-  initial_island_states = IslandState(
-    key=island_keys,
-    beta=island_betas,
-    logZ_estimate=jnp.zeros(config.n_islands, dtype=jnp.float32),
-    mean_fitness=jnp.zeros(config.n_islands, dtype=jnp.float32),
-    ess=jnp.zeros(config.n_islands, dtype=jnp.float32),
-    blackjax_state=initial_blackjax_states,
-    lineage=initial_lineage_arrays,
-    step=jnp.zeros(config.n_islands, dtype=jnp.int32),
-  )
-
-  return PRSMCState(
-    current_overall_state=initial_island_states,
-    prng_key=key_smc_loop,
-    total_swaps_attempted=jnp.array(0, dtype=jnp.int32),
-    total_swaps_accepted=jnp.array(0, dtype=jnp.int32),
-  )
-
-
 def run_prsmc_loop(
-  config: ParallelReplicaConfig,
   initial_state: PRSMCState,
+  sequence_type: SequenceType,
+  mutation_rate: Float,
+  resampling_approach: str,
+  population_size: Int,
+  n_islands: Int,
+  exchange_frequency: Int,
+  n_exchange_attempts: Int,
   fitness_fn: StackedFitnessFn,
+  num_samples: Int,
   annealing_fn: AnnealingFn,
 ) -> tuple[PRSMCState, dict]:
   """JIT-compiled Parallel Replica SMC loop."""
@@ -577,7 +440,6 @@ def run_prsmc_loop(
   def _parallel_replica_scan_step(
     carry_state: PRSMCState,
     step_idx: Int,
-    config: ParallelReplicaConfig,
     fitness_fn: StackedFitnessFn,
     annealing_fn: AnnealingFn,
   ) -> tuple[PRSMCState, dict]:
@@ -585,7 +447,11 @@ def run_prsmc_loop(
 
     current_overall_state, island_metrics = prsmc_step(
       carry_state.current_overall_state,
-      config,
+      sequence_type,
+      mutation_rate,
+      resampling_approach,
+      population_size,
+      n_islands,
       fitness_fn,
     )
     ess_p, mean_fit_p, max_fit_p, logZ_inc_p = island_metrics  # noqa: N806
@@ -594,24 +460,26 @@ def run_prsmc_loop(
       _context=None,  # No context needed for this annealing function
     )
 
-    exchange_config = config.exchange_config
-    do_exchange = (step_idx + 1) % exchange_config.exchange_frequency == 0
+    do_exchange = (step_idx + 1) % exchange_frequency == 0
 
     current_overall_state, num_accepted_this_cycle = lax.cond(
-      do_exchange & (exchange_config.n_islands > 1),
+      do_exchange & (n_islands > 1),
       lambda: migrate(
-        island_states=current_overall_state,
-        meta_beta_current_value=current_meta_beta,
-        key_exchange=key_step,
-        config=exchange_config,
-        fitness_fn=fitness_fn,
+        current_overall_state,
+        current_meta_beta,
+        key_step,
+        n_islands,
+        population_size,
+        n_exchange_attempts,
+        fitness_fn,
+        track_lineage=True,
       ),
       lambda: (current_overall_state, jnp.array(0, dtype=jnp.int32)),
     )
 
     total_swaps_attempted_this_cycle = lax.cond(
-      do_exchange & (exchange_config.n_islands > 1),
-      lambda: jnp.array(exchange_config.n_exchange_attempts, dtype=jnp.int32),
+      do_exchange & (n_islands > 1),
+      lambda: jnp.array(n_exchange_attempts, dtype=jnp.int32),
       lambda: jnp.array(0, dtype=jnp.int32),
     )
 
@@ -639,13 +507,12 @@ def run_prsmc_loop(
     lambda carry, scan_input: _parallel_replica_scan_step(
       carry,
       scan_input,
-      config,
       fitness_fn,
       annealing_fn,
     ),
     initial_state,
-    jnp.arange(config.num_samples, dtype=jnp.int32),
-    length=config.num_samples,
+    jnp.arange(num_samples, dtype=jnp.int32),
+    length=num_samples,
   )
 
   return final_carry_state, collected_outputs_scan

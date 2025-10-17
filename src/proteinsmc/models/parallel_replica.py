@@ -67,18 +67,6 @@ class ParallelReplicaConfig(BaseSamplerConfig):
       msg = "The number of island_betas must match n_islands."
       raise ValueError(msg)
 
-  @property
-  def exchange_config(self) -> ExchangeConfig:
-    """Return the exchange configuration."""
-    return ExchangeConfig(
-      n_islands=self.n_islands,
-      n_exchange_attempts=self.n_exchange_attempts,
-      exchange_frequency=self.exchange_frequency,
-      fitness_evaluator=self.fitness_evaluator,
-      sequence_type=self.sequence_type,
-      meta_annealing_schedule=self.meta_annealing_schedule,
-    )
-
 
 class IslandState(struct.PyTreeNode):
   """State of a single island in the Parallel Replica SMC sampler."""

@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import jax.numpy as jnp
 from jax import jit, vmap
 
 from .constants import (
+  AA_CHAR_TO_INT_MAP,
   CODON_INT_TO_RES_INT_JAX,
+  NUCLEOTIDES_INT_MAP,
   PROTEINMPNN_X_INT,
 )
 
@@ -16,6 +18,29 @@ if TYPE_CHECKING:
   from jaxtyping import Array, Bool, PRNGKeyArray
 
   from proteinsmc.models.types import NucleotideSequence, ProteinSequence
+
+
+def string_to_int_sequence(
+  sequence: str,
+  conversion_map: dict[str, int] | None = None,
+  sequence_type: Literal["protein", "nucleotide"] | None = None,
+) -> jnp.ndarray:
+  """Convert a string sequence to a JAX integer array using ColabDesign's AA mapping.
+
+  Args:
+      sequence: Amino acid sequence as a string.
+      conversion_map: Optional dictionary mapping characters to integers. If None, defaults to
+                      AA_CHAR_TO_INT_MAP or NUCLEOTIDES_INT_MAP based on sequence_type.
+      sequence_type: Type of the sequence, either "protein" or "nucleotide".
+
+  Returns:
+      JAX array of integer-encoded amino acid sequence.
+
+  """
+  conversion_map = conversion_map if conversion_map is not None else AA_CHAR_TO_INT_MAP
+  conversion_map = NUCLEOTIDES_INT_MAP if sequence_type == "nucleotide" else AA_CHAR_TO_INT_MAP
+  int_list = [conversion_map[res] for res in sequence]
+  return jnp.array(int_list, dtype=jnp.int8)
 
 
 @jit
