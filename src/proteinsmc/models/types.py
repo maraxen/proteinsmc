@@ -10,7 +10,6 @@ from __future__ import annotations
 import enum
 from typing import Protocol, TypeVar
 
-import jax.numpy as jnp
 from jaxtyping import Array, Int
 
 NucleotideSequence = Int[Array, "sequence_length 4"]
@@ -54,4 +53,4 @@ class VmappedTranslation(Vmapped, Protocol):
   This is used to type hint functions that are expected to be vectorized.
   """
 
-  def __call__(self, sequences: BatchEvoSequence) -> jnp.ndarray: ...  # noqa: D102
+  def __call__(self, sequences: BatchEvoSequence) -> BatchEvoSequence: ...  # noqa: D102

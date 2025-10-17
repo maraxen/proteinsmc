@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import enum
 from dataclasses import dataclass, field
-from typing import Any, Callable, Literal
+from typing import TYPE_CHECKING, Any, Callable, Literal
 
 from blackjax.smc.base import SMCState as BaseSMCState
 from blackjax.smc.inner_kernel_tuning import StateWithParameterOverride as InnerMCMCState
@@ -14,13 +14,16 @@ from blackjax.smc.tempered import TemperedSMCState
 from flax.struct import PyTreeNode
 from jaxtyping import Array, Bool, Float, Int, PRNGKeyArray
 
-from .annealing import AnnealingConfig
 from .sampler_base import BaseSamplerConfig, SamplerOutputProtocol
+
+if TYPE_CHECKING:
+  from .annealing import AnnealingConfig
+
 
 PopulationNucleotideSequences = Int[Array, "population_size nucleotide_sequence_length"]
 PopulationProteinSequences = Int[Array, "population_size protein_sequence_length"]
 PopulationSequences = PopulationNucleotideSequences | PopulationProteinSequences
-Lineage = Int[Array, "population_size 2"]  # [Global_ID, Parent_Global_ID] for each particle
+Lineage = Int[Array, "population_size 2"]
 PopulationMetrics = Float[Array, "population_size"]
 PopulationBools = Bool[Array, "population_size"]
 StackedPopulationMetrics = Float[PopulationMetrics, "population_size combine_funcs"]
