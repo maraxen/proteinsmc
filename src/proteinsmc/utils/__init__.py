@@ -28,6 +28,7 @@ from .constants import (
 )
 from .fitness import FITNESS_FUNCTIONS, get_fitness_function
 from .initiate import generate_template_population
+from .jax_utils import chunked_map
 from .memory import (
   BenchmarkResult,
   auto_tune_chunk_size,
@@ -50,7 +51,6 @@ from .mutation import (
 )
 from .pmap_utils import distribute
 from .translation import aa_to_nucleotide, nucleotide_to_aa
-from .jax_utils import chunked_map
 
 __all__ = [
   "AA_CHAR_TO_INT_MAP",

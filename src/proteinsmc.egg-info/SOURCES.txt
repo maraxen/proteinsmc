@@ -26,6 +26,7 @@ src/proteinsmc/models/types.py
 src/proteinsmc/sampling/__init__.py
 src/proteinsmc/sampling/gibbs.py
 src/proteinsmc/sampling/hmc.py
+src/proteinsmc/sampling/initialization_factory.py
 src/proteinsmc/sampling/mcmc.py
 src/proteinsmc/sampling/nk_landscape.py
 src/proteinsmc/sampling/nuts.py
@@ -34,7 +35,6 @@ src/proteinsmc/sampling/particle_systems/__init__.py
 src/proteinsmc/sampling/particle_systems/distribution.py
 src/proteinsmc/sampling/particle_systems/parallel_replica.py
 src/proteinsmc/sampling/particle_systems/smc.py
-src/proteinsmc/sampling/particle_systems/validation.py
 src/proteinsmc/scoring/__init__.py
 src/proteinsmc/scoring/cai.py
 src/proteinsmc/scoring/combine.py
@@ -43,6 +43,7 @@ src/proteinsmc/scoring/mpnn.py
 src/proteinsmc/utils/__init__.py
 src/proteinsmc/utils/annealing.py
 src/proteinsmc/utils/blackjax_utils.py
+src/proteinsmc/utils/config_unpacker.py
 src/proteinsmc/utils/constants.py
 src/proteinsmc/utils/esm.py
 src/proteinsmc/utils/fitness.py
@@ -55,5 +56,4 @@ src/proteinsmc/utils/mpnn.py
 src/proteinsmc/utils/mutation.py
 src/proteinsmc/utils/pmap_utils.py
 src/proteinsmc/utils/translation.py
-src/proteinsmc/utils/vmap_utils.py
 tests/test_runner.py

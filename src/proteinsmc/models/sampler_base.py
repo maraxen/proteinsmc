@@ -19,7 +19,9 @@ if TYPE_CHECKING:
   from proteinsmc.models.nuts import NUTSState
   from proteinsmc.models.smc import SMCState
   from proteinsmc.utils.annealing import AnnealingConfig
-from proteinsmc.utils.fitness import FitnessEvaluator
+
+# Import after TYPE_CHECKING to avoid circular imports at module load time
+from proteinsmc.models.fitness import FitnessEvaluator
 
 
 @dataclass(frozen=True)
@@ -186,14 +188,18 @@ SamplerState = TypeVar(
 
 
 def config_to_jax(config: BaseSamplerConfig) -> dict[str, jax.Array]:
-  """Convert configuration fields to JAX arrays for JIT compatibility."""
+  """Convert configuration fields to JAX arrays for JIT compatibility.
+
+  Note: String fields are excluded as JAX does not support string arrays.
+  """
   jax_config = {}
   for field_name, field_value in config.__dict__.items():
-    if isinstance(
-      field_value,
-      (int, float, str, bool),
-    ):
+    if isinstance(field_value, str):
+      # Skip string fields - JAX doesn't support string arrays
+      continue
+    if isinstance(field_value, (int, float, bool)):
       jax_config[field_name] = jax.numpy.array(field_value)
     else:
       jax_config[field_name] = field_value
+  return jax_config
   return jax_config

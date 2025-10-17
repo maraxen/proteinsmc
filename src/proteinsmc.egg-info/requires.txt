@@ -10,8 +10,4 @@ safetensors
 prxteinmpnn@ git+https://github.com/maraxen/prxteinmpnn.git
 einops>=0.8.1
 huggingface-hub>=0.35.3
-
-[dev]
-pytest
-pytest-cov
-hypothesis
+array-record>=0.8.1

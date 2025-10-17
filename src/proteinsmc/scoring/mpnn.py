@@ -8,7 +8,6 @@ from typing import IO, TYPE_CHECKING, Literal, Sequence
 import jax
 import jax.numpy as jnp
 import numpy as np
-from prxteinmpnn.mpnn import get_mpnn_model
 from prxteinmpnn.scoring.score import make_score_sequence
 from prxteinmpnn.utils.decoding_order import (
   DecodingOrder,
@@ -30,9 +29,6 @@ if TYPE_CHECKING:
   from proteinsmc.models.types import ProteinSequence
 
 from prxteinmpnn.io.loaders import create_protein_dataset
-
-DEFAULT_MPNN_MODEL = get_mpnn_model()
-
 
 DecodingSettings = Literal["random", "same_random", "sequential", "full_ar"]
 

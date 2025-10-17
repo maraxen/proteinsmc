@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import tempfile
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
 from dataclasses import replace
+from pathlib import Path
+from unittest.mock import MagicMock, Mock, patch
 
-
-import pytest
+import jax
 import jax.numpy as jnp
+import pytest
 
 from proteinsmc.models import SMCConfig
 from proteinsmc.runner import SAMPLER_REGISTRY, run_experiment
@@ -20,7 +20,7 @@ class TestSamplerRegistry:
 
   def test_registry_has_required_keys(self) -> None:
     """Test that all samplers in the registry have required keys."""
-    expected_keys = {"config_cls", "initialize_fn", "run_fn"}
+    expected_keys = {"config_cls", "run_fn"}
     
     for sampler_type, sampler_def in SAMPLER_REGISTRY.items():
       assert isinstance(sampler_type, str)
@@ -30,8 +30,7 @@ class TestSamplerRegistry:
       # Check that config_cls is a class
       assert callable(sampler_def["config_cls"])
       
-      # Check that functions are callable
-      assert callable(sampler_def["initialize_fn"])
+      # Check that run_fn is callable
       assert callable(sampler_def["run_fn"])
 
   def test_registry_contains_expected_samplers(self) -> None:
@@ -61,6 +60,7 @@ class TestRunExperiment:
       with pytest.raises(TypeError, match="Configuration object of type"):
         run_experiment(wrong_config, tmpdir, seed=42)
 
+  @patch("proteinsmc.runner.initialize_sampler_state")
   @patch("proteinsmc.runner.get_fitness_function")
   @patch("proteinsmc.runner.get_annealing_function")
   @patch("proteinsmc.runner.RunManager")
@@ -69,13 +69,14 @@ class TestRunExperiment:
     mock_run_manager: Mock,
     mock_get_annealing_function: Mock,
     mock_get_fitness_function: Mock,
+    mock_initialize_sampler_state: Mock,
     basic_smc_config: SMCConfig,
   ) -> None:
     """Test successful experiment run without auto-tuning."""
     # Setup mocks
     mock_fitness_fn = Mock()
     mock_annealing_fn = Mock()
-    mock_get_fitness_function.return_value = mock_fitness_fn
+    mock_get_fitness_function.return_value = (jax.random.PRNGKey(0), mock_fitness_fn)
     mock_get_annealing_function.return_value = mock_annealing_fn
     
     # Mock the RunManager context manager
@@ -85,6 +86,7 @@ class TestRunExperiment:
     
     # Mock the sampler functions
     mock_initial_state = Mock()
+    mock_initialize_sampler_state.return_value = mock_initial_state
     mock_final_state = Mock()
     mock_metric = MagicMock()
     mock_metric.shape = (10,)
@@ -94,11 +96,12 @@ class TestRunExperiment:
     mock_metric.__getitem__.return_value = mock_item
     mock_outputs = {"metric1": mock_metric, "metric2": mock_metric}
     
+    mock_run_fn = Mock(return_value=(mock_final_state, mock_outputs))
+    
     with patch.dict(SAMPLER_REGISTRY, {
       "smc": {
         "config_cls": SMCConfig,
-        "initialize_fn": Mock(return_value=mock_initial_state),
-        "run_fn": Mock(return_value=(mock_final_state, mock_outputs)),
+        "run_fn": mock_run_fn,
       }
     }):
       with tempfile.TemporaryDirectory() as tmpdir:
@@ -108,7 +111,9 @@ class TestRunExperiment:
     mock_get_fitness_function.assert_called()
     mock_get_annealing_function.assert_called_once()
     mock_run_manager.assert_called_once()
+    mock_run_fn.assert_called_once()
 
+  @patch("proteinsmc.runner.initialize_sampler_state")
   @patch("proteinsmc.runner.auto_tune_chunk_size")
   @patch("proteinsmc.runner.get_fitness_function")
   @patch("proteinsmc.runner.get_annealing_function")
@@ -119,6 +124,7 @@ class TestRunExperiment:
     mock_get_annealing_function: Mock,
     mock_get_fitness_function: Mock,
     mock_auto_tune_chunk_size: Mock,
+    mock_initialize_sampler_state: Mock,
     basic_smc_config: SMCConfig,
   ) -> None:
     """Test successful experiment run with auto-tuning enabled."""
@@ -129,7 +135,7 @@ class TestRunExperiment:
     # Setup mocks
     mock_fitness_fn = Mock()
     mock_annealing_fn = Mock()
-    mock_get_fitness_function.return_value = mock_fitness_fn
+    mock_get_fitness_function.return_value = (jax.random.PRNGKey(0), mock_fitness_fn)
     mock_get_annealing_function.return_value = mock_annealing_fn
     mock_auto_tune_chunk_size.return_value = 32
     
@@ -140,6 +146,7 @@ class TestRunExperiment:
     
     # Mock the sampler functions
     mock_initial_state = Mock()
+    mock_initialize_sampler_state.return_value = mock_initial_state
     mock_final_state = Mock()
 
     mock_metric = MagicMock()
@@ -150,11 +157,12 @@ class TestRunExperiment:
     mock_metric.__getitem__.return_value = mock_item
     mock_outputs = {"metric1": mock_metric, "metric2": mock_metric}
     
+    mock_run_fn = Mock(return_value=(mock_final_state, mock_outputs))
+    
     with patch.dict(SAMPLER_REGISTRY, {
       "smc": {
         "config_cls": SMCConfig,
-        "initialize_fn": Mock(return_value=mock_initial_state),
-        "run_fn": Mock(return_value=(mock_final_state, mock_outputs)),
+        "run_fn": mock_run_fn,
       }
     }):
       with tempfile.TemporaryDirectory() as tmpdir:
@@ -165,7 +173,12 @@ class TestRunExperiment:
     # Verify fitness function was called twice (once without chunk_size, once with)
     assert mock_get_fitness_function.call_count == 2
 
-  def test_experiment_creates_output_directory(self, basic_smc_config: SMCConfig) -> None:
+  @patch("proteinsmc.runner.initialize_sampler_state")
+  def test_experiment_creates_output_directory(
+    self,
+    mock_initialize_sampler_state: Mock,
+    basic_smc_config: SMCConfig,
+  ) -> None:
     """Test that experiment creates output directory if it doesn't exist."""
     with tempfile.TemporaryDirectory() as tmpdir:
       output_dir = Path(tmpdir) / "nonexistent_dir"
@@ -177,16 +190,18 @@ class TestRunExperiment:
       mock_item.ndim = 0
       mock_item.__float__ = lambda self: 0.0
       mock_metric.__getitem__.return_value = mock_item
+      
+      mock_initial_state = Mock()
+      mock_initialize_sampler_state.return_value = mock_initial_state
 
       with patch.dict(SAMPLER_REGISTRY, {
         "smc": {
           "config_cls": SMCConfig,
-          "initialize_fn": Mock(),
-
           "run_fn": Mock(return_value=(Mock(), {"metric": mock_metric})),
         }
       }), patch("proteinsmc.runner.RunManager"), \
-         patch("proteinsmc.runner.get_fitness_function"), \
+         patch("proteinsmc.runner.get_fitness_function") as mock_get_fitness_function, \
          patch("proteinsmc.runner.get_annealing_function"):
         
+        mock_get_fitness_function.return_value = (jax.random.PRNGKey(0), Mock())
         run_experiment(basic_smc_config, str(output_dir), seed=42)

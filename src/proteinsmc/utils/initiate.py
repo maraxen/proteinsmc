@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Literal
 
 import jax.numpy as jnp
 
-from .constants import AA_CHAR_TO_INT_MAP, NUCLEOTIDES_INT_MAP
 from .translation import aa_to_nucleotide, nucleotide_to_aa
 
 if TYPE_CHECKING:
