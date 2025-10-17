@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, MagicMock
 from dataclasses import replace
 
 
@@ -43,19 +43,19 @@ class TestSamplerRegistry:
 class TestRunExperiment:
   """Test the run_experiment function."""
 
-  def test_invalid_sampler_type_raises_error(self, default_smc_config: SMCConfig) -> None:
+  def test_invalid_sampler_type_raises_error(self, basic_smc_config: SMCConfig) -> None:
     """Test that invalid sampler type raises ValueError."""
     # Create a copy of the config with an invalid sampler type
-    invalid_config = replace(default_smc_config, sampler_type="invalid_sampler")
+    invalid_config = replace(basic_smc_config, sampler_type="invalid_sampler")
     
     with tempfile.TemporaryDirectory() as tmpdir:
       with pytest.raises(ValueError, match="Unknown sampler_type"):
         run_experiment(invalid_config, tmpdir, seed=42)
 
-  def test_config_type_mismatch_raises_error(self, default_smc_config: SMCConfig) -> None:
+  def test_config_type_mismatch_raises_error(self, basic_smc_config: SMCConfig) -> None:
     """Test that config type mismatch raises TypeError."""
     # Create a copy of the config with a mismatched sampler type
-    wrong_config = replace(default_smc_config, sampler_type="gibbs")
+    wrong_config = replace(basic_smc_config, sampler_type="gibbs")
     
     with tempfile.TemporaryDirectory() as tmpdir:
       with pytest.raises(TypeError, match="Configuration object of type"):
@@ -69,7 +69,7 @@ class TestRunExperiment:
     mock_run_manager: Mock,
     mock_get_annealing_function: Mock,
     mock_get_fitness_function: Mock,
-    default_smc_config: SMCConfig,
+    basic_smc_config: SMCConfig,
   ) -> None:
     """Test successful experiment run without auto-tuning."""
     # Setup mocks
@@ -102,7 +102,7 @@ class TestRunExperiment:
       }
     }):
       with tempfile.TemporaryDirectory() as tmpdir:
-        run_experiment(default_smc_config, tmpdir, seed=42)
+        run_experiment(basic_smc_config, tmpdir, seed=42)
     
     # Verify the functions were called
     mock_get_fitness_function.assert_called()
@@ -113,17 +113,17 @@ class TestRunExperiment:
   @patch("proteinsmc.runner.get_fitness_function")
   @patch("proteinsmc.runner.get_annealing_function")
   @patch("proteinsmc.runner.RunManager")
-  def test_successful_run_with_auto_tuning(
+  def test_successful_run_with__auto_tuning(
     self,
     mock_run_manager: Mock,
     mock_get_annealing_function: Mock,
     mock_get_fitness_function: Mock,
     mock_auto_tune_chunk_size: Mock,
-    default_smc_config: SMCConfig,
+    basic_smc_config: SMCConfig,
   ) -> None:
     """Test successful experiment run with auto-tuning enabled."""
     # Enable auto-tuning in config
-    auto_tuning_config = default_smc_config.memory_config.auto_tuning_config
+    auto_tuning_config = basic_smc_config.memory_config.auto_tuning_config
     object.__setattr__(auto_tuning_config, "enable_auto_tuning", True)
     
     # Setup mocks
@@ -158,14 +158,14 @@ class TestRunExperiment:
       }
     }):
       with tempfile.TemporaryDirectory() as tmpdir:
-        run_experiment(default_smc_config, tmpdir, seed=42)
+        run_experiment(basic_smc_config, tmpdir, seed=42)
     
     # Verify auto-tuning was called
     mock_auto_tune_chunk_size.assert_called_once()
     # Verify fitness function was called twice (once without chunk_size, once with)
     assert mock_get_fitness_function.call_count == 2
 
-  def test_experiment_creates_output_directory(self, default_smc_config: SMCConfig) -> None:
+  def test_experiment_creates_output_directory(self, basic_smc_config: SMCConfig) -> None:
     """Test that experiment creates output directory if it doesn't exist."""
     with tempfile.TemporaryDirectory() as tmpdir:
       output_dir = Path(tmpdir) / "nonexistent_dir"
@@ -189,4 +189,4 @@ class TestRunExperiment:
          patch("proteinsmc.runner.get_fitness_function"), \
          patch("proteinsmc.runner.get_annealing_function"):
         
-        run_experiment(default_smc_config, str(output_dir), seed=42)
+        run_experiment(basic_smc_config, str(output_dir), seed=42)
