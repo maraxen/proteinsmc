@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Sequence
 from itertools import product
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -11,7 +10,6 @@ from typing import TYPE_CHECKING, Any
 import jax
 import jax.numpy as jnp
 
-from proteinsmc.io import RunManager
 from proteinsmc.models import (
   GibbsConfig,
   HMCConfig,
@@ -39,10 +37,15 @@ from proteinsmc.utils.mutation import mutate
 from proteinsmc.utils.translation import aa_to_nucleotide, nucleotide_to_aa, string_to_int_sequence
 
 if TYPE_CHECKING:
+  from collections.abc import Callable, Sequence
+
+  from array_record.python.array_record_module import ArrayRecordWriter
+
   from proteinsmc.models.sampler_base import BaseSamplerConfig
   from proteinsmc.models.translation import TranslateFuncSignature
   from proteinsmc.utils.fitness import StackedFitnessFn
 
+from proteinsmc.io import create_writer_callback
 from proteinsmc.models.sampler_base import config_to_jax
 
 SAMPLER_REGISTRY: dict[str, dict[str, Any]] = {
@@ -75,6 +78,29 @@ SAMPLER_REGISTRY: dict[str, dict[str, Any]] = {
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+
+def _setup_writer_callback(path: Path) -> tuple[ArrayRecordWriter, Callable]:
+  """Set up the writer callback for lineage tracking."""
+  writer, writer_callback = create_writer_callback(str(path))
+
+  def io_callback(
+    payload: dict[str, jax.Array],
+    parent_uuid_bytes: jax.Array,
+    entry_type: jax.Array,
+  ) -> jax.Array:
+    """JAX-compatible IO callback function."""
+    parent_uuid_np = jax.device_get(parent_uuid_bytes)
+    payload_np = {k: jax.device_get(v) for k, v in payload.items()}
+    entry_type_np = jax.device_get(entry_type)
+    new_uuid_bytes = writer_callback(
+      payload=payload_np,
+      parent_uuid_bytes=parent_uuid_np,
+      entry_type=entry_type_np,
+    )
+    return jnp.array(new_uuid_bytes, dtype=jnp.uint8)
+
+  return writer, io_callback
 
 
 def _setup_fitness_function(
@@ -226,8 +252,8 @@ def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int 
     if hasattr(config, "annealing_config") and config.annealing_config is not None
     else None
   )
-
-  with RunManager(Path(output_dir), config) as writer:
+  writer, io_callback = _setup_writer_callback(Path(output_dir))
+  try:
     logger.info(
       "Starting run %s of type '%s'...",
       writer.run_id,
@@ -250,47 +276,26 @@ def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int 
         key=init_key,
         beta=jax_inputs.get("initial_beta", None),
         fitness_fn=fitness_fn,
-        track_lineage=config.track_lineage,
+        mutation_rate=jax_inputs.get("mutation_rate", None),
       )
       for stype in sequence_type_inputs
     )
 
-    # 5. Run the core sampler loop.
     logger.info("Starting sampler loop...")
-    final_state, all_outputs = run_fn(
+    final_state, _ = run_fn(
       config=config,
       initial_state=initial_states,
       fitness_fn=fitness_fn,
       mutation_fn=mutation_fn,
       annealing_fn=annealing_fn,
+      io_callback=io_callback,
     )
     jax.block_until_ready(final_state)
     logger.info("Sampler loop finished.")
 
     # 6. Write results to disk
-    logger.info("Writing results to disk...")
-    # The output leaves now have a shape of (num_steps, batch_size, ...) if batched
-    num_steps = jax.tree_util.tree_leaves(all_outputs)[0].shape[0]
-    mutation_rates = jnp.atleast_1d(jnp.asarray(config.mutation_rate))
-    is_batched = mutation_rates.shape[0] > 1
 
-    for i in range(num_steps):
-      step_output_tree = jax.tree_util.tree_map(lambda x: x[i], all_outputs)
-      writer.step(step_output_tree)
-
-      # Log scalar metrics for monitoring. If batched, log metrics from the first run.
-      if is_batched:
-        first_run_in_batch = jax.tree_util.tree_map(
-          lambda x: x[0],
-          step_output_tree,
-        )
-      else:
-        first_run_in_batch = step_output_tree
-
-      scalar_metrics: dict[str, int | float] = {"step": i}
-      for metric_name, metric_value in first_run_in_batch.items():
-        if jnp.ndim(metric_value) == 0:
-          scalar_metrics[metric_name] = float(metric_value)
-      writer.log_scalars(scalar_metrics)
-
-  logger.info("Run %s completed successfully.", writer.run_id)
+    logger.info("Run %s completed successfully.", writer.run_id)
+  finally:
+    writer.close()
+    logger.info("Output writer closed.")

@@ -1,93 +1,78 @@
-from __future__ import annotations
+"""I/O utilities for simulation tracking using ArrayRecord and msgpack serialization."""
 
-import json
-from concurrent.futures import ThreadPoolExecutor
-from dataclasses import asdict
-from pathlib import Path
-from typing import TYPE_CHECKING, Any
+import uuid
+from collections.abc import Callable
+from typing import Any
 
-import jax
-import jax.numpy as jnp
-import uuid_utils as uuid
-from safetensors import serialize
+import msgpack
+import msgpack_numpy
+import numpy as np
+from array_record.python.array_record_module import ArrayRecordReader, ArrayRecordWriter
+from etils import epath
+from jaxtyping import Array, UInt8
 
-if TYPE_CHECKING:
-  from proteinsmc.models.sampler_base import BaseSamplerConfig
-
-
-class DataWriter:
-  """Handles buffering and batched writing of experiment results asynchronously."""
-
-  def __init__(self, output_dir: Path, run_id: uuid.UUID, batch_size: int = 100) -> None:
-    """Initialize the DataWriter."""
-    self.output_dir = output_dir
-    self.run_id = run_id
-    self.batch_size = batch_size
-    self.results_buffer: list[Any] = []
-    self.scalar_log_path = self.output_dir / f"{self.run_id}_metrics.jsonl"
-    self._batch_index = 0
-    # Use a thread pool to make file I/O non-blocking for the main process
-    self.executor = ThreadPoolExecutor(max_workers=1)
-
-  def log_scalars(self, step_metrics: dict) -> None:
-    """Append a dictionary of scalar metrics to the JSONL file."""
-    with Path.open(self.scalar_log_path, "a") as f:
-      f.write(json.dumps(step_metrics) + "\n")
-
-  def step(self, step_result: Any) -> None:
-    """Process a single step result, dispatching a write job if the buffer is full."""
-    self.results_buffer.append(jax.device_get(step_result))
-    if len(self.results_buffer) >= self.batch_size:
-      self._dispatch_write()
-
-  def _dispatch_write(self) -> None:
-    """Submit the current buffer to the executor to be written to a file."""
-    if not self.results_buffer:
-      return
-
-    # Move the data to a local variable so the buffer can be cleared immediately
-    data_to_write = list(self.results_buffer)
-    self.results_buffer.clear()
-
-    # Submit the write operation to the background thread
-    self.executor.submit(self._write_batch_thread, data_to_write, self._batch_index)
-    self._batch_index += 1
-
-  def _write_batch_thread(self, data: list[Any], batch_index: int) -> None:
-    """Run write in the background thread."""
-    batched_pytree = jax.tree_util.tree_map(lambda *x: jnp.stack(x), *data)
-    filename = self.output_dir / f"{self.run_id}_batch_{batch_index}.safetensors"
-    serialize(batched_pytree, str(filename))
-
-  def close(self) -> None:
-    """Write any remaining data and shut down the executor."""
-    self._dispatch_write()
-    self.executor.shutdown(wait=True)  # Wait for all pending writes to complete
+msgpack_numpy.patch()
+UUID_BYTE_LENGTH = 36
 
 
-class RunManager:
-  """A context manager to set up and tear down a single experiment run."""
+def create_writer_callback(path: str) -> tuple[ArrayRecordWriter, Callable]:
+  """Create an ArrayRecordWriter and a msgpack/lineage callback.
 
-  def __init__(
-    self,
-    output_dir: str | Path,
-    config: BaseSamplerConfig,
-    batch_size: int = 100,
-  ) -> None:
-    self.output_dir = Path(output_dir)
-    self.config = config
-    self.batch_size = batch_size
-    self.run_id = uuid.uuid7()
+  Returns:
+    A tuple containing:
+      - The ArrayRecordWriter instance (must be closed manually).
+      - The callback function for use with io_callback.
 
-  def __enter__(self) -> DataWriter:
-    """Initialize the run: creates directory, saves metadata, returns a writer."""
-    self.output_dir.mkdir(parents=True, exist_ok=True)
-    metadata_path = self.output_dir / f"{self.run_id}_metadata.json"
-    with Path.open(metadata_path, "w") as f:
-      json.dump({"run_id": str(self.run_id), "config": asdict(self.config)}, f, indent=2)
-    self.writer = DataWriter(self.output_dir, self.run_id, self.batch_size)
-    return self.writer
+  """
+  writer = ArrayRecordWriter(epath.Path(path))
 
-  def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-    """Ensure all data is written at the end of the run."""
-    self.writer.close()
+  def writer_callback(
+    payload: dict[str, Array],
+    parent_uuid_bytes: Array,
+    entry_type: Array,
+  ) -> UInt8:
+    """Instantiate callback function (closure).
+
+    This function is executed by io_callback.
+    """
+    new_uuid = str(uuid.uuid4())
+    parent_uuid_str = parent_uuid_bytes.tobytes().decode("utf-8").strip("\x00")
+    if not parent_uuid_str:
+      parent_uuid_str = None
+
+    full_record = {
+      "uuid": new_uuid,
+      "parent_uuid": parent_uuid_str,
+      "payload": payload,
+      "entry_type": entry_type,
+    }
+
+    packed_bytes = msgpack.packb(full_record)
+
+    writer.write({"data": packed_bytes})
+
+    return np.array(new_uuid.encode("utf-8"), dtype=np.uint8)
+
+  return writer, writer_callback
+
+
+def read_lineage_data(path: str) -> dict[str, Any]:
+  """Read and deserialize all records from a lineage file.
+
+  Args:
+      path: The path to the ArrayRecord file.
+
+  Returns:
+      A dictionary mapping UUIDs to their corresponding records.
+
+  """
+  reader = ArrayRecordReader(epath.Path(path))
+  records_list = list(reader.read())
+
+  history = {}
+  for record in records_list:
+    packed_bytes = record["data"]
+    full_record = msgpack.unpackb(packed_bytes)
+    history[full_record["uuid"]] = full_record
+
+  return history

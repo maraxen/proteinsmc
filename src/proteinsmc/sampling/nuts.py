@@ -8,18 +8,19 @@ NUTS sampler.
 
 from __future__ import annotations
 
-from functools import partial
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import blackjax
 import jax
-from jax import jit
+from blackjax.mcmc.nuts import NUTSInfo
 
-from proteinsmc.models.nuts import NUTSState
-from proteinsmc.utils.config_unpacker import with_config
+from proteinsmc.models.sampler_base import SamplerState
 
 if TYPE_CHECKING:
-  from jaxtyping import PRNGKeyArray
+  from collections.abc import Callable
+
+  from jaxtyping import Float, Int, PRNGKeyArray
 
   from proteinsmc.models.fitness import StackedFitnessFn
   from proteinsmc.models.mutation import MutationFn
@@ -27,16 +28,21 @@ if TYPE_CHECKING:
 __all__ = ["run_nuts_loop"]
 
 
-@with_config
-@partial(jit, static_argnames=("num_samples", "step_size", "num_doublings", "fitness_fn"))
+@dataclass
+class NUTSOutput:
+  state: SamplerState
+  info: NUTSInfo
+
+
 def run_nuts_loop(
-  num_samples: int,
-  step_size: float,
-  num_doublings: int,
-  initial_state: NUTSState,
+  num_samples: Int,
+  step_size: Float,
+  num_doublings: Int,
+  initial_state: SamplerState,
   fitness_fn: StackedFitnessFn,
   _mutation_fn: MutationFn | None = None,
-) -> tuple[NUTSState, NUTSState]:
+  writer_callback: Callable | None = None,
+) -> tuple[SamplerState, SamplerState]:
   """Run a NUTS sampling loop.
 
   This function demonstrates the basic idea of NUTS but lacks the full
@@ -54,21 +60,25 @@ def run_nuts_loop(
   """
   kernel = blackjax.nuts.build_kernel()
 
-  def one_step(state: NUTSState, key: PRNGKeyArray) -> tuple[NUTSState, NUTSState]:
+  def one_step(state: SamplerState, key: PRNGKeyArray) -> tuple[SamplerState, SamplerState]:
     """Perform one step of the NUTS sampler."""
-    new_blackjax_state, _ = kernel(
+    new_blackjax_state, info = kernel(
       rng_key=key,
       state=state.blackjax_state,
       logdensity_fn=fitness_fn,
       step_size=step_size,
       max_num_doublings=num_doublings,
     )
-    new_state = NUTSState(
+    new_state = SamplerState(
       sequence=new_blackjax_state.position,
       fitness=new_blackjax_state.logdensity,
       key=key,
       blackjax_state=new_blackjax_state,
     )
+
+    if writer_callback:
+      writer_callback(NUTSOutput(state=new_state, info=info))
+
     return new_state, new_state
 
   keys = jax.random.split(initial_state.key, num_samples)

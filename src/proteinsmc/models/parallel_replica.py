@@ -5,19 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from flax import struct
-
 from .sampler_base import BaseSamplerConfig, SamplerOutputProtocol
 
 if TYPE_CHECKING:
-  from blackjax.smc.base import SMCInfo
-  from blackjax.smc.base import SMCState as BlackjaxSMCState
-  from jaxtyping import Array, Float, Int, PRNGKeyArray
+  from jaxtyping import Array
 
   from proteinsmc.models.fitness import FitnessEvaluator
 
   from .annealing import AnnealingConfig
-  from .smc import Lineage, SMCConfig
+  from .smc import SMCConfig
 
 
 @dataclass(frozen=True)
@@ -66,29 +62,6 @@ class ParallelReplicaConfig(BaseSamplerConfig):
     if len(self.island_betas) != self.n_islands:
       msg = "The number of island_betas must match n_islands."
       raise ValueError(msg)
-
-
-class IslandState(struct.PyTreeNode):
-  """State of a single island in the Parallel Replica SMC sampler."""
-
-  key: PRNGKeyArray
-  blackjax_state: BlackjaxSMCState
-  beta: Float
-  logZ_estimate: Float  # noqa: N815
-  mean_fitness: Float
-  ess: Float
-  step: Int = 0
-  lineage: Lineage | None = None
-  smc_info: SMCInfo | None = None
-
-
-class PRSMCState(struct.PyTreeNode):
-  """State of the Parallel Replica SMC sampler at a single step."""
-
-  current_overall_state: IslandState
-  prng_key: PRNGKeyArray
-  total_swaps_attempted: Int
-  total_swaps_accepted: Int
 
 
 @dataclass

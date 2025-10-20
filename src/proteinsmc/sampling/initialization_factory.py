@@ -17,14 +17,8 @@ from blackjax.smc.tempered import TemperedSMCState
 from jax import config, vmap
 from jaxtyping import PRNGKeyArray
 
-from proteinsmc.models.hmc import HMCState
-from proteinsmc.models.mcmc import MCMCState
-from proteinsmc.models.nuts import NUTSState
-from proteinsmc.models.parallel_replica import (
-  IslandState,
-  PRSMCState,
-)
-from proteinsmc.models.smc import SMCAlgorithm, SMCState
+from proteinsmc.models.sampler_base import SamplerState
+from proteinsmc.models.smc import SMCAlgorithm
 from proteinsmc.utils.config_unpacker import with_config
 from proteinsmc.utils.initiate import generate_template_population
 from proteinsmc.utils.mutation import diversify_initial_sequences
@@ -43,6 +37,7 @@ def initialize_sampler_state(  # noqa: PLR0913
   sampler_type: str,
   sequence_type: SequenceType,
   seed_sequence: EvoSequence,
+  mutation_rate: Float | None,
   population_size: Int | None,
   algorithm: SMCAlgorithm | None,
   smc_algo_kwargs: dict | None,
@@ -53,9 +48,7 @@ def initialize_sampler_state(  # noqa: PLR0913
   key: PRNGKeyArray,
   beta: Float | None,
   fitness_fn: StackedFitnessFn,
-  *,
-  track_lineage: bool = False,
-) -> HMCState | MCMCState | NUTSState | SMCState | PRSMCState:
+) -> SamplerState:
   """Make initialize state for any sampler type.
 
   Args:
@@ -65,6 +58,7 @@ def initialize_sampler_state(  # noqa: PLR0913
     population_size: Number of particles in the population.
     algorithm: SMC algorithm variant to use.
     smc_algo_kwargs: Additional algorithm-specific arguments.
+    mutation_rate: Mutation rate for SMC samplers.
     n_islands: Number of parallel islands (for Parallel Replica SMC).
     population_size_per_island: Number of particles per island (for Parallel Replica SMC).
     island_betas: Beta values for each island (for Parallel Replica SMC).
@@ -107,8 +101,10 @@ def initialize_sampler_state(  # noqa: PLR0913
       initial_population=initial_population,
       algorithm=algorithm if algorithm is not None else SMCAlgorithm.BASE,
       beta=beta,
+      mutation_rate=mutation_rate,
       smc_algo_kwargs=smc_algo_kwargs,
       key=key,
+      fitness_fn=fitness_fn,
     )
   if sampler_type == "ParallelReplica":
     key_init_islands, key = jax.random.split(key)
@@ -135,8 +131,8 @@ def initialize_sampler_state(  # noqa: PLR0913
       n_islands=_n_islands,
       population_size_per_island=_population_size_per_island,
       island_betas=island_betas,
-      track_lineage=track_lineage,
       key=key,
+      fitness_fn=fitness_fn,
     )
   msg = f"Unsupported sampler config type: {type(config)}"
   raise ValueError(msg)
@@ -147,37 +143,49 @@ def _initialize_single_state(
   initial_population: BatchEvoSequence,
   fitness_fn: StackedFitnessFn,
   key: PRNGKeyArray,
-) -> HMCState | MCMCState | NUTSState:
+) -> SamplerState:
   match sampler_type:
     case "HMC":
       init_fn = hmc.init
-      state_cls = HMCState
     case "MCMC":
       init_fn = mcmc.random_walk.init
-      state_cls = MCMCState
     case "NUTS":
       init_fn = nuts.init
-      state_cls = NUTSState
     case _:
       msg = f"Unsupported single-particle sampler type: {sampler_type}"
       raise ValueError(msg)
+
+  # Initialize blackjax state
+  key_fitness, key_next = jax.random.split(key)
+  initial_sequence = initial_population[0]
+
+  # Compute initial fitness
+  initial_fitness = fitness_fn(initial_sequence, key_fitness, None)
+
+  # Create a logdensity function for blackjax (uses combined fitness at index 0)
+  def logdensity_fn(seq: EvoSequence) -> Float:
+    return fitness_fn(seq, key_fitness, None)[0]
+
   blackjax_initial_state = init_fn(
-    initial_population[0],
-    fitness_fn,
+    initial_sequence,
+    logdensity_fn,
   )
-  return state_cls(
-    sequence=initial_population[0],
-    fitness=jnp.array(blackjax_initial_state.logdensity, dtype=jnp.float32),
-    key=key,
+
+  return SamplerState(
+    sequence=initial_sequence,
+    fitness=initial_fitness,
+    key=key_next,
     blackjax_state=blackjax_initial_state,
+    step=jnp.array(0, dtype=jnp.int32),
   )
 
 
 def _initialize_blackjax_smc_state(
+  key: PRNGKeyArray,
   algorithm: SMCAlgorithm,
   initial_population: BatchEvoSequence,
-  smc_algo_kwargs: dict,
-  key: PRNGKeyArray,
+  update_params: dict | None = None,
+  smc_algo_kwargs: dict | None = None,
 ) -> BlackjaxSMCState:
   """Initialize the Blackjax SMC state based on algorithm type.
 
@@ -186,6 +194,7 @@ def _initialize_blackjax_smc_state(
     initial_population: Initial population of sequences.
     smc_algo_kwargs: Additional algorithm-specific arguments.
     key: JAX PRNG key.
+    update_params: Update parameters for the SMC state.
 
   Returns:
     Initial Blackjax SMC state.
@@ -195,6 +204,7 @@ def _initialize_blackjax_smc_state(
     ValueError: If the algorithm type is not recognized.
 
   """
+  smc_algo_kwargs = smc_algo_kwargs or {}
   match algorithm:
     case (
       SMCAlgorithm.BASE
@@ -202,7 +212,7 @@ def _initialize_blackjax_smc_state(
       | SMCAlgorithm.PARALLEL_REPLICA
       | SMCAlgorithm.FROM_MCMC
     ):
-      return smc.base.init(particles=initial_population, init_update_params={})
+      return smc.base.init(particles=initial_population, init_update_params=update_params or {})
     case SMCAlgorithm.ADAPTIVE_TEMPERED:
       return smc.adaptive_tempered.init(particles=initial_population)
     case SMCAlgorithm.INNER_MCMC:
@@ -228,13 +238,15 @@ def _initialize_blackjax_smc_state(
       raise ValueError(msg)
 
 
-def _initialize_smc_state(
+def _initialize_smc_state(  # noqa: PLR0913
   initial_population: BatchEvoSequence,
   beta: Float,
+  mutation_rate: Float,
   algorithm: SMCAlgorithm,
   smc_algo_kwargs: dict,
   key: PRNGKeyArray,
-) -> SMCState:
+  fitness_fn: StackedFitnessFn,
+) -> SamplerState:
   """Initialize the state for the SMC sampler.
 
   Args:
@@ -243,26 +255,35 @@ def _initialize_smc_state(
     algorithm: SMC algorithm variant to use.
     smc_algo_kwargs: Additional algorithm-specific arguments.
     key: JAX PRNG key.
+    fitness_fn: Fitness function to evaluate sequences.
+    mutation_rate: Mutation rate for SMC samplers.
 
   Returns:
-    An initial SMCState.
+    An initial SamplerState for SMC.
 
   """
-  key, subkey = jax.random.split(key)
+  key_fitness, key_blackjax, key_next = jax.random.split(key, 3)
+  update_params = {"mutation_rate": mutation_rate}
 
   blackjax_initial_state = _initialize_blackjax_smc_state(
     algorithm=algorithm,
     initial_population=initial_population,
     smc_algo_kwargs=smc_algo_kwargs,
-    key=subkey,
+    key=key_blackjax,
+    update_params=update_params,
   )
+  initial_fitness_batch = vmap(lambda seq: fitness_fn(seq, key_fitness, beta))(
+    initial_population,
+  )
+  mean_fitness = jnp.mean(initial_fitness_batch, axis=0)
 
-  return SMCState(
-    population=initial_population,
+  return SamplerState(
+    sequence=initial_population,
+    fitness=mean_fitness,
+    key=key_next,
     blackjax_state=blackjax_initial_state,
-    beta=beta,
-    key=subkey,
     step=jnp.array(0, dtype=jnp.int32),
+    additional_fields={"beta": beta if beta is not None else jnp.array(1.0)},
   )
 
 
@@ -272,9 +293,8 @@ def _initialize_prsmc_state(  # noqa: PLR0913
   population_size_per_island: Int,
   island_betas: Float,
   key: PRNGKeyArray,
-  *,
-  track_lineage: bool = False,
-) -> PRSMCState:
+  fitness_fn: StackedFitnessFn,
+) -> SamplerState:
   """Initialize the state for the Parallel Replica SMC sampler.
 
   Args:
@@ -283,16 +303,16 @@ def _initialize_prsmc_state(  # noqa: PLR0913
     population_size_per_island: Population size per island.
     island_betas: List of beta values for each island.
     key: JAX PRNG key.
-    track_lineage: Whether to track lineage information.
+    fitness_fn: Fitness function to evaluate sequences.
 
   Returns:
-    An initial PRSMCState.
+    An initial SamplerState for PRSMC with stacked island data.
 
   Raises:
     ValueError: If the seed sequence contains invalid characters.
 
   """
-  key_init_islands, key_smc_loop = jax.random.split(key)
+  key_init_islands, _ = jax.random.split(key)
 
   # Initialize island-specific data
   island_keys = jax.random.split(key_init_islands, n_islands)
@@ -311,34 +331,36 @@ def _initialize_prsmc_state(  # noqa: PLR0913
     ),
   )(initial_populations)
 
-  # Initialize lineage tracking if enabled
-  if track_lineage:
-    island_indices = jnp.arange(n_islands)[:, None]
-    particle_indices = jnp.arange(population_size_per_island)[None, :]
-    global_ids = island_indices * population_size_per_island + particle_indices
-    parent_ids = jnp.full_like(global_ids, -1)
-    initial_lineage_arrays = jnp.transpose(
-      jnp.stack([global_ids, parent_ids], axis=1),
-      (0, 2, 1),
-    )
-  else:
-    initial_lineage_arrays = None
+  # Compute initial fitness for each island (n_islands, population_size_per_island, n_fitness+1)
+  key_fitness, _ = jax.random.split(key_init_islands)
+  fitness_keys = jax.random.split(key_fitness, n_islands)
+  initial_fitness_batch = vmap(
+    lambda island_pop, k, beta: vmap(lambda seq: fitness_fn(seq, k, beta))(island_pop),
+  )(initial_populations, fitness_keys, island_betas_array)
+
+  # For PRSMC additional fields
+  mean_fitness = jnp.mean(initial_fitness_batch[:, :, 0], axis=1)  # Mean over particles
+  max_fitness = jnp.max(initial_fitness_batch[:, :, 0], axis=1)  # Max over particles
+
+  # Extract update_parameters if available
+  update_params = None
+  update_param_values = getattr(initial_blackjax_states, "update_parameters", None)
+  if update_param_values is not None and isinstance(update_param_values, jax.Array):
+    update_params = {"smc_update_param": update_param_values}
 
   # Construct initial island states
-  initial_island_states = IslandState(
-    key=island_keys,
-    beta=island_betas_array,
-    logZ_estimate=jnp.zeros(n_islands, dtype=jnp.float32),
-    mean_fitness=jnp.zeros(n_islands, dtype=jnp.float32),
-    ess=jnp.zeros(n_islands, dtype=jnp.float32),
+  return SamplerState(
+    sequence=initial_populations,  # Shape: (n_islands, population_size_per_island, seq_len)
+    fitness=initial_fitness_batch,  # Shape: (n_islands, population_size_per_island, n_fitness+1)
+    key=island_keys,  # Shape: (n_islands, 2)
     blackjax_state=initial_blackjax_states,
-    lineage=initial_lineage_arrays,
     step=jnp.zeros(n_islands, dtype=jnp.int32),
-  )
-
-  return PRSMCState(
-    current_overall_state=initial_island_states,
-    prng_key=key_smc_loop,
-    total_swaps_attempted=jnp.array(0, dtype=jnp.int32),
-    total_swaps_accepted=jnp.array(0, dtype=jnp.int32),
+    update_parameters=update_params,
+    additional_fields={
+      "beta": island_betas_array,
+      "mean_fitness": mean_fitness,
+      "max_fitness": max_fitness,
+      "ess": jnp.zeros(n_islands, dtype=jnp.float32),
+      "logZ_estimate": jnp.zeros(n_islands, dtype=jnp.float32),
+    },
   )

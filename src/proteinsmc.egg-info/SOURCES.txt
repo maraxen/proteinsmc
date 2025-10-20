@@ -32,7 +32,6 @@ src/proteinsmc/sampling/nk_landscape.py
 src/proteinsmc/sampling/nuts.py
 src/proteinsmc/sampling/ste.py
 src/proteinsmc/sampling/particle_systems/__init__.py
-src/proteinsmc/sampling/particle_systems/distribution.py
 src/proteinsmc/sampling/particle_systems/parallel_replica.py
 src/proteinsmc/sampling/particle_systems/smc.py
 src/proteinsmc/scoring/__init__.py
