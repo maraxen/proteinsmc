@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Sequence
 from itertools import product
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Sequence
+from typing import TYPE_CHECKING, Any
 
 import jax
 import jax.numpy as jnp
@@ -44,9 +45,6 @@ if TYPE_CHECKING:
 
 from proteinsmc.models.sampler_base import config_to_jax
 
-# The SAMPLER_REGISTRY maps a sampler type string to its configuration class
-# and the core execution function. The initialization is now handled by a
-# unified factory function.
 SAMPLER_REGISTRY: dict[str, dict[str, Any]] = {
   "smc": {
     "config_cls": SMCConfig,
@@ -99,8 +97,6 @@ def _setup_fitness_function(
       "Auto-tuning chunk size for fitness function. This may take a moment.",
     )
     key, tune_key = jax.random.split(key)
-    # Create dummy data for auto-tuning. If the run is batched, the fitness
-    # function is expected to handle inputs with a leading batch dimension.
     num_rates = jnp.atleast_1d(jnp.array(config.mutation_rate)).shape[0]
     is_batched = num_rates > 1
 
@@ -203,6 +199,7 @@ def _get_inputs(config: BaseSamplerConfig) -> tuple[dict[str, Any], list[str]]:
         zip(
           seed_sequence_inputs,
           sequence_type_inputs,
+          strict=False,
         )
         if config.combinations_mode == "zip"
         else product(
@@ -220,14 +217,9 @@ def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int 
   """Run a sampling experiment based on the provided configuration."""
   key = jax.random.PRNGKey(seed)
 
-  # 1. Validate config and get sampler-specific functions
   sampler_def = _validate_config(config)
   run_fn: Callable[..., tuple[Any, dict[str, Any]]] = sampler_def["run_fn"]
-
-  # 2. Set up fitness function and optional auto-tuning
   key, fitness_fn = _setup_fitness_function(key, config)
-
-  # 3. Prepare other shared components
   mutation_fn = _setup_mutation_function(config)
   annealing_fn = (
     get_annealing_function(config.annealing_config)
