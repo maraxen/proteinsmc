@@ -194,3 +194,38 @@ def valid_config_kwargs(monkeypatch):
       n_steps=100,
     ),
   )
+
+
+@pytest.fixture
+def annealing_config_mock() -> AnnealingConfig:
+  """Provide a mock annealing configuration for testing."""
+  return AnnealingConfig(
+    annealing_fn="linear",
+    beta_max=1.0,
+    n_steps=10,
+    kwargs={},
+  )
+
+
+@pytest.fixture
+def smc_config_mock(
+  basic_memory_config: MemoryConfig,
+  basic_annealing_config: AnnealingConfig,
+  fitness_evaluator_mock: FitnessEvaluator,
+) -> SMCConfig:
+  """Provide a mock SMC configuration for testing."""
+  return SMCConfig(
+    prng_seed=42,
+    seed_sequence="MKAF",
+    num_samples=10,
+    n_states=20,
+    mutation_rate=0.1,
+    diversification_ratio=0.5,
+    sequence_type="protein",
+    fitness_evaluator=fitness_evaluator_mock,
+    memory_config=basic_memory_config,
+    annealing_config=basic_annealing_config,
+    population_size=16,
+  )
+
+
