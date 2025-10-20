@@ -2,517 +2,300 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import partial
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 import jax
 import jax.numpy as jnp
+from blackjax.smc.base import SMCInfo
 from blackjax.smc.base import step as blackjax_smc_step
-from jax import jit, lax, vmap
+from jax import lax, vmap
+from jax.experimental import io_callback
+
+from proteinsmc.utils.mutation import mutate
 
 if TYPE_CHECKING:
+  from collections.abc import Callable
+
   from jaxtyping import Array, Float, Int, PRNGKeyArray
 
   from proteinsmc.models.fitness import StackedFitnessFn
+  from proteinsmc.models.mutation import MutationFn
   from proteinsmc.models.types import SequenceType
   from proteinsmc.utils.annealing import AnnealingFn
 
-from proteinsmc.models.parallel_replica import (
-  IslandState,
-  PRSMCState,
-)
+
+from proteinsmc.models.sampler_base import SamplerState
 from proteinsmc.sampling.particle_systems.smc import resample
-from proteinsmc.utils.mutation import mutate
 
 
-def island_smc_step(
-  island_state: IslandState,
-  sequence_type: SequenceType,
-  mutation_rate: Float,
-  resampling_approach: str,
-  population_size: Int,
-  n_islands: Int,
-  fitness_fn: StackedFitnessFn,
-  *,
-  track_lineage: bool = False,
-) -> IslandState:
-  """Perform one SMC step (mutation, weighting, UNCONDITIONAL resampling) for a single island.
+@dataclass
+class PRSMCOutput:
+  """Output of a single PRSMC step, with data stacked across all islands.
 
-  CRITICAL: This step now uses the native Blackjax flow: Resample(t-1) -> Update(t) -> Weight(t)
-
-  Args:
-    island_state: Current state of the island.
-    config: Configuration for the SMC step.
-    fitness_fn: Stacked fitness function.
-
-  Returns:
-    Updated state of the island.
-
+  The `state` and `info` fields contain pytrees where the leading axis
+  corresponds to the islands.
   """
-  key_step, key_next_island = jax.random.split(island_state.key, 2)
-  key_smc_update, key_smc_weight, key_smc_resample = jax.random.split(key_step, 3)
 
-  p_step = island_state.step
+  state: SamplerState
+  info: SMCInfo
+  num_attempted_swaps: Int
+  num_accepted_swaps: Int
 
-  @partial(
-    jit,
-    static_argnames=("p_step", "mutation_rate", "q_states"),
-  )
-  def mutation_update_fn(
-    keys: PRNGKeyArray,
-    particles: Array,
-    _update_parameters: Array,
-    p_step: Int,
-    mutation_rate: Float,
-    q_states: Int,
-  ) -> tuple[Array, None]:
-    """Apply mutation to the resampled particles."""
-    mutated_particles = jax.lax.cond(
-      (p_step > 0),
-      lambda x: mutate(
-        keys,
-        x,
-        mutation_rate,
-        q_states,
-      ).astype(x.dtype),
-      lambda x: x,
-      particles,
-    )
 
-    return mutated_particles, None
+def mutation_update_fn(
+  keys: PRNGKeyArray,
+  sequences: Array,
+  update_parameters: dict[str, Array],
+  q_states: Int,
+) -> tuple[Array, None]:
+  """Apply mutation to the resampled sequences."""
+  mutated_sequence = jax.vmap(
+    partial(mutate, q_states=q_states),
+    in_axes=(0, None, 0),
+  )(keys, sequences, update_parameters["mutation_rate"])
 
-  @partial(jit, static_argnames=("fitness_fn_partial", "beta"))
-  def weight_fn(
-    sequence: Array,
-    fitness_fn_partial: Callable,
-    beta: Float,
-  ) -> Array:
-    """Weight function for the SMC step."""
-    fitness_values, _ = fitness_fn_partial(sequence)
+  return mutated_sequence, None
 
-    return jnp.asarray(
-      jnp.where(
-        jnp.isneginf(fitness_values),
-        -jnp.inf,
-        beta * fitness_values,
-      ),
-    )
 
-  sequence_alphabet_size = 4 if sequence_type == "nucleotide" else 20
-
-  mutation_partial = partial(
-    mutation_update_fn,
-    p_step=p_step,
-    mutation_rate=mutation_rate,
-    sequence_alphabet_size=sequence_alphabet_size,
-  )
-
-  fitness_fn_partial = partial(fitness_fn, key_smc_weight, None)
-  weight_partial = partial(
-    weight_fn,
-    fitness_fn_partial=fitness_fn_partial,
-    beta=island_state.beta,
-  )
-
-  next_blackjax_state, info = blackjax_smc_step(
-    rng_key=key_step,
-    state=island_state.blackjax_state,
-    update_fn=mutation_partial,
-    weight_fn=weight_partial,
-    resample_fn=partial(resample, resampling_approach),
-  )
-
-  normalized_weights = next_blackjax_state.weights
-  ess = 1.0 / jnp.sum(normalized_weights**2)
-
-  next_lineage = None
-  if track_lineage and island_state.lineage is not None:
-    previous_lineage = island_state.lineage
-
-    parent_global_ids = previous_lineage[info.ancestors, 0]
-
-    total_pop_size = population_size * n_islands
-    new_global_ids = jnp.arange(
-      p_step * total_pop_size,
-      p_step * total_pop_size + population_size,
-      dtype=jnp.int32,
-    )
-
-    next_lineage = jnp.stack([new_global_ids, parent_global_ids], axis=1)
-
-  fitness_values, _ = fitness_fn(
-    jnp.asarray(next_blackjax_state.particles),
-    key_smc_weight,
-    None,
-  )
-
-  finite_fitness_mask = jnp.isfinite(fitness_values)
-  eps = 1e-9
-
-  if isinstance(normalized_weights, jax.Array) and isinstance(finite_fitness_mask, jax.Array):
-    weighted_finite_fitness = jnp.where(
-      finite_fitness_mask,
-      fitness_values * normalized_weights,
-      0.0,
-    )
-    sum_weights_for_finite = jnp.sum(jnp.where(finite_fitness_mask, normalized_weights, 0.0))
-  else:
-    weighted_finite_fitness = jnp.array(0.0)
-    sum_weights_for_finite = jnp.array(0.0)
-
-  if not isinstance(weighted_finite_fitness, jax.Array):
-    msg = f"Expected weighted_finite_fitness to be a jax.Array, got {type(weighted_finite_fitness)}"
-    raise TypeError(
-      msg,
-    )
-
-  mean_fitness_this_step = jax.lax.cond(
-    sum_weights_for_finite > eps,
-    lambda: jnp.sum(weighted_finite_fitness) / sum_weights_for_finite,
-    lambda: jnp.nan,
-  )
-
-  if not isinstance(mean_fitness_this_step, jax.Array):
-    msg = f"Expected mean_fitness_this_step to be a jax.Array, got {type(mean_fitness_this_step)}"
-    raise TypeError(
-      msg,
-    )
-
-  if not isinstance(fitness_values, jax.Array):
-    msg = f"Expected fitness_values to be a jax.Array, got {type(fitness_values)}"
-    raise TypeError(msg)
-
-  max_fitness_this_step = jnp.max(jnp.where(jnp.isfinite(fitness_values), fitness_values, -jnp.inf))
-  max_fitness_this_step = jnp.where(
-    jnp.all(~jnp.isfinite(fitness_values)),
-    jnp.nan,
-    max_fitness_this_step,
-  )
-
-  return IslandState(
-    key=key_next_island,
-    beta=island_state.beta,
-    blackjax_state=next_blackjax_state,
-    smc_info=info,
-    logZ_estimate=island_state.logZ_estimate + info.log_likelihood_increment,
-    mean_fitness=mean_fitness_this_step,
-    ess=ess,
-    step=island_state.step + 1,
-    lineage=next_lineage,
+def weight_fn(
+  sequence: Array,
+  fitness_fn_partial: Callable,
+  beta: Float,
+) -> Array:
+  """Weight function for the SMC step for a single particle."""
+  fitness_values, _ = fitness_fn_partial(sequence)
+  return jnp.array(
+    jnp.where(
+      jnp.isneginf(fitness_values),
+      -jnp.inf,
+      beta * fitness_values,
+    ),
+    dtype=jnp.bfloat16,
   )
 
 
-def prsmc_step(
-  island_states: IslandState,
-  sequence_type: SequenceType,
-  mutation_rate: Float,
-  resampling_approach: str,
+def migrate(  # noqa: PLR0913
+  island_states: SamplerState,
+  meta_beta: Float,
+  key: PRNGKeyArray,
+  n_islands: Int,
   population_size: Int,
-  n_islands: Int,
-  fitness_fn: StackedFitnessFn,
-) -> tuple[IslandState, tuple[Float, Float, Float, Float]]:
-  """Perform a single step of the PRSMC algorithm across all islands.
-
-  Args:
-    island_states: Current state of all islands.
-    config: Configuration for the SMC step.
-    fitness_fn: Stacked fitness function.
-
-  Returns:
-    tuple containing:
-      - Updated island states
-      - Tuple of metrics (ESS, mean fitness, max fitness, logZ increment)
-
-  """
-  updated_islands = vmap(
-    lambda state: island_smc_step(
-      state,
-      sequence_type,
-      mutation_rate,
-      resampling_approach,
-      population_size,
-      n_islands,
-      fitness_fn,
-    ),
-    in_axes=0,
-    out_axes=0,
-  )(island_states)
-
-  ess = updated_islands.ess
-  mean_fitness = updated_islands.mean_fitness
-  max_fitness = jnp.max(
-    jnp.asarray(
-      jnp.where(
-        jnp.isfinite(updated_islands.mean_fitness),
-        updated_islands.mean_fitness,
-        -jnp.inf,
-      ),
-    ),
-    axis=0,
-  )
-  logZ_increment = updated_islands.logZ_estimate - island_states.logZ_estimate  # noqa: N806
-
-  return updated_islands, (ess, mean_fitness, max_fitness, logZ_increment)
-
-
-def migrate(
-  island_states: IslandState,
-  meta_beta_current_value: Float,
-  key_exchange: PRNGKeyArray,
-  n_islands: Int,
-  population_size_per_island: Int,
   n_exchange_attempts: Int,
   fitness_fn: StackedFitnessFn,
-  *,
-  track_lineage: bool = False,
-) -> tuple[IslandState, Int]:
-  """Perform replica exchange attempts. Acceptance is scaled by meta_beta_current_value.
+) -> tuple[SamplerState, Int]:
+  """Perform replica exchange attempts between islands."""
+  all_particles = island_states.blackjax_state.particles  # type: ignore[attr-access]
+  all_betas = island_states.additional_fields["beta"]
+  mean_fitness = island_states.additional_fields["mean_fitness"]
 
-  Args:
-    island_states: Current state of the islands.
-    meta_beta_current_value: Current value of the meta beta parameter.
-    key_exchange: JAX PRNG key for random operations.
-    config: Configuration for the exchange process.
-    fitness_fn: Stacked fitness function.
+  num_accepted_swaps = jnp.array(0, dtype=jnp.int32)
 
-  Returns:
-    tuple containing updated island states and total number of accepted swaps.
+  safe_mean_fitness = jnp.nan_to_num(mean_fitness, nan=-jnp.inf)
+  probs_idx1 = jax.nn.softmax(safe_mean_fitness)
 
-  """
-  all_population_stacked = island_states.blackjax_state.particles
-  all_betas = island_states.beta
-  mean_fitness_per_island = island_states.mean_fitness
-
-  all_lineage_stacked = island_states.lineage
-
-  num_swaps_accepted_total = jnp.array(0, dtype=jnp.int32)
-
-  safe_mean_fitness = jnp.nan_to_num(mean_fitness_per_island, nan=0.0)
-  min_fitness_val = jnp.min(safe_mean_fitness)
-  shifted_fitness = safe_mean_fitness - min_fitness_val + 1e-9
-  sum_shifted_fitness = jnp.sum(shifted_fitness)
-  eps = 1e-9
-  probs_idx1 = jax.lax.cond(
-    (sum_shifted_fitness > eps) & (n_islands > 0),
-    lambda: shifted_fitness / sum_shifted_fitness,
-    lambda: jnp.ones(n_islands, dtype=jnp.float32) / jnp.maximum(n_islands, 1.0),
-  )
-
-  def attempt_exchange(_: int, loop_state: tuple) -> tuple:
-    key_attempt, current_population_state, current_lineage_state, current_accepted_swaps = (
-      loop_state
-    )
+  def attempt_exchange_body(_: int, loop_state: tuple) -> tuple:
+    (
+      key_attempt,
+      current_particles,
+      current_accepted_swaps,
+    ) = loop_state
     (
       key_select_idx1,
       key_select_idx2,
-      key_particle_choice1,
-      key_particle_choice2,
+      key_particle_choice,
       key_acceptance,
-      key_next_attempt,
-    ) = jax.random.split(key_attempt, 6)
+      key_next_iter,
+    ) = jax.random.split(key_attempt, 5)
+
     idx1 = jax.random.choice(key_select_idx1, jnp.arange(n_islands), p=probs_idx1)
-    offset_for_idx2 = jax.random.randint(
-      key_select_idx2,
-      shape=(),
-      minval=1,
-      maxval=jnp.maximum(n_islands, 2),
-    )
-    idx2 = (idx1 + offset_for_idx2) % n_islands
-    idx2 = jax.lax.cond(n_islands <= 1, lambda: idx1, lambda: idx2)
+    idx2 = (idx1 + jax.random.randint(key_select_idx2, (), 1, n_islands)) % n_islands
 
-    island_a_population = current_population_state[idx1]
-    island_b_population = current_population_state[idx2]
-
-    island_a_lineage = current_lineage_state[idx1]
-    island_b_lineage = current_lineage_state[idx2]
-
-    beta_a = all_betas[idx1]
-    beta_b = all_betas[idx2]
-    sequence_idx_a = jax.random.randint(
-      key_particle_choice1,
-      shape=(),
-      minval=0,
-      maxval=population_size_per_island,
+    particle_idx = jax.random.randint(
+      key_particle_choice,
+      (2,),
+      0,
+      population_size,
     )
-    sequence_idx_b = jax.random.randint(
-      key_particle_choice2,
-      shape=(),
-      minval=0,
-      maxval=population_size_per_island,
-    )
-    config_a = island_a_population[sequence_idx_a]
-    config_b = island_b_population[sequence_idx_b]
+    particle1 = current_particles[idx1, particle_idx[0]]
+    particle2 = current_particles[idx2, particle_idx[1]]
 
-    fitness_a, _ = fitness_fn(
-      jnp.expand_dims(config_a, 0),
-      key_acceptance,
-      None,
-    )
-    fitness_b, _ = fitness_fn(
-      jnp.expand_dims(config_b, 0),
-      key_acceptance,
-      None,
-    )
-    fitness_a = jnp.mean(fitness_a)
-    fitness_b = jnp.mean(fitness_b)
+    fitness1, _ = fitness_fn(jnp.expand_dims(particle1, 0), key_acceptance, None)
+    fitness2, _ = fitness_fn(jnp.expand_dims(particle2, 0), key_acceptance, None)
 
-    log_acceptance_ratio = meta_beta_current_value * (beta_a - beta_b) * (fitness_b - fitness_a)
-    log_acceptance_ratio = jnp.where(
-      jnp.isinf(fitness_a) | jnp.isinf(fitness_b) | (idx1 == idx2),
-      -jnp.inf,
-      log_acceptance_ratio,
+    log_acceptance_ratio = (
+      meta_beta * (all_betas[idx1] - all_betas[idx2]) * (fitness2[0] - fitness1[0])
     )
-    accept = jnp.log(
-      jax.random.uniform(key_acceptance, shape=(), minval=1e-38, maxval=1.0),
-    ) < jnp.asarray(log_acceptance_ratio)
+    log_acceptance_ratio = jnp.array(
+      jnp.where(
+        jnp.isinf(fitness1[0]) | jnp.isinf(fitness2[0]),
+        -jnp.inf,
+        log_acceptance_ratio,
+      ),
+      dtype=jnp.float32,
+    )
 
-    new_population_state = jax.lax.cond(
+    accept = jnp.log(jax.random.uniform(key_acceptance)) < log_acceptance_ratio
+
+    new_particles = lax.cond(
       accept,
-      lambda parts: parts.at[idx1, sequence_idx_a]
-      .set(config_b)
-      .at[idx2, sequence_idx_b]
-      .set(config_a),
-      lambda parts: parts,
-      current_population_state,
+      lambda p: p.at[idx1, particle_idx[0]]
+      .set(particle2)
+      .at[
+        idx2,
+        particle_idx[1],
+      ]
+      .set(particle1),
+      lambda p: p,
+      current_particles,
     )
-
-    new_lineage_state = jax.lax.cond(
-      accept & track_lineage,
-      lambda lineage_parts: lineage_parts.at[idx1, sequence_idx_a]
-      .set(island_b_lineage[sequence_idx_b])
-      .at[idx2, sequence_idx_b]
-      .set(island_a_lineage[sequence_idx_a]),
-      lambda lineage_parts: lineage_parts,
-      current_lineage_state,
-    )
-
     updated_accepted_swaps = current_accepted_swaps + jax.lax.select(accept, 1, 0)
 
-    return key_next_attempt, new_population_state, new_lineage_state, updated_accepted_swaps
+    return key_next_iter, new_particles, updated_accepted_swaps
 
-  initial_loop_state = (
-    key_exchange,
-    all_population_stacked,
-    all_lineage_stacked,
-    num_swaps_accepted_total,
+  key, final_particles, total_accepted = lax.fori_loop(
+    0,
+    n_exchange_attempts,
+    attempt_exchange_body,
+    (key, all_particles, num_accepted_swaps),
   )
 
-  final_population_state, final_lineage_state, total_accepted_swaps = jax.lax.cond(
-    (n_exchange_attempts > 0) & (n_islands > 1),
-    lambda: lax.fori_loop(0, n_exchange_attempts, attempt_exchange, initial_loop_state)[1:],
-    lambda: (all_population_stacked, all_lineage_stacked, num_swaps_accepted_total),
-  )
+  updated_blackjax_state = island_states.blackjax_state._replace(particles=final_particles)  # type: ignore[attr-access]
+  updated_states = island_states._replace(blackjax_state=updated_blackjax_state)  # type: ignore[attr-access]
 
-  updated_blackjax_states = island_states.blackjax_state._replace(
-    particles=final_population_state,
-  )
-
-  updated_island_states = IslandState(
-    key=island_states.key,
-    beta=island_states.beta,
-    logZ_estimate=island_states.logZ_estimate,
-    mean_fitness=island_states.mean_fitness,
-    ess=island_states.ess,
-    step=island_states.step,
-    blackjax_state=updated_blackjax_states,
-    lineage=final_lineage_state,
-  )
-
-  return updated_island_states, total_accepted_swaps
+  return updated_states, total_accepted
 
 
-def run_prsmc_loop(
-  initial_state: PRSMCState,
+def run_prsmc_loop(  # noqa: PLR0913
+  num_steps: int,
+  initial_state: SamplerState,
   sequence_type: SequenceType,
-  mutation_rate: Float,
   resampling_approach: str,
   population_size: Int,
   n_islands: Int,
   exchange_frequency: Int,
   n_exchange_attempts: Int,
   fitness_fn: StackedFitnessFn,
-  num_samples: Int,
   annealing_fn: AnnealingFn,
-) -> tuple[PRSMCState, dict]:
+  writer_callback: Callable,
+) -> SamplerState:
   """JIT-compiled Parallel Replica SMC loop."""
+  q_states = 4 if sequence_type == "nucleotide" else 20
+  mutation_partial = partial(
+    mutation_update_fn,
+    q_states=q_states,
+  )
 
-  @partial(jit, static_argnames=("step_config", "fitness_fn", "annealing_fn"))
-  def _parallel_replica_scan_step(
-    carry_state: PRSMCState,
+  def _prsmc_step(
+    carry_state: SamplerState,
     step_idx: Int,
-    fitness_fn: StackedFitnessFn,
-    annealing_fn: AnnealingFn,
-  ) -> tuple[PRSMCState, dict]:
-    key_step, next_smc_loop_key = jax.random.split(carry_state.prng_key)
-
-    current_overall_state, island_metrics = prsmc_step(
-      carry_state.current_overall_state,
-      sequence_type,
-      mutation_rate,
-      resampling_approach,
-      population_size,
-      n_islands,
-      fitness_fn,
+  ) -> tuple[SamplerState, None]:
+    key_step, key_fitness, key_exchange, key_next_loop = jax.random.split(
+      carry_state.key,
+      4,
     )
-    ess_p, mean_fit_p, max_fit_p, logZ_inc_p = island_metrics  # noqa: N806
-    current_meta_beta = annealing_fn(
-      current_step=step_idx,  # type: ignore[call-arg]
-      _context=None,  # No context needed for this annealing function
+    keys_islands = jax.random.split(key_step, n_islands)
+    keys_fitness_islands = jax.random.split(key_fitness, n_islands)
+    betas = carry_state.additional_fields["beta"]
+
+    def single_island_weight_fn(beta: Float, key: PRNGKeyArray, sequence: Array) -> Array:
+      fitness_fn_partial = partial(fitness_fn, key, None)
+      return weight_fn(sequence, fitness_fn_partial, beta)
+
+    smc_step_fn = partial(
+      blackjax_smc_step,
+      update_fn=mutation_partial,
+      resample_fn=partial(resample, resampling_approach),
     )
 
+    # Apply one SMC step to each island
+    next_blackjax_states, infos = vmap(
+      lambda state, key, beta: smc_step_fn(
+        rng_key=key,
+        state=state,
+        weight_fn=partial(single_island_weight_fn, beta, key),
+      ),
+      in_axes=(0, 0, 0),
+    )(carry_state.blackjax_state, keys_islands, betas)
+
+    # Update fitness and metrics for each island
+    fitness_values, _ = vmap(fitness_fn, in_axes=(0, 0, None))(
+      next_blackjax_states.particles,  # type: ignore[attr-access]
+      keys_fitness_islands,
+      None,
+    )
+    ess = 1.0 / jnp.sum(next_blackjax_states.weights**2, axis=-1)
+    mean_fitness = jnp.nansum(
+      fitness_values * next_blackjax_states.weights,
+      axis=-1,
+    )
+    max_fitness = jnp.max(
+      jnp.array(jnp.where(jnp.isfinite(fitness_values), fitness_values, -jnp.inf)),
+      axis=-1,
+    )
+
+    logZ_estimates = carry_state.additional_fields["logZ_estimate"] + infos.log_likelihood_increment  # noqa: N806
+
+    # Package the state after the SMC step
+    state_after_smc = SamplerState(
+      sequence=next_blackjax_states.particles,  # type: ignore[call-arg]
+      fitness=fitness_values,
+      key=key_next_loop,
+      blackjax_state=next_blackjax_states,
+      step=carry_state.step + 1,
+      additional_fields={
+        "beta": betas,
+        "mean_fitness": mean_fitness,
+        "max_fitness": max_fitness,
+        "ess": ess,
+        "logZ_estimate": logZ_estimates,
+      },
+    )
+
+    # Perform replica exchange migration
+    meta_beta = annealing_fn(step_idx)
     do_exchange = (step_idx + 1) % exchange_frequency == 0
-
-    current_overall_state, num_accepted_this_cycle = lax.cond(
+    state_after_migration, num_accepted_swaps = lax.cond(
       do_exchange & (n_islands > 1),
       lambda: migrate(
-        current_overall_state,
-        current_meta_beta,
-        key_step,
+        state_after_smc,
+        meta_beta,
+        key_exchange,
         n_islands,
         population_size,
         n_exchange_attempts,
         fitness_fn,
-        track_lineage=True,
       ),
-      lambda: (current_overall_state, jnp.array(0, dtype=jnp.int32)),
+      lambda: (state_after_smc, jnp.array(0, dtype=jnp.int32)),
     )
-
-    total_swaps_attempted_this_cycle = lax.cond(
+    num_attempted_swaps = jnp.where(
       do_exchange & (n_islands > 1),
-      lambda: jnp.array(n_exchange_attempts, dtype=jnp.int32),
-      lambda: jnp.array(0, dtype=jnp.int32),
+      n_exchange_attempts,
+      0,
     )
 
-    next_carry_state = PRSMCState(
-      current_overall_state=current_overall_state,
-      prng_key=next_smc_loop_key,
-      total_swaps_attempted=carry_state.total_swaps_attempted + total_swaps_attempted_this_cycle,
-      total_swaps_accepted=carry_state.total_swaps_accepted + num_accepted_this_cycle,
+    step_output = PRSMCOutput(
+      state=state_after_migration,
+      info=infos,
+      num_attempted_swaps=num_attempted_swaps,
+      num_accepted_swaps=num_accepted_swaps,
+    )
+    io_callback(
+      writer_callback,
+      step_output,
+      result_shape=step_output,
     )
 
-    collected_metrics = {
-      "ess_per_island": ess_p,
-      "mean_fitness_per_island": mean_fit_p,
-      "max_fitness_per_island": max_fit_p,
-      "logZ_increment_per_island": logZ_inc_p,
-      "meta_beta": current_meta_beta,
-      "num_accepted_swaps": num_accepted_this_cycle,
-      "num_attempted_swaps": total_swaps_attempted_this_cycle,
-      "population": current_overall_state.population,  # Sequences for this step
-      "lineage": current_overall_state.lineage,  # Lineage metadata for this step
-    }
-    return next_carry_state, collected_metrics
+    return state_after_migration, None
 
-  final_carry_state, collected_outputs_scan = lax.scan(
-    lambda carry, scan_input: _parallel_replica_scan_step(
-      carry,
-      scan_input,
-      fitness_fn,
-      annealing_fn,
-    ),
-    initial_state,
-    jnp.arange(num_samples, dtype=jnp.int32),
-    length=num_samples,
+  current_state = initial_state
+
+  final_state, _ = lax.fori_loop(
+    0,
+    num_steps,
+    lambda i, val: (_prsmc_step(val, i), None),
+    current_state,
   )
 
-  return final_carry_state, collected_outputs_scan
+  return final_state

@@ -1,13 +1,22 @@
+"""Utilities for JAX-based operations."""
+
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 import jax.numpy as jnp
 import jax.tree_util
 from jax import lax
 
 if TYPE_CHECKING:
-  from jaxtyping import Array, PyTree
+  from collections.abc import Callable
+
+  from jaxtyping import Array, Int, PRNGKeyArray, PyTree
+
+  from proteinsmc.models.types import UUIDArray
+
+
+import jax
 
 
 def chunked_map(
@@ -28,7 +37,7 @@ def chunked_map(
     chunk_size: The size of each chunk to process. This is passed as `batch_size`
                 to `jax.lax.map`.
     static_args: A dictionary of static keyword arguments to be passed to `func`
-                 on each call. These are not chunked or mapped over.
+                  on each call. These are not chunked or mapped over.
 
   Returns:
     The result of applying the function to the data, concatenated back into
@@ -43,9 +52,54 @@ def chunked_map(
     msg = f"static_args must be a dictionary, but got {type(static_args)}"
     raise TypeError(msg)
 
-  def func_to_map(x):
+  def func_to_map(x: PyTree[Array]) -> PyTree[Array]:
     if isinstance(x, tuple):
       return func(*x, **kwargs)
     return func(x, **kwargs)
 
   return lax.map(func_to_map, data, batch_size=chunk_size)
+
+
+def generate_jax_uuid(key: PRNGKeyArray) -> tuple[UUIDArray, PRNGKeyArray]:
+  """Generate a UUID using JAX's random number generator.
+
+  Args:
+      key: A JAX PRNG key.
+
+  Returns:
+      A tuple containing:
+        - The generated UUID as a JAX array of uint8.
+        - The updated PRNG key.
+
+  """
+  new_key, subkey = jax.random.split(key)
+  uuid_array = jax.random.randint(
+    key=subkey,
+    shape=(16,),
+    minval=0,
+    maxval=256,
+    dtype=jnp.uint8,
+  )
+  return uuid_array, new_key
+
+
+def generate_jax_hash(key: PRNGKeyArray, data: Int) -> tuple[UUIDArray, PRNGKeyArray]:
+  """Generate a hash-based UUID using JAX's random number generator and input data.
+
+  Args:
+      key: A JAX PRNG key.
+      data: An integer input to hash.
+
+  Returns:
+      A tuple containing:
+        - The generated hash-based UUID as a JAX array of uint8.
+        - The updated PRNG key.
+
+  """
+  new_key, subkey = jax.random.split(key)
+  hash_value = jax.random.fold_in(subkey, data)
+  hash_bytes = jnp.array(
+    [(hash_value >> (i * 8)) & 0xFF for i in range(16)],
+    dtype=jnp.uint8,
+  )
+  return hash_bytes, new_key

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Literal, Protocol, TypeVar
 
-from jaxtyping import Array, Int
+from jaxtyping import Array, Int, UInt8
 
 NucleotideSequence = Int[Array, "sequence_length 4"]
 """A sequence of nucleotides represented as integers.
@@ -25,6 +25,11 @@ BatchEvoSequence = Int[Array, "batch_size sequence_length alphabet_size"]
 
 SequenceType = Literal["nucleotide", "protein"]
 """Type of biological sequence, either nucleotide or protein."""
+
+UUIDArray = UInt8[
+  Array,
+  "36",
+]
 
 
 class Vmapped(Protocol):

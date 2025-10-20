@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 import blackjax
 import jax
 
-from proteinsmc.models.mcmc import MCMCState
+from proteinsmc.models.sampler_base import SamplerState
 
 if TYPE_CHECKING:
+  from collections.abc import Callable
+
   from jaxtyping import PRNGKeyArray
 
   from proteinsmc.models.fitness import StackedFitnessFn
@@ -18,26 +20,27 @@ if TYPE_CHECKING:
 
 def run_mcmc_loop(
   num_samples: int,
-  initial_state: MCMCState,
+  initial_state: SamplerState,
   fitness_fn: StackedFitnessFn,
   mutation_fn: Callable[[PRNGKeyArray, EvoSequence], EvoSequence],
-) -> tuple[MCMCState, MCMCState]:
+) -> tuple[SamplerState, SamplerState]:
   """Run the MCMC sampling loop using Blackjax."""
   kernel = blackjax.mcmc.random_walk.build_rmh()
 
-  def one_step(state: MCMCState, key: PRNGKeyArray) -> tuple[MCMCState, MCMCState]:
+  def one_step(state: SamplerState, key: PRNGKeyArray) -> tuple[SamplerState, SamplerState]:
     """Perform one step of the MCMC sampler."""
     new_blackjax_state, _ = kernel(
       rng_key=key,
-      state=state.blackjax_state,
+      state=state.blackjax_state,  # pyright: ignore[reportArgumentType]
       logdensity_fn=fitness_fn,
       transition_generator=mutation_fn,
     )
-    new_state = MCMCState(
+    new_state = SamplerState(
       sequence=new_blackjax_state.position,  # pyright: ignore[reportArgumentType]
       fitness=new_blackjax_state.logdensity,  # pyright: ignore[reportArgumentType]
       key=key,
       blackjax_state=new_blackjax_state,
+      step=state.step + 1,
     )
     return new_state, new_state
 

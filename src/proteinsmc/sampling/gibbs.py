@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 from functools import partial
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 import jax
 import jax.numpy as jnp
 from jax import jit, random
 
-from proteinsmc.models.gibbs import GibbsConfig, GibbsState, GibbsUpdateFn
+from proteinsmc.models.gibbs import GibbsConfig, GibbsUpdateFn
+from proteinsmc.models.sampler_base import SamplerState
 
 if TYPE_CHECKING:
+  from collections.abc import Callable
+
   from jaxtyping import Float, Int, PRNGKeyArray
 
   from proteinsmc.models.types import EvoSequence
@@ -20,11 +23,15 @@ if TYPE_CHECKING:
 __all__ = ["initialize_gibbs_state", "make_gibbs_update_fns", "run_gibbs_loop"]
 
 
-def initialize_gibbs_state(config: GibbsConfig) -> GibbsState:
+def initialize_gibbs_state(config: GibbsConfig) -> SamplerState:
   """Initialize the state of the Gibbs sampler."""
   key = jax.random.PRNGKey(config.prng_seed)
-  initial_samples = jnp.array(config.seed_sequence, dtype=jnp.int32)
-  return GibbsState(samples=initial_samples, fitness=jnp.array(0.0), key=key)
+  initial_samples = jnp.array(config.seed_sequence, dtype=jnp.int8)
+  return SamplerState(
+    sequence=initial_samples,
+    fitness=jnp.array(0.0),
+    key=key,
+  )
 
 
 def make_gibbs_update_fns(
@@ -81,13 +88,13 @@ def make_gibbs_update_fns(
 @partial(jit, static_argnames=("config", "fitness_fn", "update_fns"))
 def run_gibbs_loop(
   config: GibbsConfig,
-  initial_state: GibbsState,
+  initial_state: SamplerState,
   fitness_fn: FitnessFn,
   update_fns: tuple[
     GibbsUpdateFn,
     ...,
   ],
-) -> tuple[GibbsState, GibbsState]:
+) -> tuple[SamplerState, SamplerState]:
   """Run the Gibbs sampler loop.
 
   Args:
@@ -101,8 +108,8 @@ def run_gibbs_loop(
 
   """
 
-  def body_fn(state: GibbsState, _i: Int) -> tuple[GibbsState, GibbsState]:
-    current_state = state.samples
+  def body_fn(state: SamplerState, _i: Int) -> tuple[SamplerState, SamplerState]:
+    current_state = state.sequence
 
     new_state = current_state
     for j, update_fn in enumerate(update_fns):
@@ -115,7 +122,7 @@ def run_gibbs_loop(
       _context=None,
     )
     _, key_next = random.split(state.key)
-    next_state = GibbsState(samples=new_state, fitness=fitness, key=key_next)
+    next_state = SamplerState(sequence=new_state, fitness=fitness, key=key_next)
     return next_state, next_state
 
   final_state, state_history = jax.lax.scan(body_fn, initial_state, jnp.arange(config.num_samples))

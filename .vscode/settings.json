@@ -1,5 +1,6 @@
 {
   "cSpell.words": [
+    "ACDEF",
     "allclose",
     "argnames",
     "argwhere",
@@ -12,6 +13,7 @@
     "deserialise",
     "ECOLI",
     "einops",
+    "epath",
     "ESMC",
     "esmj",
     "fori",
@@ -37,6 +39,7 @@
     "MKTFFVAGVIL",
     "mpnn",
     "multinomial",
+    "packb",
     "pmap",
     "pmapped",
     "pretuning",
@@ -58,8 +61,10 @@
     "subkey",
     "swiglu",
     "tensordot",
+    "tobytes",
     "traj",
     "unflatten",
+    "unpackb",
     "unpad",
     "unshard",
     "vmap",
