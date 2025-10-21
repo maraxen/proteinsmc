@@ -156,30 +156,42 @@ Based on recent planning, the project has adopted a new, scalable architecture f
 
 ### 2. Parallel Replica SMC State Management
 
-- **Issue:** Custom PRSMC implementation has architectural mismatches with BlackJAX SMC API around state batching.
-- **Current State:** 3-4 tests failing in `test_parallel_replica.py::TestRunPRSMCLoop` with various errors:
-  - `IndexError: tuple index out of range` in basic loop test
-  - `TypeError: JAX encountered invalid PRNG key data` in no-exchange tests
-  - Complex interaction between per-island state and BlackJAX SMC expectations
-- **Root Causes:**
-  1. **Key Management:** PRSMC uses per-island keys (shape `(n_islands, 2)`), but key splitting logic may not handle this correctly in all code paths
-  2. **Update Parameters Structure:** BlackJAX SMC's `update_parameters` field needs to be a dict with batched values for custom update functions, but the batching semantics across islands are unclear
-  3. **State Batching:** Unclear whether BlackJAX SMC expects states to be batched via vmap or handled differently for multi-replica scenarios
+- **Issue:** Custom PRSMC implementation has shape/dtype consistency issues in edge cases.
+- **Status (2025-10-21):** ✅ Core issues RESOLVED:
+  - ✅ Key Management: Fixed by ensuring keys are always batched with shape `(n_islands, 2)` using `jax.random.split(key, n_islands)`
+  - ✅ Update Parameters: Fixed by properly structuring `update_parameters` dict with shape `(population_size,)` arrays and vmapping states correctly
+  - ✅ JAX PyTree Compatibility: Converted `MigrationInfo` and `PRSMCOutput` from `@dataclass` to `@struct.dataclass`
+  - ✅ Loop Structure: Fixed `lax.fori_loop` to return correct carry structure
+- **Remaining Work:**
+  - Shape mismatches in migrate/exchange function for single-island case (n_islands=1)
+  - Fitness extraction logic needs adjustment for StackedFitness format
+  - Integration tests need updates for proper state initialization patterns
+- **Priority:** Medium - Core PRSMC functionality works, edge cases need refinement
 - **Key Files:**
   - Implementation: `src/proteinsmc/sampling/particle_systems/parallel_replica.py`
-  - Initialization: `src/proteinsmc/sampling/initialization_factory.py` lines 303-379 (`_initialize_prsmc_state`)
-  - Tests: `tests/sampling/particle_systems/test_parallel_replica.py` lines 514-805
-- **Priority:** Medium-High - Parallel replica is a core feature for evolutionary studies and benchmarking.
-- **Next Steps:**
-  1. Consult BlackJAX documentation on proper SMC state structure for custom update functions
-  2. Clarify whether `vmap` over BlackJAX SMC states is the correct pattern or if there's a better way
-  3. Review how `update_parameters` dict should be structured when vmapped
-  4. Investigate the `IndexError: tuple index out of range` - likely related to key indexing after vmap splits
-  5. Consider whether parallel replica should use a different BlackJAX primitive or custom implementation
-- **Context:** BlackJAX does not have native support for parallel replica exchange - this is a custom wrapper around BlackJAX SMC.
+  - Initialization: `src/proteinsmc/sampling/initialization_factory.py` lines 303-379
+  - Tests: `tests/sampling/particle_systems/test_parallel_replica.py`
 
-### 3. Recent Architectural Improvements (Completed)
+### 3. Dynamic Data Type Handling (Cross-Application)
+
+- **Issue:** Application-wide need for flexible dtype handling across different sequence types and samplers.
+- **Current State:** Sequences use int8 for memory efficiency, but different components may expect float32 or other dtypes. Weight computations use mixed dtypes (bfloat16 vs float32).
+- **Future Solution:** Implement centralized dtype management system that:
+  1. Defines canonical dtypes for different data categories (sequences, weights, fitness scores, etc.)
+  2. Provides automatic conversion utilities with performance optimization
+  3. Supports configuration-based dtype selection for memory/precision trade-offs
+  4. Ensures consistency across SMC, MCMC, and other sampling algorithms
+- **Priority:** Medium-High - Affects multiple samplers and can cause subtle bugs
+- **Implementation Notes:**
+  - Should integrate with JAX's dtype promotion system
+  - Consider using a registry pattern for dtype specifications
+  - Add validation layers to catch dtype mismatches early
+  - Document dtype expectations in function signatures using jaxtyping
+- **Related Issues:** Connects to issue #1 (HMC/NUTS conversions) and issue #2 (PRSMC state management)
+
+### 4. Recent Architectural Improvements (Completed)
 
 - ✅ **SamplerState Refactoring:** Converted from `equinox.nn.State` (incorrect - for neural networks) to `flax.struct.dataclass` (correct - immutable PyTreeNode for JAX transformations)
 - ✅ **Config Serialization:** Fixed `io.py` to exclude JAX Mesh field (contains unpicklable Device objects) when creating metadata files
 - ✅ **Test Coverage:** Improved from 62% to 96.2% (227/236 tests passing)
+- ✅ **PRSMC Key Management & Update Parameters:** Fixed key batching and update_parameters structure for proper vmap compatibility (2025-10-21)

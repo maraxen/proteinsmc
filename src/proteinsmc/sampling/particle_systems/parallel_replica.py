@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -10,6 +9,7 @@ import jax
 import jax.numpy as jnp
 from blackjax.smc.base import SMCInfo
 from blackjax.smc.base import step as blackjax_smc_step
+from flax import struct
 from jax import lax, vmap
 from jax.experimental import io_callback
 
@@ -29,7 +29,7 @@ from proteinsmc.models.sampler_base import SamplerState
 from proteinsmc.sampling.particle_systems.smc import resample
 
 
-@dataclass
+@struct.dataclass
 class MigrationInfo:
   """Information about replica exchange/migration events during a PRSMC step.
 
@@ -45,7 +45,7 @@ class MigrationInfo:
   log_acceptance_ratio: Array  # Shape: (n_exchange_attempts,) - acceptance probability
 
 
-@dataclass
+@struct.dataclass
 class PRSMCOutput:
   """Output of a single PRSMC step, with data stacked across all islands.
 
@@ -82,13 +82,15 @@ def weight_fn(
 ) -> Array:
   """Weight function for the SMC step for a single particle."""
   fitness_values, _ = fitness_fn_partial(sequence)
+  # Squeeze to ensure we have a scalar fitness value
+  fitness_scalar = jnp.squeeze(fitness_values)
   return jnp.array(
     jnp.where(
-      jnp.isneginf(fitness_values),
+      jnp.isneginf(fitness_scalar),
       -jnp.inf,
-      beta * fitness_values,
+      beta * fitness_scalar,
     ),
-    dtype=jnp.bfloat16,
+    dtype=jnp.float32,
   )
 
 
@@ -103,6 +105,8 @@ def migrate(  # noqa: PLR0913
 ) -> tuple[SamplerState, Int, MigrationInfo]:
   """Perform replica exchange attempts between islands.
 
+  This function should only be called when n_islands > 1.
+
   Returns:
       Updated island states, number of accepted swaps, and migration info.
 
@@ -113,6 +117,7 @@ def migrate(  # noqa: PLR0913
 
   num_accepted_swaps = jnp.array(0, dtype=jnp.int32)
 
+  # Use mean_fitness (shape: n_islands) to determine selection probabilities
   safe_mean_fitness = jnp.nan_to_num(mean_fitness, nan=-jnp.inf)
   probs_idx1 = jax.nn.softmax(safe_mean_fitness)
 
@@ -289,6 +294,11 @@ def run_prsmc_loop(  # noqa: PLR0913
       fitness_fn_partial = partial(fitness_fn, key, None)
       return weight_fn(sequence, fitness_fn_partial, beta)
 
+    # Batch the weight function for all particles
+    def batched_island_weight_fn(beta: Float, key: PRNGKeyArray, sequences: Array) -> Array:
+      """Weight function that takes all particles and returns all weights."""
+      return vmap(lambda seq: single_island_weight_fn(beta, key, seq))(sequences)
+
     smc_step_fn = partial(
       blackjax_smc_step,
       update_fn=mutation_partial,
@@ -300,26 +310,55 @@ def run_prsmc_loop(  # noqa: PLR0913
       lambda state, key, beta: smc_step_fn(
         rng_key=key,
         state=state,
-        weight_fn=partial(single_island_weight_fn, beta, key),
+        weight_fn=partial(batched_island_weight_fn, beta, key),
       ),
       in_axes=(0, 0, 0),
     )(carry_state.blackjax_state, keys_islands, betas)
 
     # Update fitness and metrics for each island
-    fitness_values, _ = vmap(fitness_fn, in_axes=(0, 0, None))(
+    # Vmap over islands, then vmap over particles within each island
+    # fitness_fn returns (Array, None) - we need to extract the fitness values
+    # and ensure they have the correct shape (n_islands, population_size)
+    def extract_fitness_for_island(particles: Array, key: PRNGKeyArray) -> Array:
+      """Extract fitness values for all particles in one island."""
+      # Vmap over particles
+      fitness_list = vmap(lambda seq: fitness_fn(seq, key, None))(particles)
+      # fitness_list is a tuple (fitness_values, aux_data)
+      # Return first element to preserve input shape structure
+      return fitness_list[0]  # Shape: (population_size,) or (population_size, 1)
+
+    # Vmap over islands
+    fitness_values = vmap(extract_fitness_for_island, in_axes=(0, 0))(
       next_blackjax_states.particles,  # type: ignore[attr-access]
       keys_fitness_islands,
-      None,
     )
-    ess = 1.0 / jnp.sum(next_blackjax_states.weights**2, axis=-1)
+    # Now fitness_values has shape (n_islands, population_size, 1) or (n_islands, population_size)
+
+    # For metric calculations, we need to squeeze to ensure proper broadcasting
+    # Squeeze only if we have more than 2 dimensions
+    fitness_for_metrics = (
+      jnp.squeeze(fitness_values, axis=-1)
+      if fitness_values.ndim > 2  # noqa: PLR2004
+      else fitness_values
+    )
+    # fitness_for_metrics has shape (n_islands, population_size)
+
+    # Calculate metrics while preserving the island dimension
+    # Ensure we don't collapse to scalar when n_islands=1
+    ess = 1.0 / jnp.sum(next_blackjax_states.weights**2, axis=-1, keepdims=False)
+    # ess has shape (n_islands,)
     mean_fitness = jnp.nansum(
-      fitness_values * next_blackjax_states.weights,
+      fitness_for_metrics * next_blackjax_states.weights,
       axis=-1,
+      keepdims=False,
     )
+    # mean_fitness has shape (n_islands,)
     max_fitness = jnp.max(
-      jnp.array(jnp.where(jnp.isfinite(fitness_values), fitness_values, -jnp.inf)),
+      jnp.array(jnp.where(jnp.isfinite(fitness_for_metrics), fitness_for_metrics, -jnp.inf)),
       axis=-1,
+      keepdims=False,
     )
+    # max_fitness has shape (n_islands,)
 
     logZ_estimates = carry_state.additional_fields["logZ_estimate"] + infos.log_likelihood_increment  # noqa: N806
 
@@ -395,11 +434,14 @@ def run_prsmc_loop(  # noqa: PLR0913
 
   current_state = initial_state
 
-  final_state, _ = lax.fori_loop(
+  def loop_body(i: int, state: SamplerState) -> SamplerState:
+    """Loop body for fori_loop."""
+    next_state, _ = _prsmc_step(state, i)
+    return next_state
+
+  return lax.fori_loop(
     0,
     num_steps,
-    lambda i, val: (_prsmc_step(val, i), None),
+    loop_body,
     current_state,
   )
-
-  return final_state

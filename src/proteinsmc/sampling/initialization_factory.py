@@ -143,6 +143,7 @@ def initialize_sampler_state(  # noqa: PLR0913
       n_islands=_n_islands,
       population_size_per_island=_population_size_per_island,
       island_betas=island_betas,
+      mutation_rate=mutation_rate,
       key=key,
       fitness_fn=fitness_fn,
     )
@@ -304,6 +305,7 @@ def _initialize_prsmc_state(  # noqa: PLR0913
   n_islands: Int,
   population_size_per_island: Int,
   island_betas: Float,
+  mutation_rate: Float | None,
   key: PRNGKeyArray,
   fitness_fn: StackedFitnessFn,
 ) -> SamplerState:
@@ -314,6 +316,7 @@ def _initialize_prsmc_state(  # noqa: PLR0913
     n_islands: Number of islands.
     population_size_per_island: Population size per island.
     island_betas: List of beta values for each island.
+    mutation_rate: Mutation rate for the SMC update function (default: 0.1 if None).
     key: JAX PRNG key.
     fitness_fn: Fitness function to evaluate sequences.
 
@@ -330,6 +333,16 @@ def _initialize_prsmc_state(  # noqa: PLR0913
   island_keys = jax.random.split(key_init_islands, n_islands)
   island_betas_array = jnp.array(island_betas, dtype=jnp.float32)
 
+  # Prepare BlackJAX SMC update parameters for the mutation_update_fn
+  # Assumes mutation_rate applies equally to all particles on all islands
+  mutation_rate_val = jnp.array(mutation_rate or 0.1, dtype=jnp.float32)
+  mutation_rates_per_particle = jnp.full(
+    population_size_per_island,
+    mutation_rate_val,
+    dtype=jnp.float32,
+  )
+  update_params_island = {"mutation_rate": mutation_rates_per_particle}
+
   initial_weights = jnp.full(
     population_size_per_island,
     1.0 / population_size_per_island,
@@ -339,7 +352,7 @@ def _initialize_prsmc_state(  # noqa: PLR0913
     lambda p: BaseSMCState(
       particles=p,
       weights=initial_weights,
-      update_parameters=jnp.array(0.0, dtype=jnp.float32),
+      update_parameters=update_params_island,
     ),
   )(initial_populations)
 
@@ -354,12 +367,6 @@ def _initialize_prsmc_state(  # noqa: PLR0913
   mean_fitness = jnp.mean(initial_fitness_batch[:, :, 0], axis=1)  # Mean over particles
   max_fitness = jnp.max(initial_fitness_batch[:, :, 0], axis=1)  # Max over particles
 
-  # Extract update_parameters if available
-  update_params = {}
-  update_param_values = getattr(initial_blackjax_states, "update_parameters", None)
-  if update_param_values is not None and isinstance(update_param_values, jax.Array):
-    update_params = {"smc_update_param": update_param_values}
-
   # Construct initial island states
   return SamplerState(
     sequence=initial_populations,  # Shape: (n_islands, population_size_per_island, seq_len)
@@ -367,7 +374,7 @@ def _initialize_prsmc_state(  # noqa: PLR0913
     key=island_keys,  # Shape: (n_islands, 2)
     blackjax_state=initial_blackjax_states,
     step=jnp.zeros(n_islands, dtype=jnp.int32),
-    update_parameters=update_params,
+    update_parameters={},
     additional_fields={
       "beta": island_betas_array,
       "mean_fitness": mean_fitness,
