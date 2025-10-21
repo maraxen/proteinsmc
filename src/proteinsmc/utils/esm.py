@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, BinaryIO, Callable
+from typing import TYPE_CHECKING, Any, BinaryIO
 
 import einops
 import equinox as eqx
@@ -21,6 +21,8 @@ from jax import numpy as jnp
 from jaxtyping import Array, Float, Int
 
 if TYPE_CHECKING:
+  from collections.abc import Callable
+
   from jaxtyping import PRNGKeyArray
 
   from proteinsmc.models.types import ProteinSequence
@@ -50,15 +52,13 @@ def remap_sequences(
   """
   esm_aa_ints_raw = PROTEINMPNN_TO_ESM_AA_MAP_JAX[sequence]
 
-  esm_aa_ids_with_special = jnp.concatenate(
+  return jnp.concatenate(
     [
       jnp.array([ESM_BOS_ID], dtype=jnp.int32),
       esm_aa_ints_raw,
       jnp.array([ESM_EOS_ID], dtype=jnp.int32),
     ],
   )
-
-  return esm_aa_ids_with_special
 
 
 class AbstractFromTorch(eqx.Module):
@@ -233,7 +233,6 @@ class MultiHeadAttention(AbstractFromTorch):
       einops.rearrange(k, "b s h d -> b s (h d)"),
     )
 
-
   def __call__(self, x: InternalProjection) -> InternalProjection:
     """Apply multi-head attention with RoPE."""
     qkv = self.layernorm_qkv(x)
@@ -399,7 +398,7 @@ def create_esmc_skeleton(key: PRNGKeyArray, model_name: str) -> ESMC:
   eps = 1e-5
 
   def _create_block(k: PRNGKeyArray) -> UnifiedTransformerBlock:
-    k_attn, k_ffn, k_ln = jax.random.split(k, 3)
+    k_attn, k_ffn, _k_ln = jax.random.split(k, 3)
 
     # --- Attention Block ---
     k_qkv_w, k_out_w = jax.random.split(k_attn, 2)

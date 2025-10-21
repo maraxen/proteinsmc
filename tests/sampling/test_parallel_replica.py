@@ -42,7 +42,6 @@ class TestExchangeConfig:
     assert config.n_exchange_attempts == 10
     assert config.exchange_frequency == 5
     assert config.sequence_type == "protein"
-    assert not config.track_lineage
 
   def test_custom_n_islands(self, fitness_evaluator_mock, annealing_config_mock) -> None:
     """Test ExchangeConfig with custom n_islands.
@@ -186,35 +185,6 @@ class TestExchangeConfig:
     )
 
     assert config.sequence_type == "nucleotide"
-
-  def test_track_lineage_enabled(
-    self,
-    fitness_evaluator_mock,
-    annealing_config_mock,
-  ) -> None:
-    """Test ExchangeConfig with lineage tracking enabled.
-
-    Args:
-        fitness_evaluator_mock: Fixture providing mock fitness evaluator.
-        annealing_config_mock: Fixture providing mock annealing config.
-
-    Returns:
-        None
-
-    Raises:
-        AssertionError: If config initialization fails.
-
-    Example:
-        >>> test_track_lineage_enabled(fitness_evaluator_mock, annealing_config_mock)
-
-    """
-    config = ExchangeConfig(
-      track_lineage=True,
-      fitness_evaluator=fitness_evaluator_mock,
-      meta_annealing_schedule=annealing_config_mock,
-    )
-
-    assert config.track_lineage is True
 
 
 class TestParallelReplicaConfig:
@@ -394,7 +364,6 @@ class TestPRSMCOutput:
       mean_fitness_per_island=jnp.array([0.5, 0.7, 0.9]),
       max_fitness_per_island=jnp.array([0.8, 0.9, 1.0]),
       logZ_increment_per_island=jnp.array([0.1, 0.2, 0.3]),
-      lineage_per_island=None,
       meta_beta=jnp.array([0.25, 0.5, 0.75]),
       num_accepted_swaps=jnp.array([5]),
       num_attempted_swaps=jnp.array([10]),
@@ -433,7 +402,6 @@ class TestPRSMCOutput:
       mean_fitness_per_island=mean_fitness,
       max_fitness_per_island=max_fitness,
       logZ_increment_per_island=logZ_increment,
-      lineage_per_island=None,
       meta_beta=meta_beta,
       num_accepted_swaps=num_accepted,
       num_attempted_swaps=num_attempted,
@@ -464,7 +432,6 @@ class TestPRSMCOutput:
       mean_fitness_per_island=jnp.array([0.5]),
       max_fitness_per_island=jnp.array([0.8]),
       logZ_increment_per_island=jnp.array([0.1]),
-      lineage_per_island=None,
       meta_beta=jnp.array([1.0]),
       num_accepted_swaps=jnp.array([5]),
       num_attempted_swaps=jnp.array([10]),

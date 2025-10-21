@@ -37,6 +37,21 @@ where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 
+[tool.ruff]
+line-length = 100
+fix = true
+indent-width = 2
+exclude = [".venv", "venv", "build", "dist", "__pycache__", "tests"]
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+  "PD",
+  "D203",
+  "D213",
+  "COM812",
+]
+
 [project.optional-dependencies]
 dev = [
     "hypothesis>=6.140.2",

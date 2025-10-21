@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from functools import partial
-from typing import IO, TYPE_CHECKING, Literal, Sequence
+from typing import IO, TYPE_CHECKING, Literal
 
 import jax
 import jax.numpy as jnp

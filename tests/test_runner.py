@@ -63,10 +63,10 @@ class TestRunExperiment:
   @patch("proteinsmc.runner.initialize_sampler_state")
   @patch("proteinsmc.runner.get_fitness_function")
   @patch("proteinsmc.runner.get_annealing_function")
-  @patch("proteinsmc.runner.RunManager")
+  @patch("proteinsmc.runner._setup_writer_callback")
   def test_successful_run_without_auto_tuning(
     self,
-    mock_run_manager: Mock,
+    mock_setup_writer: Mock,
     mock_get_annealing_function: Mock,
     mock_get_fitness_function: Mock,
     mock_initialize_sampler_state: Mock,
@@ -79,10 +79,10 @@ class TestRunExperiment:
     mock_get_fitness_function.return_value = (jax.random.PRNGKey(0), mock_fitness_fn)
     mock_get_annealing_function.return_value = mock_annealing_fn
     
-    # Mock the RunManager context manager
+    # Mock the writer setup
     mock_writer = Mock()
-    mock_writer.run_id = "test_run_id"
-    mock_run_manager.return_value.__enter__.return_value = mock_writer
+    mock_io_callback = Mock()
+    mock_setup_writer.return_value = (mock_writer, mock_io_callback)
     
     # Mock the sampler functions
     mock_initial_state = Mock()
@@ -110,17 +110,17 @@ class TestRunExperiment:
     # Verify the functions were called
     mock_get_fitness_function.assert_called()
     mock_get_annealing_function.assert_called_once()
-    mock_run_manager.assert_called_once()
+    mock_setup_writer.assert_called_once()
     mock_run_fn.assert_called_once()
 
   @patch("proteinsmc.runner.initialize_sampler_state")
   @patch("proteinsmc.runner.auto_tune_chunk_size")
   @patch("proteinsmc.runner.get_fitness_function")
   @patch("proteinsmc.runner.get_annealing_function")
-  @patch("proteinsmc.runner.RunManager")
+  @patch("proteinsmc.runner._setup_writer_callback")
   def test_successful_run_with__auto_tuning(
     self,
-    mock_run_manager: Mock,
+    mock_setup_writer: Mock,
     mock_get_annealing_function: Mock,
     mock_get_fitness_function: Mock,
     mock_auto_tune_chunk_size: Mock,
@@ -139,10 +139,10 @@ class TestRunExperiment:
     mock_get_annealing_function.return_value = mock_annealing_fn
     mock_auto_tune_chunk_size.return_value = 32
     
-    # Mock the RunManager context manager
+    # Mock the writer setup
     mock_writer = Mock()
-    mock_writer.run_id = "test_run_id"
-    mock_run_manager.return_value.__enter__.return_value = mock_writer
+    mock_io_callback = Mock()
+    mock_setup_writer.return_value = (mock_writer, mock_io_callback)
     
     # Mock the sampler functions
     mock_initial_state = Mock()
@@ -199,9 +199,12 @@ class TestRunExperiment:
           "config_cls": SMCConfig,
           "run_fn": Mock(return_value=(Mock(), {"metric": mock_metric})),
         }
-      }), patch("proteinsmc.runner.RunManager"), \
+      }), patch("proteinsmc.runner._setup_writer_callback") as mock_setup_writer, \
          patch("proteinsmc.runner.get_fitness_function") as mock_get_fitness_function, \
          patch("proteinsmc.runner.get_annealing_function"):
         
+        mock_writer = Mock()
+        mock_io_callback = Mock()
+        mock_setup_writer.return_value = (mock_writer, mock_io_callback)
         mock_get_fitness_function.return_value = (jax.random.PRNGKey(0), Mock())
         run_experiment(basic_smc_config, str(output_dir), seed=42)

@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Literal, Protocol
 
 import jax
 import numpy as np
-from blackjax.mcmc.random_walk import RWState
 from blackjax.smc.base import SMCState as BaseSMCState
 from blackjax.smc.inner_kernel_tuning import StateWithParameterOverride as InnerMCMCState
 from blackjax.smc.partial_posteriors_path import PartialPosteriorsSMCState
@@ -22,6 +21,7 @@ from proteinsmc.models.memory import MemoryConfig
 
 if TYPE_CHECKING:
   from blackjax.base import State as BlackjaxState
+  from blackjax.mcmc.random_walk import RWState
   from jaxtyping import PRNGKeyArray
 
   from proteinsmc.models.types import EvoSequence
@@ -78,7 +78,6 @@ class BaseSamplerConfig:
     default="zip",
   )
   annealing_config: AnnealingConfig | None = field(default=None, kw_only=True)
-  track_lineage: bool = field(default=False)
 
   def _validate_types(self) -> None:
     """Check types of the fields."""
@@ -211,7 +210,7 @@ class SamplerState(State):
         key: PRNG key for randomness.
         blackjax_state: State from BlackJAX sampler.
         step: Current step number in the sampling process.
-        parent_uuid: UUID of the parent state for lineage tracking.
+        update_parameters: Parameters to update during sampling (e.g., mutation rate).
         additional_fields: Additional fields to store in the state.
 
     Returns:

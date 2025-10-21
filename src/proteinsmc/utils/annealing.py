@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from functools import partial
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 import jax
 import jax.numpy as jnp
@@ -11,6 +11,8 @@ from jax import jit
 from jaxtyping import Float
 
 if TYPE_CHECKING:
+  from collections.abc import Callable
+
   from jaxtyping import Array
 
   from proteinsmc.models.annealing import (

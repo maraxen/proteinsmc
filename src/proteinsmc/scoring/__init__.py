@@ -6,6 +6,6 @@ from .mpnn import make_mpnn_score
 
 __all__ = [
   "make_cai_score",
-  "make_mpnn_score",
   "make_esm_score",
+  "make_mpnn_score",
 ]

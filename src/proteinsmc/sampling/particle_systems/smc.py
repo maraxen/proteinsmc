@@ -138,8 +138,8 @@ def run_smc_loop(  # noqa: PLR0913
       )
       io_callback(
         writer_callback,
-        smc_step_output,
-        result_shape=SMCOutput,
+        None,
+        {"state": smc_step_output.state, "info": smc_step_output.info},
       )
     return next_smc_state, info
 

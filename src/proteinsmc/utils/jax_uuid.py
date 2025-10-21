@@ -1,10 +1,16 @@
 """Utility functions for working with UUIDs in JAX."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import jax
 import jax.numpy as jnp
-from jaxtyping import Int, PRNGKeyArray
 
-from proteinsmc.models.types import UUIDArray
+if TYPE_CHECKING:
+  from jaxtyping import Int, PRNGKeyArray
+
+  from proteinsmc.models.types import UUIDArray
 
 
 def generate_jax_uuid(key: PRNGKeyArray) -> tuple[UUIDArray, PRNGKeyArray]:
