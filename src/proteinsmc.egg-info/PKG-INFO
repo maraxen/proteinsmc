@@ -19,3 +19,20 @@ Requires-Dist: einops>=0.8.1
 Requires-Dist: huggingface-hub>=0.35.3
 Requires-Dist: array-record>=0.8.1
 Requires-Dist: msgpack-numpy>=0.4.8
+Provides-Extra: dev
+Requires-Dist: hypothesis>=6.140.2; extra == "dev"
+Requires-Dist: pytest>=8.4.2; extra == "dev"
+Requires-Dist: pytest-cov>=7.0.0; extra == "dev"
+Requires-Dist: ruff>=0.14.1; extra == "dev"
+Requires-Dist: ty>=0.0.1a21; extra == "dev"
+Provides-Extra: docs
+Requires-Dist: sphinx; extra == "docs"
+Requires-Dist: sphinx-rtd-theme; extra == "docs"
+Requires-Dist: sphinx-autodoc-typehints; extra == "docs"
+Requires-Dist: sphinx-autobuild; extra == "docs"
+Requires-Dist: myst-parser; extra == "docs"
+Requires-Dist: sphinx-copybutton; extra == "docs"
+Requires-Dist: sphinx-design; extra == "docs"
+Requires-Dist: sphinxext-rediraffe; extra == "docs"
+Requires-Dist: sphinx-book-theme; extra == "docs"
+Requires-Dist: myst-nb; extra == "docs"
