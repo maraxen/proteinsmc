@@ -20,17 +20,18 @@ Stay tuned for benchmarks and actual science
 
 ## Setup
 
-1. (Recommended) Create a virtual environment:
+This project uses `uv` for dependency and environment management.
+
+1. Install dependencies:
 
    ```zsh
-   python3 -m venv .venv
-   source .venv/bin/activate
+   uv sync
    ```
 
-2. Install dependencies:
+2. Run commands using `uv run`:
 
    ```zsh
-   pip install -r requirements.txt
+   uv run python src/main.py
    ```
 
 ## Linting
@@ -38,7 +39,15 @@ Stay tuned for benchmarks and actual science
 Run ruff to check and fix code style:
 
 ```zsh
-ruff check src/ --fix
+uv run ruff check src/ --fix
+```
+
+## Testing
+
+Run tests with coverage:
+
+```zsh
+uv run pytest --cov=src --cov-report=term
 ```
 
 ## Project Structure

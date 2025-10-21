@@ -52,22 +52,28 @@ The project uses `ruff` for linting. The current configuration focuses on `F` (P
 
 Maintain the modular structure within `src/`. When adding new functionalities, consider where they best fit within the existing `experiment.py`, `initiation.py`, `mpnn.py`, `mutate.py`, `sampling/`, and `utils/` modules, or if a new module is warranted.
 
-### Virtual Environment
+### Running Python Commands
 
-Always activate the virtual environment before running any Python commands or scripts. The activation script is located at `.venv/bin/activate`. You should do this before running any Python-related functions.
+This project uses `uv` for dependency and environment management. Always use `uv run` to execute Python commands, which automatically handles the virtual environment.
 
 ### Running Tests
 
 To run all tests, use the following command from the project root:
 
 ```bash
-"/Users/mar/MIT Dropbox/Marielle Russo/2025_workspace/proteinsmc/.venv/bin/python" -m pytest
+uv run pytest
+```
+
+To run tests with coverage:
+
+```bash
+uv run pytest --cov=src --cov-report=term
 ```
 
 To run a specific test file, provide its path:
 
 ```bash
-"/Users/mar/MIT Dropbox/Marielle Russo/2025_workspace/proteinsmc/.venv/bin/python" -m pytest "/Users/mar/MIT Dropbox/Marielle Russo/2025_workspace/proteinsmc/tests/utils/test_combined_fitness.py"
+uv run pytest tests/utils/test_combined_fitness.py
 ```
 
 ### Shell Commands

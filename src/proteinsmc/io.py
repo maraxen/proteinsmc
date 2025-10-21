@@ -9,8 +9,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import jax.tree_util as jtu
 import msgpack
 import msgpack_numpy
+import numpy as np
 from array_record.python.array_record_module import ArrayRecordReader, ArrayRecordWriter
 from jaxtyping import PyTree
 
@@ -92,8 +94,10 @@ def create_writer_callback(path: str) -> tuple[ArrayRecordWriter, Callable]:
         pytree_payload: The payload data to write (will be serialized with msgpack).
 
     """
-    packed_bytes = msgpack.packb(pytree_payload)
-    writer.write({"data": packed_bytes})
+    # Convert JAX arrays to numpy arrays for msgpack serialization
+    pytree_numpy = jtu.tree_map(lambda x: np.array(x), pytree_payload)
+    packed_bytes = msgpack.packb(pytree_numpy)
+    writer.write(packed_bytes)
 
   return writer, writer_callback
 
@@ -109,12 +113,15 @@ def read_lineage_data(path: str) -> dict[str, Any]:
 
   """
   reader = ArrayRecordReader(path)
-  records_list = list(reader.read())
 
   history = []
-  for record in records_list:
-    packed_bytes = record["data"]
-    full_record = msgpack.unpackb(packed_bytes)
-    history.append(full_record)
+  try:
+    records_list = list(reader.read())
+    for packed_bytes in records_list:
+      full_record = msgpack.unpackb(packed_bytes)
+      history.append(full_record)
+  except IndexError:
+    # Empty file - no records
+    pass
 
   return {"records": history}
