@@ -32,6 +32,9 @@ if TYPE_CHECKING:
 BlackjaxSMCState = BaseSMCState | PartialPosteriorsSMCState | TemperedSMCState
 
 
+from proteinsmc.models.types import UUIDArray
+
+
 @with_config
 def initialize_sampler_state(  # noqa: PLR0913
   sampler_type: str,
@@ -48,6 +51,7 @@ def initialize_sampler_state(  # noqa: PLR0913
   key: PRNGKeyArray,
   beta: Float | None,
   fitness_fn: StackedFitnessFn,
+  run_uuid: UUIDArray | None = None,
 ) -> SamplerState:
   """Make initialize state for any sampler type.
 
@@ -87,17 +91,18 @@ def initialize_sampler_state(  # noqa: PLR0913
     output_sequence_type=sequence_type,
   )
   if sampler_type in {"HMC", "MCMC", "NUTS"}:
-    return _initialize_single_state(
+    state = _initialize_single_state(
       sampler_type=sampler_type,
       initial_population=initial_population,
       fitness_fn=fitness_fn,
       key=key,
     )
+    return state._replace(run_uuid=run_uuid)
 
   if sampler_type == "SMC":
     if smc_algo_kwargs is None:
       smc_algo_kwargs = {}
-    return _initialize_smc_state(
+    state = _initialize_smc_state(
       initial_population=initial_population,
       algorithm=algorithm if algorithm is not None else SMCAlgorithm.BASE,
       beta=beta,
@@ -106,6 +111,7 @@ def initialize_sampler_state(  # noqa: PLR0913
       key=key,
       fitness_fn=fitness_fn,
     )
+    return state._replace(run_uuid=run_uuid)
   if sampler_type == "ParallelReplica":
     key_init_islands, key = jax.random.split(key)
     _n_islands = n_islands if n_islands is not None else jnp.array(4, dtype=jnp.int32)
@@ -126,7 +132,7 @@ def initialize_sampler_state(  # noqa: PLR0913
       _population_size_per_island,
       -1,
     )
-    return _initialize_prsmc_state(
+    state = _initialize_prsmc_state(
       initial_populations=initial_populations_stacked,
       n_islands=_n_islands,
       population_size_per_island=_population_size_per_island,
@@ -134,6 +140,7 @@ def initialize_sampler_state(  # noqa: PLR0913
       key=key,
       fitness_fn=fitness_fn,
     )
+    return state._replace(run_uuid=run_uuid)
   msg = f"Unsupported sampler config type: {type(config)}"
   raise ValueError(msg)
 

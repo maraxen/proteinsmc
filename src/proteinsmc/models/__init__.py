@@ -2,12 +2,12 @@
 
 from .annealing import AnnealingConfig
 from .fitness import CombineFunction, FitnessEvaluator, FitnessFunction
-from .gibbs import GibbsConfig, GibbsState, GibbsUpdateFn
-from .hmc import HMCConfig, HMCState
-from .mcmc import MCMCConfig, MCMCState
+from .gibbs import GibbsConfig, GibbsUpdateFn
+from .hmc import HMCConfig
+from .mcmc import MCMCConfig
 from .memory import AutoTuningConfig, MemoryConfig
-from .nuts import NUTSConfig, NUTSState
-from .parallel_replica import ParallelReplicaConfig, PRSMCOutput, PRSMCState
+from .nuts import NUTSConfig
+from .parallel_replica import ParallelReplicaConfig, PRSMCOutput
 from .sampler_base import BaseSamplerConfig, SamplerOutputProtocol
 from .smc import (
   PopulationBools,
@@ -17,7 +17,6 @@ from .smc import (
   PopulationSequences,
   SMCConfig,
   SMCOutput,
-  SMCState,
   StackedPopulationMetrics,
 )
 from .types import (
@@ -36,10 +35,8 @@ __all__ = [
   "MemoryConfig",
   "AutoTuningConfig",
   "ParallelReplicaConfig",
-  "PRSMCState",
   "SMCConfig",
   "SMCOutput",
-  "SMCState",
   "StackedPopulationMetrics",
   "PopulationNucleotideSequences",
   "PopulationProteinSequences",
@@ -50,13 +47,9 @@ __all__ = [
   "ProteinSequence",
   "EvoSequence",
   "GibbsConfig",
-  "GibbsState",
   "GibbsUpdateFn",
   "HMCConfig",
-  "HMCState",
   "MCMCConfig",
-  "MCMCState",
   "NUTSConfig",
-  "NUTSState",
   "PRSMCOutput",
 ]

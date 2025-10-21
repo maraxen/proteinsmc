@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import jax
 import jax.numpy as jnp
 from jax import jit, random
+from jax.experimental import io_callback as jax_io_callback
 
 from proteinsmc.models.gibbs import GibbsConfig, GibbsUpdateFn
 from proteinsmc.models.sampler_base import SamplerState
@@ -85,8 +86,16 @@ def make_gibbs_update_fns(
   return update_fns  # type: ignore[return-value]
 
 
-@partial(jit, static_argnames=("config", "fitness_fn", "update_fns"))
-def run_gibbs_loop(
+@partial(
+  jit,
+  static_argnames=(
+    "config",
+    "fitness_fn",
+    "update_fns",
+    "io_callback",
+  ),
+)
+def _run_gibbs_loop_impl(
   config: GibbsConfig,
   initial_state: SamplerState,
   fitness_fn: FitnessFn,
@@ -94,36 +103,60 @@ def run_gibbs_loop(
     GibbsUpdateFn,
     ...,
   ],
-) -> tuple[SamplerState, SamplerState]:
-  """Run the Gibbs sampler loop.
+  io_callback: Callable,
+) -> tuple[SamplerState, dict]:
+  """JIT-compiled implementation of the Gibbs sampler loop."""
 
+  def body_fn(i: Int, state: SamplerState) -> SamplerState:
+    current_sequence = state.sequence
+    new_sequence = current_sequence
+    for j, update_fn in enumerate(update_fns):
+      key_comp, _ = random.split(random.fold_in(state.key, j))
+      new_sequence = update_fn(key_comp, new_sequence, fitness_fn)
+    fitness = fitness_fn(
+      _key=state.key,
+      sequence=new_sequence,
+      _context=None,
+    )
+    _, key_next = random.split(state.key)
+    next_state = SamplerState(sequence=new_sequence, fitness=fitness, key=key_next)
+    payload = {
+      "sequence": next_state.sequence,
+      "fitness": next_state.fitness,
+      "step": i,
+    }
+    jax_io_callback(io_callback, payload)
+    return next_state
+
+  final_state = jax.lax.fori_loop(0, config.num_samples, body_fn, initial_state)
+  return final_state, {}
+
+
+def run_gibbs_loop(
+  config: GibbsConfig,
+  initial_state: SamplerState,
+  fitness_fn: FitnessFn,
+  io_callback: Callable,
+  **kwargs,
+) -> tuple[SamplerState, dict]:
+  """Run the Gibbs sampler loop.
   Args:
       config: Configuration for the Gibbs sampler.
       initial_state: Initial state of the sampler.
       fitness_fn: Fitness function to evaluate sequences.
-      update_fns: Tuple of update functions, each updating one component of the state.
-
+      io_callback: A callback function for logging metrics.
+      **kwargs: Additional keyword arguments.
   Returns:
-      A tuple containing the final state and the history of states.
-
+      A tuple containing the final state and an empty dictionary.
   """
-
-  def body_fn(state: SamplerState, _i: Int) -> tuple[SamplerState, SamplerState]:
-    current_state = state.sequence
-
-    new_state = current_state
-    for j, update_fn in enumerate(update_fns):
-      key_comp, _ = random.split(random.fold_in(state.key, j))
-      new_state = update_fn(key_comp, new_state, fitness_fn)  # type: ignore[call-arg]
-
-    fitness = fitness_fn(
-      _key=state.key,  # type: ignore[arg-type]
-      sequence=new_state,
-      _context=None,
-    )
-    _, key_next = random.split(state.key)
-    next_state = SamplerState(sequence=new_state, fitness=fitness, key=key_next)
-    return next_state, next_state
-
-  final_state, state_history = jax.lax.scan(body_fn, initial_state, jnp.arange(config.num_samples))
-  return final_state, state_history
+  update_fns = make_gibbs_update_fns(
+    sequence_length=len(config.seed_sequence),
+    n_states=config.n_states,
+  )
+  return _run_gibbs_loop_impl(
+    config=config,
+    initial_state=initial_state,
+    fitness_fn=fitness_fn,
+    update_fns=update_fns,
+    io_callback=io_callback,
+  )

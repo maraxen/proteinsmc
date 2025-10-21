@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import blackjax
 import jax
+from jax.experimental import io_callback
 
 from proteinsmc.models.sampler_base import SamplerState
 
@@ -19,31 +20,40 @@ if TYPE_CHECKING:
 
 
 def run_mcmc_loop(
-  num_samples: int,
+  config,
   initial_state: SamplerState,
   fitness_fn: StackedFitnessFn,
   mutation_fn: Callable[[PRNGKeyArray, EvoSequence], EvoSequence],
-) -> tuple[SamplerState, SamplerState]:
+  io_callback: Callable,
+  **kwargs,
+) -> tuple[SamplerState, dict]:
   """Run the MCMC sampling loop using Blackjax."""
   kernel = blackjax.mcmc.random_walk.build_rmh()
 
-  def one_step(state: SamplerState, key: PRNGKeyArray) -> tuple[SamplerState, SamplerState]:
+  def one_step(i, state):
     """Perform one step of the MCMC sampler."""
-    new_blackjax_state, _ = kernel(
-      rng_key=key,
-      state=state.blackjax_state,  # pyright: ignore[reportArgumentType]
+    key, kernel_key, next_key = jax.random.split(state.key, 3)
+    new_blackjax_state, mcmc_info = kernel(
+      rng_key=kernel_key,
+      state=state.blackjax_state,
       logdensity_fn=fitness_fn,
       transition_generator=mutation_fn,
     )
     new_state = SamplerState(
-      sequence=new_blackjax_state.position,  # pyright: ignore[reportArgumentType]
-      fitness=new_blackjax_state.logdensity,  # pyright: ignore[reportArgumentType]
-      key=key,
+      sequence=new_blackjax_state.position,
+      fitness=new_blackjax_state.logdensity,
+      key=next_key,
       blackjax_state=new_blackjax_state,
-      step=state.step + 1,
+      step=i,
     )
-    return new_state, new_state
+    payload = {
+      "sequence": new_state.sequence,
+      "fitness": new_state.fitness,
+      "step": new_state.step,
+      "acceptance_rate": mcmc_info.acceptance_rate,
+    }
+    io_callback(payload)
+    return new_state
 
-  keys = jax.random.split(initial_state.key, num_samples)
-  final_state, state_history = jax.lax.scan(one_step, initial_state, keys)
-  return final_state, state_history
+  final_state = jax.lax.fori_loop(0, config.num_samples, one_step, initial_state)
+  return final_state, {}

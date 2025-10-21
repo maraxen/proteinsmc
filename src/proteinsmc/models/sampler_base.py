@@ -190,41 +190,20 @@ class SamplerOutputProtocol(Protocol):
   """Protocol for sampler output dataclasses."""
 
 
+from proteinsmc.models.types import UUIDArray
+
+
 class SamplerState(State):
   """Protocol for sampler state dataclasses."""
 
-  def __init__(  # noqa: PLR0913
-    self,
-    sequence: EvoSequence,
-    fitness: StackedFitness,
-    key: PRNGKeyArray,
-    blackjax_state: BlackjaxState | BlackjaxSMCState | RWState | None = None,
-    step: jax.Array | None = None,
-    update_parameters: dict[str, jax.Array] | None = None,
-    additional_fields: dict[str, jax.Array] | None = None,
-  ) -> None:
-    """Initialize the sampler state.
-
-    Args:
-        sequence: Current sequence(s) in the sampler.
-        fitness: Fitness scores for the current sequences.
-        key: PRNG key for randomness.
-        blackjax_state: State from BlackJAX sampler.
-        step: Current step number in the sampling process.
-        parent_uuid: UUID of the parent state for lineage tracking.
-        additional_fields: Additional fields to store in the state.
-
-    Returns:
-        None
-
-    """
-    self.sequence = sequence
-    self.fitness = fitness
-    self.key = key
-    self.blackjax_state = blackjax_state
-    self.step = step or jax.numpy.array(0, dtype=jax.numpy.int32)
-    self.update_parameters = update_parameters or {}
-    self.additional_fields = additional_fields or {}
+  sequence: EvoSequence
+  fitness: StackedFitness
+  key: PRNGKeyArray
+  run_uuid: UUIDArray | None = None
+  blackjax_state: BlackjaxState | BlackjaxSMCState | RWState | None = None
+  step: jax.Array | None = None
+  update_parameters: dict[str, jax.Array] = field(default_factory=dict)
+  additional_fields: dict[str, jax.Array] = field(default_factory=dict)
 
 
 def config_to_jax(config: BaseSamplerConfig) -> dict[str, jax.Array]:

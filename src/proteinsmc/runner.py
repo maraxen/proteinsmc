@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from itertools import product
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import jax
 import jax.numpy as jnp
+from jax.experimental import io_callback as jax_io_callback
 
 from proteinsmc.models import (
   GibbsConfig,
@@ -46,7 +48,7 @@ if TYPE_CHECKING:
   from proteinsmc.utils.fitness import StackedFitnessFn
 
 from proteinsmc.io import create_writer_callback
-from proteinsmc.models.sampler_base import config_to_jax
+from proteinsmc.models.sampler_base import BaseSamplerConfig, config_to_jax
 
 SAMPLER_REGISTRY: dict[str, dict[str, Any]] = {
   "smc": {
@@ -80,25 +82,18 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def _setup_writer_callback(path: Path) -> tuple[ArrayRecordWriter, Callable]:
-  """Set up the writer callback for lineage tracking."""
-  writer, writer_callback = create_writer_callback(str(path))
+def _setup_writer_callback(
+  path: Path, run_uid: str, config: BaseSamplerConfig
+) -> tuple[ArrayRecordWriter, Callable]:
+  """Set up the writer callback."""
+  writer, writer_callback = create_writer_callback(
+    path=str(path), run_uid=run_uid, config=config
+  )
 
-  def io_callback(
-    payload: dict[str, jax.Array],
-    parent_uuid_bytes: jax.Array,
-    entry_type: jax.Array,
-  ) -> jax.Array:
+  def io_callback(payload: dict[str, jax.Array]):
     """JAX-compatible IO callback function."""
-    parent_uuid_np = jax.device_get(parent_uuid_bytes)
     payload_np = {k: jax.device_get(v) for k, v in payload.items()}
-    entry_type_np = jax.device_get(entry_type)
-    new_uuid_bytes = writer_callback(
-      payload=payload_np,
-      parent_uuid_bytes=parent_uuid_np,
-      entry_type=entry_type_np,
-    )
-    return jnp.array(new_uuid_bytes, dtype=jnp.uint8)
+    writer_callback(payload_np)
 
   return writer, io_callback
 
@@ -242,6 +237,7 @@ def _get_inputs(config: BaseSamplerConfig) -> tuple[dict[str, Any], list[str]]:
 def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int = 0) -> None:
   """Run a sampling experiment based on the provided configuration."""
   key = jax.random.PRNGKey(seed)
+  run_uid = uuid.uuid4().hex
 
   sampler_def = _validate_config(config)
   run_fn: Callable[..., tuple[Any, dict[str, Any]]] = sampler_def["run_fn"]
@@ -252,11 +248,13 @@ def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int 
     if hasattr(config, "annealing_config") and config.annealing_config is not None
     else None
   )
-  writer, io_callback = _setup_writer_callback(Path(output_dir))
+  writer, io_callback = _setup_writer_callback(
+    path=Path(output_dir), run_uid=run_uid, config=config
+  )
   try:
     logger.info(
       "Starting run %s of type '%s'...",
-      writer.run_id,
+      run_uid,
       config.sampler_type,
     )
     jax_inputs, sequence_type_inputs = _get_inputs(config)
@@ -277,12 +275,13 @@ def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int 
         beta=jax_inputs.get("initial_beta", None),
         fitness_fn=fitness_fn,
         mutation_rate=jax_inputs.get("mutation_rate", None),
+        run_uid=run_uid,
       )
       for stype in sequence_type_inputs
     )
 
     logger.info("Starting sampler loop...")
-    final_state, _ = run_fn(
+    final_state, metrics = run_fn(
       config=config,
       initial_state=initial_states,
       fitness_fn=fitness_fn,
@@ -295,7 +294,7 @@ def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int 
 
     # 6. Write results to disk
 
-    logger.info("Run %s completed successfully.", writer.run_id)
+    logger.info("Run %s completed successfully.", run_uid)
   finally:
     writer.close()
     logger.info("Output writer closed.")

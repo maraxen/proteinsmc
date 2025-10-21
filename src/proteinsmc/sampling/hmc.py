@@ -31,31 +31,27 @@ class HMCOutput:
 
 
 def run_hmc_loop(
-  num_samples: int,
+  config,
   initial_state: SamplerState,
   fitness_fn: StackedFitnessFn,
-  _mutation_fn: MutationFn | None = None,
-  writer_callback: Callable | None = None,
-) -> tuple[SamplerState, SamplerState]:
+  io_callback: Callable,
+  **kwargs,
+) -> tuple[SamplerState, dict]:
   """Run the Hamiltonian Monte Carlo (HMC) sampler loop.
-
   Args:
       config: HMC sampler configuration.
-      num_samples: Number of samples to draw.
-      initial_state: Initial sequence of the sampler.
+      initial_state: Initial state of the sampler.
       fitness_fn: Fitness function to evaluate sequences.
-      mutation_fn: Mutation function to generate new sequences.
-      writer_callback: Optional callback function for writing outputs.
-
+      io_callback: Callback function for writing outputs.
+      **kwargs: Additional keyword arguments.
   Returns:
-      A tuple containing the final state and the history of states.
-
+      A tuple containing the final state and a dictionary of metrics.
   """
   kernel = blackjax.hmc.build_kernel()
 
-  def one_step(state: SamplerState, key: PRNGKeyArray) -> tuple[SamplerState, SamplerState]:
+  def one_step(i, state):
     """Perform one step of the HMC sampler."""
-    kernel_key, next_key = jax.random.split(key)
+    key, kernel_key, next_key = jax.random.split(state.key, 3)
     new_blackjax_state, hmc_info = kernel(
       rng_key=kernel_key,
       state=state.blackjax_state,
@@ -66,21 +62,18 @@ def run_hmc_loop(
       fitness=new_blackjax_state.logdensity,
       key=next_key,
       blackjax_state=new_blackjax_state,
-      step=state.step + 1,
+      step=i,
     )
-    if writer_callback is not None:
-      io_callback(
-        writer_callback,
-        new_state,
-        result_shape=SamplerState,
-      )
-      io_callback(
-        writer_callback,
-        hmc_info,
-        result_shape=HMCInfo,
-      )
-    return new_state, new_state
 
-  keys = jax.random.split(initial_state.key, num_samples)
-  final_state, state_history = jax.lax.scan(one_step, initial_state, keys)
-  return final_state, state_history
+    payload = {
+      "sequence": new_state.sequence,
+      "fitness": new_state.fitness,
+      "step": new_state.step,
+      "acceptance_rate": hmc_info.acceptance_rate,
+      "divergence": hmc_info.is_divergent,
+    }
+    io_callback(payload)
+    return new_state
+
+  final_state = jax.lax.fori_loop(0, config.num_samples, one_step, initial_state)
+  return final_state, {}

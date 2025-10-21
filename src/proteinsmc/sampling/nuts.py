@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 import blackjax
 import jax
 from blackjax.mcmc.nuts import NUTSInfo
+from jax.experimental import io_callback
 
 from proteinsmc.models.sampler_base import SamplerState
 
@@ -35,52 +36,50 @@ class NUTSOutput:
 
 
 def run_nuts_loop(
-  num_samples: Int,
-  step_size: Float,
-  num_doublings: Int,
+  config,
   initial_state: SamplerState,
   fitness_fn: StackedFitnessFn,
-  _mutation_fn: MutationFn | None = None,
-  writer_callback: Callable | None = None,
-) -> tuple[SamplerState, SamplerState]:
+  io_callback: Callable,
+  **kwargs,
+) -> tuple[SamplerState, dict]:
   """Run a NUTS sampling loop.
-
-  This function demonstrates the basic idea of NUTS but lacks the full
-  adaptivity and tree-building of a true NUTS implementation.
-
   Args:
       config: Configuration for the NUTS sampler.
       initial_state: Initial position of the sampler.
       fitness_fn: Fitness function to evaluate sequences.
-      key: JAX PRNG key for random number generation.
-
+      io_callback: Callback function for writing outputs.
+      **kwargs: Additional keyword arguments.
   Returns:
       A tuple containing the final state and the history of states.
-
   """
   kernel = blackjax.nuts.build_kernel()
 
-  def one_step(state: SamplerState, key: PRNGKeyArray) -> tuple[SamplerState, SamplerState]:
+  def one_step(i, state):
     """Perform one step of the NUTS sampler."""
-    new_blackjax_state, info = kernel(
-      rng_key=key,
+    key, kernel_key, next_key = jax.random.split(state.key, 3)
+    new_blackjax_state, nuts_info = kernel(
+      rng_key=kernel_key,
       state=state.blackjax_state,
       logdensity_fn=fitness_fn,
-      step_size=step_size,
-      max_num_doublings=num_doublings,
+      step_size=config.step_size,
+      max_num_doublings=config.num_doublings,
     )
     new_state = SamplerState(
       sequence=new_blackjax_state.position,
       fitness=new_blackjax_state.logdensity,
-      key=key,
+      key=next_key,
       blackjax_state=new_blackjax_state,
+      step=i,
     )
+    payload = {
+      "sequence": new_state.sequence,
+      "fitness": new_state.fitness,
+      "step": new_state.step,
+      "acceptance_rate": nuts_info.acceptance_rate,
+      "divergence": nuts_info.is_divergent,
+    }
+    io_callback(payload)
+    return new_state
 
-    if writer_callback:
-      writer_callback(NUTSOutput(state=new_state, info=info))
-
-    return new_state, new_state
-
-  keys = jax.random.split(initial_state.key, num_samples)
-  final_state, state_history = jax.lax.scan(one_step, initial_state, keys)
-  return final_state, state_history
+  final_state = jax.lax.fori_loop(0, config.num_samples, one_step, initial_state)
+  return final_state, {}
