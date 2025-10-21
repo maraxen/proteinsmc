@@ -37,11 +37,23 @@ where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 
-[dependency-groups]
+[project.optional-dependencies]
 dev = [
     "hypothesis>=6.140.2",
     "pytest>=8.4.2",
     "pytest-cov>=7.0.0",
     "ruff>=0.14.1",
     "ty>=0.0.1a21",
+]
+docs = [
+    "sphinx",
+    "sphinx-rtd-theme",
+    "sphinx-autodoc-typehints",
+    "sphinx-autobuild",
+    "myst-parser",
+    "sphinx-copybutton",
+    "sphinx-design",
+    "sphinxext-rediraffe",
+    "sphinx-book-theme",
+    "myst-nb",
 ]
