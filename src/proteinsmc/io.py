@@ -4,7 +4,7 @@ import json
 import shutil
 import subprocess
 from collections.abc import Callable, Generator
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict, fields, is_dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -56,7 +56,22 @@ def create_metadata_file(config: object, output_path: Path) -> None:
   # Extract config data - handle both dataclass and regular objects
   config_data: dict[str, Any] | str
   if is_dataclass(config) and not isinstance(config, type):
-    config_data = asdict(config)  # type: ignore[arg-type]
+    # Manually extract config fields to avoid pickling JAX Mesh/Device objects
+    # We can't use asdict() because it deepcopies all values, including unpicklable ones
+    config_data = {}
+    for field_info in fields(config):
+      if field_info.name == "mesh":
+        # Skip the mesh field - it contains JAX Device objects that can't be pickled
+        continue
+      value = getattr(config, field_info.name)
+      # For nested dataclasses, convert to dict or string representation
+      if is_dataclass(value) and not isinstance(value, type):
+        try:
+          config_data[field_info.name] = asdict(value)  # type: ignore[arg-type]
+        except (TypeError, RecursionError):
+          config_data[field_info.name] = str(value)
+      else:
+        config_data[field_info.name] = value
   else:
     config_data = str(config)
 

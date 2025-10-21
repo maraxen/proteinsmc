@@ -14,7 +14,7 @@ from blackjax.smc.inner_kernel_tuning import StateWithParameterOverride as Inner
 from blackjax.smc.partial_posteriors_path import PartialPosteriorsSMCState
 from blackjax.smc.pretuning import StateWithParameterOverride as PretuningSMCState
 from blackjax.smc.tempered import TemperedSMCState
-from equinox.nn import State
+from flax import struct
 from jax.sharding import Mesh
 
 from proteinsmc.models.memory import MemoryConfig
@@ -189,41 +189,21 @@ class SamplerOutputProtocol(Protocol):
   """Protocol for sampler output dataclasses."""
 
 
-class SamplerState(State):
-  """Protocol for sampler state dataclasses."""
+@struct.dataclass
+class SamplerState:
+  """Immutable state for samplers, compatible with JAX transformations.
 
-  def __init__(  # noqa: PLR0913
-    self,
-    sequence: EvoSequence,
-    fitness: StackedFitness,
-    key: PRNGKeyArray,
-    blackjax_state: BlackjaxState | BlackjaxSMCState | RWState | None = None,
-    step: jax.Array | None = None,
-    update_parameters: dict[str, jax.Array] | None = None,
-    additional_fields: dict[str, jax.Array] | None = None,
-  ) -> None:
-    """Initialize the sampler state.
+  This is a PyTreeNode that can be passed through jax.jit, jax.lax.scan, etc.
+  Use the `.replace()` method to create modified copies.
+  """
 
-    Args:
-        sequence: Current sequence(s) in the sampler.
-        fitness: Fitness scores for the current sequences.
-        key: PRNG key for randomness.
-        blackjax_state: State from BlackJAX sampler.
-        step: Current step number in the sampling process.
-        update_parameters: Parameters to update during sampling (e.g., mutation rate).
-        additional_fields: Additional fields to store in the state.
-
-    Returns:
-        None
-
-    """
-    self.sequence = sequence
-    self.fitness = fitness
-    self.key = key
-    self.blackjax_state = blackjax_state
-    self.step = step or jax.numpy.array(0, dtype=jax.numpy.int32)
-    self.update_parameters = update_parameters or {}
-    self.additional_fields = additional_fields or {}
+  sequence: EvoSequence
+  fitness: StackedFitness
+  key: PRNGKeyArray
+  blackjax_state: BlackjaxState | BlackjaxSMCState | RWState | None = None
+  step: jax.Array = struct.field(default_factory=lambda: jax.numpy.array(0, dtype=jax.numpy.int32))
+  update_parameters: dict[str, jax.Array] = struct.field(default_factory=dict)
+  additional_fields: dict[str, jax.Array] = struct.field(default_factory=dict)
 
 
 def config_to_jax(config: BaseSamplerConfig) -> dict[str, jax.Array]:

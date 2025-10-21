@@ -135,3 +135,51 @@ Based on recent planning, the project has adopted a new, scalable architecture f
 - **Testing:** Use pytest for testing. Use chex for assertions on JAX arrays. Mock external systems like file I/O where appropriate.  
 - **Immutability:** Embrace the functional and immutable nature of JAX. Avoid in-place modifications of state.  
 - **Clarity over Premature Optimization:** Write clear, readable code first. Rely on jax.jit for performance and only optimize further if a bottleneck is identified.
+
+## **Technical Debt & Future Enhancements Backlog**
+
+### 1. Data Type Conversions (HMC/NUTS)
+
+- **Issue:** HMC/NUTS samplers require float32 inputs for gradient computation, but sequences are stored as int8 for memory efficiency.
+- **Current State:** 4 tests failing in `test_initialization_factory.py` (HMC/NUTS initialization with int8 sequences).
+- **Future Solution:** Implement modular data type conversion layer that:
+  1. Detects sampler requirements (gradient-based vs. discrete)
+  2. Automatically converts int8 sequences to float32 when needed
+  3. Converts results back to int8 for storage
+  4. Minimizes memory overhead through lazy conversion
+- **Priority:** Medium - Currently blocking HMC/NUTS testing, but these samplers are less critical than SMC for primary use cases.
+- **Implementation Notes:**
+  - Consider using JAX's `astype()` with JIT compilation for efficiency
+  - May need to update `StackedFitnessFn` type signature to be more flexible
+  - Document the performance trade-offs in the conversion layer
+- **Test Files:** `tests/sampling/test_initialization_factory.py` lines 96-179
+
+### 2. Parallel Replica SMC State Management
+
+- **Issue:** Custom PRSMC implementation has architectural mismatches with BlackJAX SMC API around state batching.
+- **Current State:** 3-4 tests failing in `test_parallel_replica.py::TestRunPRSMCLoop` with various errors:
+  - `IndexError: tuple index out of range` in basic loop test
+  - `TypeError: JAX encountered invalid PRNG key data` in no-exchange tests
+  - Complex interaction between per-island state and BlackJAX SMC expectations
+- **Root Causes:**
+  1. **Key Management:** PRSMC uses per-island keys (shape `(n_islands, 2)`), but key splitting logic may not handle this correctly in all code paths
+  2. **Update Parameters Structure:** BlackJAX SMC's `update_parameters` field needs to be a dict with batched values for custom update functions, but the batching semantics across islands are unclear
+  3. **State Batching:** Unclear whether BlackJAX SMC expects states to be batched via vmap or handled differently for multi-replica scenarios
+- **Key Files:**
+  - Implementation: `src/proteinsmc/sampling/particle_systems/parallel_replica.py`
+  - Initialization: `src/proteinsmc/sampling/initialization_factory.py` lines 303-379 (`_initialize_prsmc_state`)
+  - Tests: `tests/sampling/particle_systems/test_parallel_replica.py` lines 514-805
+- **Priority:** Medium-High - Parallel replica is a core feature for evolutionary studies and benchmarking.
+- **Next Steps:**
+  1. Consult BlackJAX documentation on proper SMC state structure for custom update functions
+  2. Clarify whether `vmap` over BlackJAX SMC states is the correct pattern or if there's a better way
+  3. Review how `update_parameters` dict should be structured when vmapped
+  4. Investigate the `IndexError: tuple index out of range` - likely related to key indexing after vmap splits
+  5. Consider whether parallel replica should use a different BlackJAX primitive or custom implementation
+- **Context:** BlackJAX does not have native support for parallel replica exchange - this is a custom wrapper around BlackJAX SMC.
+
+### 3. Recent Architectural Improvements (Completed)
+
+- ✅ **SamplerState Refactoring:** Converted from `equinox.nn.State` (incorrect - for neural networks) to `flax.struct.dataclass` (correct - immutable PyTreeNode for JAX transformations)
+- ✅ **Config Serialization:** Fixed `io.py` to exclude JAX Mesh field (contains unpicklable Device objects) when creating metadata files
+- ✅ **Test Coverage:** Improved from 62% to 96.2% (227/236 tests passing)
