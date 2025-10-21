@@ -21,13 +21,28 @@ if TYPE_CHECKING:
   from jaxtyping import Array, Float, Int, PRNGKeyArray
 
   from proteinsmc.models.fitness import StackedFitnessFn
-  from proteinsmc.models.mutation import MutationFn
   from proteinsmc.models.types import SequenceType
   from proteinsmc.utils.annealing import AnnealingFn
 
 
 from proteinsmc.models.sampler_base import SamplerState
 from proteinsmc.sampling.particle_systems.smc import resample
+
+
+@dataclass
+class MigrationInfo:
+  """Information about replica exchange/migration events during a PRSMC step.
+
+  All arrays have static shape to be JAX-compatible. The first dimension
+  corresponds to the n_exchange_attempts (all attempted swaps, accepted or not).
+  """
+
+  island_from: Array  # Shape: (n_exchange_attempts,) - source island index
+  island_to: Array  # Shape: (n_exchange_attempts,) - destination island index
+  particle_idx_from: Array  # Shape: (n_exchange_attempts,) - source particle index
+  particle_idx_to: Array  # Shape: (n_exchange_attempts,) - dest particle index
+  accepted: Array  # Shape: (n_exchange_attempts,) - bool, was swap accepted
+  log_acceptance_ratio: Array  # Shape: (n_exchange_attempts,) - acceptance probability
 
 
 @dataclass
@@ -42,6 +57,7 @@ class PRSMCOutput:
   info: SMCInfo
   num_attempted_swaps: Int
   num_accepted_swaps: Int
+  migration_info: MigrationInfo  # Migration events for this step
 
 
 def mutation_update_fn(
@@ -84,8 +100,13 @@ def migrate(  # noqa: PLR0913
   population_size: Int,
   n_exchange_attempts: Int,
   fitness_fn: StackedFitnessFn,
-) -> tuple[SamplerState, Int]:
-  """Perform replica exchange attempts between islands."""
+) -> tuple[SamplerState, Int, MigrationInfo]:
+  """Perform replica exchange attempts between islands.
+
+  Returns:
+      Updated island states, number of accepted swaps, and migration info.
+
+  """
   all_particles = island_states.blackjax_state.particles  # type: ignore[attr-access]
   all_betas = island_states.additional_fields["beta"]
   mean_fitness = island_states.additional_fields["mean_fitness"]
@@ -95,11 +116,25 @@ def migrate(  # noqa: PLR0913
   safe_mean_fitness = jnp.nan_to_num(mean_fitness, nan=-jnp.inf)
   probs_idx1 = jax.nn.softmax(safe_mean_fitness)
 
-  def attempt_exchange_body(_: int, loop_state: tuple) -> tuple:
+  # Pre-allocate arrays for migration tracking (static shapes)
+  island_from_log = jnp.zeros(n_exchange_attempts, dtype=jnp.int32)
+  island_to_log = jnp.zeros(n_exchange_attempts, dtype=jnp.int32)
+  particle_idx_from_log = jnp.zeros(n_exchange_attempts, dtype=jnp.int32)
+  particle_idx_to_log = jnp.zeros(n_exchange_attempts, dtype=jnp.int32)
+  accepted_log = jnp.zeros(n_exchange_attempts, dtype=jnp.bool_)
+  log_acceptance_ratio_log = jnp.zeros(n_exchange_attempts, dtype=jnp.float32)
+
+  def attempt_exchange_body(i: int, loop_state: tuple) -> tuple:
     (
       key_attempt,
       current_particles,
       current_accepted_swaps,
+      islands_from,
+      islands_to,
+      particles_from,
+      particles_to,
+      accepted_arr,
+      log_ratios,
     ) = loop_state
     (
       key_select_idx1,
@@ -152,19 +187,66 @@ def migrate(  # noqa: PLR0913
     )
     updated_accepted_swaps = current_accepted_swaps + jax.lax.select(accept, 1, 0)
 
-    return key_next_iter, new_particles, updated_accepted_swaps
+    # Record migration event
+    islands_from = islands_from.at[i].set(idx1)
+    islands_to = islands_to.at[i].set(idx2)
+    particles_from = particles_from.at[i].set(particle_idx[0])
+    particles_to = particles_to.at[i].set(particle_idx[1])
+    accepted_arr = accepted_arr.at[i].set(accept)
+    log_ratios = log_ratios.at[i].set(log_acceptance_ratio)
 
-  key, final_particles, total_accepted = lax.fori_loop(
+    return (
+      key_next_iter,
+      new_particles,
+      updated_accepted_swaps,
+      islands_from,
+      islands_to,
+      particles_from,
+      particles_to,
+      accepted_arr,
+      log_ratios,
+    )
+
+  (
+    key,
+    final_particles,
+    total_accepted,
+    island_from_log,
+    island_to_log,
+    particle_idx_from_log,
+    particle_idx_to_log,
+    accepted_log,
+    log_acceptance_ratio_log,
+  ) = lax.fori_loop(
     0,
     n_exchange_attempts,
     attempt_exchange_body,
-    (key, all_particles, num_accepted_swaps),
+    (
+      key,
+      all_particles,
+      num_accepted_swaps,
+      island_from_log,
+      island_to_log,
+      particle_idx_from_log,
+      particle_idx_to_log,
+      accepted_log,
+      log_acceptance_ratio_log,
+    ),
   )
 
   updated_blackjax_state = island_states.blackjax_state._replace(particles=final_particles)  # type: ignore[attr-access]
   updated_states = island_states._replace(blackjax_state=updated_blackjax_state)  # type: ignore[attr-access]
 
-  return updated_states, total_accepted
+  migration_info = MigrationInfo(
+    island_from=island_from_log,
+    island_to=island_to_log,
+    particle_idx_from=particle_idx_from_log,
+    particle_idx_to=particle_idx_to_log,
+    accepted=accepted_log,
+    log_acceptance_ratio=log_acceptance_ratio_log,
+  )
+
+  return updated_states, total_accepted, migration_info
 
 
 def run_prsmc_loop(  # noqa: PLR0913
@@ -256,7 +338,18 @@ def run_prsmc_loop(  # noqa: PLR0913
     # Perform replica exchange migration
     meta_beta = annealing_fn(step_idx)
     do_exchange = (step_idx + 1) % exchange_frequency == 0
-    state_after_migration, num_accepted_swaps = lax.cond(
+
+    # Create empty migration info for when no exchange happens
+    empty_migration_info = MigrationInfo(
+      island_from=jnp.zeros(n_exchange_attempts, dtype=jnp.int32),
+      island_to=jnp.zeros(n_exchange_attempts, dtype=jnp.int32),
+      particle_idx_from=jnp.zeros(n_exchange_attempts, dtype=jnp.int32),
+      particle_idx_to=jnp.zeros(n_exchange_attempts, dtype=jnp.int32),
+      accepted=jnp.zeros(n_exchange_attempts, dtype=jnp.bool_),
+      log_acceptance_ratio=jnp.zeros(n_exchange_attempts, dtype=jnp.float32),
+    )
+
+    state_after_migration, num_accepted_swaps, migration_info = lax.cond(
       do_exchange & (n_islands > 1),
       lambda: migrate(
         state_after_smc,
@@ -267,7 +360,7 @@ def run_prsmc_loop(  # noqa: PLR0913
         n_exchange_attempts,
         fitness_fn,
       ),
-      lambda: (state_after_smc, jnp.array(0, dtype=jnp.int32)),
+      lambda: (state_after_smc, jnp.array(0, dtype=jnp.int32), empty_migration_info),
     )
     num_attempted_swaps = jnp.where(
       do_exchange & (n_islands > 1),
@@ -280,11 +373,18 @@ def run_prsmc_loop(  # noqa: PLR0913
       info=infos,
       num_attempted_swaps=num_attempted_swaps,
       num_accepted_swaps=num_accepted_swaps,
+      migration_info=migration_info,
     )
     io_callback(
       writer_callback,
-      step_output,
-      result_shape=step_output,
+      None,
+      {
+        "state": step_output.state,
+        "info": step_output.info,
+        "num_attempted_swaps": step_output.num_attempted_swaps,
+        "num_accepted_swaps": step_output.num_accepted_swaps,
+        "migration_info": step_output.migration_info,
+      },
     )
 
     return state_after_migration, None

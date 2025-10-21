@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable, TypedDict, Unpack
+from collections.abc import Callable
+from typing import TYPE_CHECKING, TypedDict, Unpack
 
 from proteinsmc.models.types import EvoSequence
 

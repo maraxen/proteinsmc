@@ -28,7 +28,6 @@ class ExchangeConfig:
   fitness_evaluator: FitnessEvaluator = field(kw_only=True)
   sequence_type: str = field(default="protein")
   meta_annealing_schedule: AnnealingConfig = field(kw_only=True)
-  track_lineage: bool = field(default=False)
 
 
 @dataclass(frozen=True)
@@ -41,7 +40,6 @@ class ParallelReplicaConfig(BaseSamplerConfig):
   exchange_frequency: int = field(default=5)
   island_betas: list[float] = field(default_factory=list)
   meta_annealing_schedule: AnnealingConfig = field(kw_only=True)
-  track_lineage: bool = field(default=False)
   sampler_type: str = field(default="parallel_replica", init=False)
 
   def __post_init__(self) -> None:
@@ -72,7 +70,6 @@ class PRSMCOutput(SamplerOutputProtocol):
   mean_fitness_per_island: Array
   max_fitness_per_island: Array
   logZ_increment_per_island: Array  # noqa: N815
-  lineage_per_island: Array | None
   meta_beta: Array
   num_accepted_swaps: Array
   num_attempted_swaps: Array

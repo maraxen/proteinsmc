@@ -6,7 +6,8 @@ keyword arguments from configuration objects to underlying functions.
 
 import functools
 import inspect
-from typing import Any, Callable, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from proteinsmc.models import BaseSamplerConfig
 

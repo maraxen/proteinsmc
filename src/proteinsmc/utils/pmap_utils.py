@@ -42,7 +42,7 @@ def distribute(
 
   def shard_array(x: Array) -> Array:
     """Shard an array across devices."""
-    return x.reshape((num_devices, -1) + x.shape[1:])
+    return x.reshape((num_devices, -1, *x.shape[1:]))
 
   sharded_data = jax.tree_util.tree_map(shard_array, data)
 
@@ -53,6 +53,6 @@ def distribute(
   sharded_results = pmapped_worker(sharded_data)
 
   def unshard_array(x: Array) -> Array:
-    return x.reshape((-1,) + x.shape[2:])
+    return x.reshape((-1, *x.shape[2:]))
 
   return jax.tree_util.tree_map(unshard_array, sharded_results)

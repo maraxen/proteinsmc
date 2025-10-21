@@ -12,7 +12,7 @@ if TYPE_CHECKING:
   from proteinsmc.models.fitness import CombineFn
 
 
-def make_sum_combine(**_kwargs: Any) -> CombineFn:
+def make_sum_combine(**_kwargs: Any) -> CombineFn:  # noqa: ANN401
   """Make combine function that sums input along axis 0.
 
   Returns:

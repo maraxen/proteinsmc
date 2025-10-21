@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING
 import jax
 import jax.numpy as jnp
 from jax import jit, random
+from jax.experimental import io_callback as jax_io_callback
 
-from proteinsmc.models.gibbs import GibbsConfig, GibbsUpdateFn
 from proteinsmc.models.sampler_base import SamplerState
 
 if TYPE_CHECKING:
@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
   from jaxtyping import Float, Int, PRNGKeyArray
 
+  from proteinsmc.models.gibbs import GibbsConfig, GibbsUpdateFn
   from proteinsmc.models.types import EvoSequence
   from proteinsmc.utils.fitness import FitnessFn
 
@@ -94,7 +95,8 @@ def run_gibbs_loop(
     GibbsUpdateFn,
     ...,
   ],
-) -> tuple[SamplerState, SamplerState]:
+  io_callback: Callable | None = None,
+) -> tuple[SamplerState, dict[str, jax.Array]]:
   """Run the Gibbs sampler loop.
 
   Args:
@@ -102,13 +104,14 @@ def run_gibbs_loop(
       initial_state: Initial state of the sampler.
       fitness_fn: Fitness function to evaluate sequences.
       update_fns: Tuple of update functions, each updating one component of the state.
+      io_callback: Optional callback function for writing outputs.
 
   Returns:
-      A tuple containing the final state and the history of states.
+      A tuple containing the final state and empty metrics dictionary.
 
   """
 
-  def body_fn(state: SamplerState, _i: Int) -> tuple[SamplerState, SamplerState]:
+  def body_fn(step_idx: Int, state: SamplerState) -> SamplerState:
     current_state = state.sequence
 
     new_state = current_state
@@ -122,8 +125,21 @@ def run_gibbs_loop(
       _context=None,
     )
     _, key_next = random.split(state.key)
-    next_state = SamplerState(sequence=new_state, fitness=fitness, key=key_next)
-    return next_state, next_state
+    next_state = SamplerState(
+      sequence=new_state,
+      fitness=fitness,
+      key=key_next,
+      step=jnp.array(step_idx + 1),
+    )
 
-  final_state, state_history = jax.lax.scan(body_fn, initial_state, jnp.arange(config.num_samples))
-  return final_state, state_history
+    if io_callback is not None:
+      jax_io_callback(
+        io_callback,
+        None,
+        {"sequence": next_state.sequence, "fitness": next_state.fitness, "step": next_state.step},
+      )
+
+    return next_state
+
+  final_state = jax.lax.fori_loop(0, config.num_samples, body_fn, initial_state)
+  return final_state, {}

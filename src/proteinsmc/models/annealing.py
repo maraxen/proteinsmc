@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, TypedDict, Unpack
+from typing import Any, TypedDict, Unpack
 
 
 class AnnealingKwargs(TypedDict):

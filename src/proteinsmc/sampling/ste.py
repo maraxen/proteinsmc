@@ -11,7 +11,7 @@ other samplers are navigating model landscapes.
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 import jax
 import jax.numpy as jnp
