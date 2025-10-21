@@ -12,7 +12,6 @@ from typing import Any
 import msgpack
 import msgpack_numpy
 from array_record.python.array_record_module import ArrayRecordReader, ArrayRecordWriter
-from etils import epath
 from jaxtyping import PyTree
 
 msgpack_numpy.patch()
@@ -80,7 +79,7 @@ def create_writer_callback(path: str) -> tuple[ArrayRecordWriter, Callable]:
       - The callback function for use with io_callback.
 
   """
-  writer = ArrayRecordWriter(epath.Path(path))
+  writer = ArrayRecordWriter(path)
 
   def writer_callback(
     pytree_payload: PyTree,
@@ -109,7 +108,7 @@ def read_lineage_data(path: str) -> dict[str, Any]:
       A list of deserialized records.
 
   """
-  reader = ArrayRecordReader(epath.Path(path))
+  reader = ArrayRecordReader(path)
   records_list = list(reader.read())
 
   history = []
