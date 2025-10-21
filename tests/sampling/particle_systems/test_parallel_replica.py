@@ -10,6 +10,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 from blackjax.smc.base import SMCState
+from jax import vmap
 
 from proteinsmc.models.sampler_base import SamplerState
 from proteinsmc.sampling.particle_systems.parallel_replica import (
@@ -55,7 +56,7 @@ class TestMutationUpdateFn:
     mutated, _ = mutation_update_fn(keys, sequences, update_parameters, q_states=20)
 
     chex.assert_shape(mutated, (n_particles, seq_length))
-    chex.assert_type(mutated, jnp.int32)
+    chex.assert_type(mutated, jnp.int8)
     # At least some mutations should have occurred (probabilistically)
     assert not jnp.array_equal(mutated, sequences)
 
@@ -86,7 +87,7 @@ class TestMutationUpdateFn:
     mutated, _ = mutation_update_fn(keys, sequences, update_parameters, q_states=4)
 
     chex.assert_shape(mutated, (n_particles, seq_length))
-    chex.assert_type(mutated, jnp.int32)
+    chex.assert_type(mutated, jnp.int8)
     # Verify values are within valid nucleotide range
     assert jnp.all((mutated >= 0) & (mutated < 4))
 
@@ -232,8 +233,8 @@ class TestWeightFn:
     jitted_weight_fn = jax.jit(weight_fn, static_argnums=1)
     weight = jitted_weight_fn(sequence, mock_fitness_fn, beta)
 
-    expected_weight = beta * fitness_value
-    chex.assert_trees_all_close(weight, expected_weight, rtol=1e-5)
+    expected_weight = jnp.asarray(beta * fitness_value, dtype=jnp.bfloat16)
+    chex.assert_trees_all_close(weight, expected_weight, rtol=1e-2)
 
 
 class TestMigrate:
@@ -267,7 +268,11 @@ class TestMigrate:
       20,
     )
     weights = jnp.ones((n_islands, population_size)) / population_size
-    blackjax_state = SMCState(particles=particles, weights=weights)
+    blackjax_state = SMCState(
+      particles=particles,
+      weights=weights,
+      update_parameters=jnp.array(0.0, dtype=jnp.float32),
+    )
 
     betas = jnp.array([0.3, 0.6, 1.0])
     mean_fitness = jnp.array([1.0, 2.0, 3.0])
@@ -277,7 +282,7 @@ class TestMigrate:
       fitness=jnp.ones((n_islands, population_size)),
       key=jax.random.PRNGKey(42),
       blackjax_state=blackjax_state,
-      step=0,
+      step=jnp.array(0, dtype=jnp.int32),
       additional_fields={
         "beta": betas,
         "mean_fitness": mean_fitness,
@@ -516,7 +521,21 @@ class TestRunPRSMCLoop:
       20,
     )
     weights = jnp.ones((n_islands, population_size)) / population_size
-    blackjax_state = SMCState(particles=particles, weights=weights)
+    
+    # Create per-island SMCState using vmap (matching initialization_factory pattern)
+    initial_weights = jnp.full(population_size, 1.0 / population_size, dtype=jnp.float32)
+    # Note: update_parameters needs to be a dict for mutation_update_fn
+    # mutation_rate should be batched per particle (or broadcastable)
+    mutation_rates_per_particle = jnp.full(population_size, 0.1, dtype=jnp.float32)
+    
+    def create_island_state(particles_island):
+      return SMCState(
+        particles=particles_island,
+        weights=initial_weights,
+        update_parameters={"mutation_rate": mutation_rates_per_particle},
+      )
+    
+    blackjax_state = vmap(create_island_state)(particles)
 
     betas = jnp.array([0.5, 1.0])
     mean_fitness = jnp.ones((n_islands,))
@@ -524,12 +543,15 @@ class TestRunPRSMCLoop:
     ess = jnp.full((n_islands,), population_size / 2.0)
     logZ_estimate = jnp.zeros((n_islands,))
 
+    # Split PRNG key for each island (matching initialization_factory)
+    island_keys = jax.random.split(jax.random.PRNGKey(42), n_islands)
+
     return SamplerState(
       sequence=particles,
       fitness=jnp.ones((n_islands, population_size)),
-      key=jax.random.PRNGKey(42),
+      key=island_keys,  # Per-island keys: shape (n_islands, 2)
       blackjax_state=blackjax_state,
-      step=0,
+      step=jnp.zeros(n_islands, dtype=jnp.int32),  # Per-island step counter
       additional_fields={
         "beta": betas,
         "mean_fitness": mean_fitness,
@@ -625,14 +647,18 @@ class TestRunPRSMCLoop:
       20,
     )
     weights = jnp.ones((n_islands, population_size)) / population_size
-    blackjax_state = SMCState(particles=particles, weights=weights)
+    blackjax_state = SMCState(
+      particles=particles,
+      weights=weights,
+      update_parameters=jnp.array(0.0, dtype=jnp.float32),
+    )
 
     single_island_state = SamplerState(
       sequence=particles,
       fitness=jnp.ones((n_islands, population_size)),
       key=jax.random.PRNGKey(42),
       blackjax_state=blackjax_state,
-      step=0,
+      step=jnp.array(0, dtype=jnp.int32),
       additional_fields={
         "beta": jnp.array([1.0]),
         "mean_fitness": jnp.ones((n_islands,)),
@@ -709,14 +735,18 @@ class TestRunPRSMCLoop:
       4,  # Nucleotide range
     )
     weights = jnp.ones((n_islands, population_size)) / population_size
-    blackjax_state = SMCState(particles=particles, weights=weights)
+    blackjax_state = SMCState(
+      particles=particles,
+      weights=weights,
+      update_parameters=jnp.array(0.0, dtype=jnp.float32),
+    )
 
     nucleotide_state = SamplerState(
       sequence=particles,
       fitness=jnp.ones((n_islands, population_size)),
       key=jax.random.PRNGKey(42),
       blackjax_state=blackjax_state,
-      step=0,
+      step=jnp.array(0, dtype=jnp.int32),
       additional_fields={
         "beta": jnp.array([0.5, 1.0]),
         "mean_fitness": jnp.ones((n_islands,)),
@@ -865,14 +895,18 @@ class TestPRSMCOutput:
       20,
     )
     weights = jnp.ones((n_islands, population_size)) / population_size
-    blackjax_state = SMCState(particles=particles, weights=weights)
+    blackjax_state = SMCState(
+      particles=particles,
+      weights=weights,
+      update_parameters=jnp.array(0.0, dtype=jnp.float32),
+    )
 
     state = SamplerState(
       sequence=particles,
       fitness=jnp.ones((n_islands, population_size)),
       key=jax.random.PRNGKey(42),
       blackjax_state=blackjax_state,
-      step=1,
+      step=jnp.array(1, dtype=jnp.int32),
       additional_fields={"beta": jnp.array([0.5, 1.0])},
     )
 
@@ -880,6 +914,8 @@ class TestPRSMCOutput:
 
     info = SMCInfo(
       log_likelihood_increment=jnp.zeros((n_islands,)),
+      ancestors=jnp.zeros((n_islands, population_size), dtype=jnp.int32),
+      update_info={},
     )
 
     migration_info = MigrationInfo(

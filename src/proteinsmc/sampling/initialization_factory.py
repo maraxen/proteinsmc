@@ -14,12 +14,11 @@ from blackjax import hmc, mcmc, nuts, smc
 from blackjax.smc.base import SMCState as BaseSMCState
 from blackjax.smc.partial_posteriors_path import PartialPosteriorsSMCState
 from blackjax.smc.tempered import TemperedSMCState
-from jax import config, vmap
+from jax import vmap
 from jaxtyping import PRNGKeyArray
 
 from proteinsmc.models.sampler_base import SamplerState
 from proteinsmc.models.smc import SMCAlgorithm
-from proteinsmc.utils.config_unpacker import with_config
 from proteinsmc.utils.initiate import generate_template_population
 from proteinsmc.utils.mutation import diversify_initial_sequences
 
@@ -32,7 +31,6 @@ if TYPE_CHECKING:
 BlackjaxSMCState = BaseSMCState | PartialPosteriorsSMCState | TemperedSMCState
 
 
-@with_config
 def initialize_sampler_state(  # noqa: PLR0913
   sampler_type: str,
   sequence_type: SequenceType,
@@ -49,16 +47,16 @@ def initialize_sampler_state(  # noqa: PLR0913
   beta: Float | None,
   fitness_fn: StackedFitnessFn,
 ) -> SamplerState:
-  """Make initialize state for any sampler type.
+  """Initialize state for any sampler type.
 
   Args:
     sampler_type: Type of sampler ("SMC", "HMC", "MCMC", "NUTS", "ParallelReplica").
     sequence_type: Type of sequence ("protein" or "nucleotide").
     seed_sequence: Initial sequence string.
+    mutation_rate: Mutation rate for SMC samplers.
     population_size: Number of particles in the population.
     algorithm: SMC algorithm variant to use.
     smc_algo_kwargs: Additional algorithm-specific arguments.
-    mutation_rate: Mutation rate for SMC samplers.
     n_islands: Number of parallel islands (for Parallel Replica SMC).
     population_size_per_island: Number of particles per island (for Parallel Replica SMC).
     island_betas: Beta values for each island (for Parallel Replica SMC).
@@ -66,18 +64,32 @@ def initialize_sampler_state(  # noqa: PLR0913
     key: JAX PRNG key.
     beta: Initial beta value for tempering (for SMC).
     fitness_fn: Fitness function to evaluate sequences.
-    track_lineage: Whether to track particle lineage (for Parallel Replica SMC).
 
   Returns:
     Initial state for the specified sampler type.
 
   Raises:
-    ValueError: If the config type is not recognized.
+    ValueError: If the sampler type is not recognized.
 
   Example:
-    >>> config = SMCConfig(seed_sequence="ACGT", population_size=100, ...)
     >>> key = jax.random.PRNGKey(0)
-    >>> initial_state = initialize_sampler_state(config, fitness_fn, key)
+    >>> seed_seq = jnp.array([0, 1, 2, 3], dtype=jnp.int8)
+    >>> initial_state = initialize_sampler_state(
+    ...     sampler_type="SMC",
+    ...     sequence_type="protein",
+    ...     seed_sequence=seed_seq,
+    ...     mutation_rate=0.1,
+    ...     population_size=100,
+    ...     algorithm=SMCAlgorithm.BASE,
+    ...     smc_algo_kwargs={},
+    ...     n_islands=None,
+    ...     population_size_per_island=None,
+    ...     island_betas=None,
+    ...     diversification_ratio=None,
+    ...     key=key,
+    ...     beta=1.0,
+    ...     fitness_fn=fitness_fn,
+    ... )
 
   """
   initial_population = generate_template_population(
@@ -134,7 +146,7 @@ def initialize_sampler_state(  # noqa: PLR0913
       key=key,
       fitness_fn=fitness_fn,
     )
-  msg = f"Unsupported sampler config type: {type(config)}"
+  msg = f"Unsupported sampler type: {sampler_type}"
   raise ValueError(msg)
 
 
@@ -343,7 +355,7 @@ def _initialize_prsmc_state(  # noqa: PLR0913
   max_fitness = jnp.max(initial_fitness_batch[:, :, 0], axis=1)  # Max over particles
 
   # Extract update_parameters if available
-  update_params = None
+  update_params = {}
   update_param_values = getattr(initial_blackjax_states, "update_parameters", None)
   if update_param_values is not None and isinstance(update_param_values, jax.Array):
     update_params = {"smc_update_param": update_param_values}

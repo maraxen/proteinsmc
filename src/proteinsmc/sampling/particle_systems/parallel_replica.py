@@ -69,7 +69,7 @@ def mutation_update_fn(
   """Apply mutation to the resampled sequences."""
   mutated_sequence = jax.vmap(
     partial(mutate, q_states=q_states),
-    in_axes=(0, None, 0),
+    in_axes=(0, 0, 0),
   )(keys, sequences, update_parameters["mutation_rate"])
 
   return mutated_sequence, None
@@ -234,8 +234,11 @@ def migrate(  # noqa: PLR0913
     ),
   )
 
-  updated_blackjax_state = island_states.blackjax_state._replace(particles=final_particles)  # type: ignore[attr-access]
-  updated_states = island_states._replace(blackjax_state=updated_blackjax_state)  # type: ignore[attr-access]
+  # Update blackjax_state.particles - create new blackjax state with updated particles
+  updated_blackjax_state = island_states.blackjax_state._replace(particles=final_particles)  # type: ignore[union-attr]
+
+  # Create new SamplerState with updated blackjax_state using .replace()
+  updated_states = island_states.replace(blackjax_state=updated_blackjax_state)
 
   migration_info = MigrationInfo(
     island_from=island_from_log,
@@ -273,12 +276,13 @@ def run_prsmc_loop(  # noqa: PLR0913
     carry_state: SamplerState,
     step_idx: Int,
   ) -> tuple[SamplerState, None]:
-    key_step, key_fitness, key_exchange, key_next_loop = jax.random.split(
-      carry_state.key,
-      4,
-    )
-    keys_islands = jax.random.split(key_step, n_islands)
-    keys_fitness_islands = jax.random.split(key_fitness, n_islands)
+    # carry_state.key has shape (n_islands, 2) - split per island
+    # vmap over islands to split keys: (n_islands, 2) -> 4 x (n_islands, 2)
+    split_keys = vmap(lambda k: jax.random.split(k, 4))(carry_state.key)
+    keys_islands = split_keys[:, 0, :]  # (n_islands, 2) - for SMC step
+    keys_fitness_islands = split_keys[:, 1, :]  # (n_islands, 2) - for fitness eval
+    key_exchange = split_keys[0, 2, :]  # (2,) - single key for exchange (scalar across islands)
+    key_next_loop = split_keys[:, 3, :]  # (n_islands, 2) - for next iteration
     betas = carry_state.additional_fields["beta"]
 
     def single_island_weight_fn(beta: Float, key: PRNGKeyArray, sequence: Array) -> Array:
