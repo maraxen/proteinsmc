@@ -3,7 +3,7 @@
 import json
 import shutil
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from dataclasses import asdict, is_dataclass
 from datetime import datetime
 from pathlib import Path
@@ -102,26 +102,24 @@ def create_writer_callback(path: str) -> tuple[ArrayRecordWriter, Callable]:
   return writer, writer_callback
 
 
-def read_lineage_data(path: str) -> dict[str, Any]:
+def read_lineage_data(path: str) -> Generator[dict[str, Any], None, None]:
   """Read and deserialize all records from a lineage file.
 
   Args:
       path: The path to the ArrayRecord file.
 
   Returns:
-      A list of deserialized records.
+      A generator yielding deserialized records.
 
   """
   reader = ArrayRecordReader(path)
 
-  history = []
   try:
-    records_list = list(reader.read())
-    for packed_bytes in records_list:
+    num_records = reader.num_records()
+    for _ in range(num_records):
+      packed_bytes = reader.read()  # read() with no args returns next record
       full_record = msgpack.unpackb(packed_bytes)
-      history.append(full_record)
+      yield full_record
   except IndexError:
-    # Empty file - no records
+    # No more records or empty file
     pass
-
-  return {"records": history}

@@ -5,12 +5,10 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
-from typing import TYPE_CHECKING
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import jax.numpy as jnp
 import jax.tree_util as jtu
-import pytest
 
 from proteinsmc.io import (
   create_metadata_file,
@@ -18,9 +16,6 @@ from proteinsmc.io import (
   get_git_commit_hash,
   read_lineage_data,
 )
-
-if TYPE_CHECKING:
-  from dataclasses import dataclass
 
 
 class TestGetGitCommitHash:
@@ -495,10 +490,11 @@ class TestReadLineageData:
     writer.close()
 
     # Read the data back
-    lineage_data = read_lineage_data(writer_path)
+    lineage_data = list(read_lineage_data(writer_path))
 
-    assert "records" in lineage_data
-    assert len(lineage_data["records"]) == 3
+    assert len(lineage_data) == 3
+    assert lineage_data[0]["data"]["step"] == 0
+    assert lineage_data[0]["data"]["fitness"] == 1.0
 
   def test_read_lineage_data_with_arrays(self, tmp_path: Path) -> None:
     """Test reading lineage data containing JAX arrays.
@@ -531,12 +527,12 @@ class TestReadLineageData:
     writer.close()
 
     # Read back and verify
-    lineage_data = read_lineage_data(writer_path)
+    lineage_data = list(read_lineage_data(writer_path))
 
-    assert len(lineage_data["records"]) == 2
+    assert len(lineage_data) == 2
     # Note: After deserialization, arrays become lists/numpy arrays
-    assert "data" in lineage_data["records"][0]
-    assert "sequences" in lineage_data["records"][0]["data"]
+    assert "data" in lineage_data[0]
+    assert "sequences" in lineage_data[0]["data"]
 
   def test_read_lineage_data_empty_file(self, tmp_path: Path) -> None:
     """Test reading from an empty lineage file.
@@ -561,10 +557,9 @@ class TestReadLineageData:
     writer.close()
 
     # Read the empty file
-    lineage_data = read_lineage_data(writer_path)
+    lineage_data = list(read_lineage_data(writer_path))
 
-    assert "records" in lineage_data
-    assert len(lineage_data["records"]) == 0
+    assert len(lineage_data) == 0
 
   def test_read_lineage_data_complex_pytree(self, tmp_path: Path) -> None:
     """Test reading lineage data with complex nested PyTree structures.
@@ -600,10 +595,10 @@ class TestReadLineageData:
     writer.close()
 
     # Read and verify structure
-    lineage_data = read_lineage_data(writer_path)
+    lineage_data = list(read_lineage_data(writer_path))
 
-    assert len(lineage_data["records"]) == 1
-    record = lineage_data["records"][0]
+    assert len(lineage_data) == 1
+    record = lineage_data[0]
     assert "data" in record
     assert "level1" in record["data"]
     assert "level2" in record["data"]["level1"]
@@ -669,8 +664,8 @@ class TestIntegrationScenarios:
       assert metadata["git_commit_hash"] == "abc123"
 
     # Step 4: Read lineage data
-    lineage_data = read_lineage_data(writer_path)
-    assert len(lineage_data["records"]) == 5
+    lineage_data = list(read_lineage_data(writer_path))
+    assert len(lineage_data) == 5
 
   def test_pytree_roundtrip_preserves_structure(self, tmp_path: Path) -> None:
     """Test that PyTree structure is preserved through write/read cycle.
@@ -712,8 +707,8 @@ class TestIntegrationScenarios:
     callback(original_payload)
     writer.close()
 
-    lineage_data = read_lineage_data(writer_path)
-    retrieved_payload = lineage_data["records"][0]
+    lineage_data = list(read_lineage_data(writer_path))
+    retrieved_payload = lineage_data[0]
 
     # Verify structure is preserved (keys exist, nesting is maintained)
     assert "data" in retrieved_payload

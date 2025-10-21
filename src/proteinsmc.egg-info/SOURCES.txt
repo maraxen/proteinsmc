@@ -13,6 +13,7 @@ src/proteinsmc/models/annealing.py
 src/proteinsmc/models/fitness.py
 src/proteinsmc/models/gibbs.py
 src/proteinsmc/models/hmc.py
+src/proteinsmc/models/lineage.py
 src/proteinsmc/models/mcmc.py
 src/proteinsmc/models/memory.py
 src/proteinsmc/models/mutation.py
@@ -49,9 +50,9 @@ src/proteinsmc/utils/fitness.py
 src/proteinsmc/utils/foldcomp.py
 src/proteinsmc/utils/initiate.py
 src/proteinsmc/utils/jax_utils.py
+src/proteinsmc/utils/jax_uuid.py
 src/proteinsmc/utils/memory.py
 src/proteinsmc/utils/metrics.py
-src/proteinsmc/utils/mpnn.py
 src/proteinsmc/utils/mutation.py
 src/proteinsmc/utils/pmap_utils.py
 src/proteinsmc/utils/translation.py
