@@ -125,7 +125,7 @@ def _run_gibbs_loop_impl(
       "fitness": next_state.fitness,
       "step": i,
     }
-    jax_io_callback(io_callback, payload)
+    jax_io_callback(io_callback, None, payload)
     return next_state
 
   final_state = jax.lax.fori_loop(0, config.num_samples, body_fn, initial_state)
