@@ -114,7 +114,7 @@ class TestRunExperiment:
     mock_run_fn.assert_called_once()
 
   @patch("proteinsmc.runner.initialize_sampler_state")
-  @patch("proteinsmc.runner.auto_tune_chunk_size")
+  @patch("proteinsmc.runner.auto_tune_batch_size")
   @patch("proteinsmc.runner.get_fitness_function")
   @patch("proteinsmc.runner.get_annealing_function")
   @patch("proteinsmc.runner._setup_writer_callback")
@@ -123,7 +123,7 @@ class TestRunExperiment:
     mock_setup_writer: Mock,
     mock_get_annealing_function: Mock,
     mock_get_fitness_function: Mock,
-    mock_auto_tune_chunk_size: Mock,
+    mock_auto_tune_batch_size: Mock,
     mock_initialize_sampler_state: Mock,
     basic_smc_config: SMCConfig,
   ) -> None:
@@ -137,7 +137,7 @@ class TestRunExperiment:
     mock_annealing_fn = Mock()
     mock_get_fitness_function.return_value = (jax.random.PRNGKey(0), mock_fitness_fn)
     mock_get_annealing_function.return_value = mock_annealing_fn
-    mock_auto_tune_chunk_size.return_value = 32
+    mock_auto_tune_batch_size.return_value = 32
     
     # Mock the writer setup
     mock_writer = Mock()
@@ -169,8 +169,8 @@ class TestRunExperiment:
         run_experiment(basic_smc_config, tmpdir, seed=42)
     
     # Verify auto-tuning was called
-    mock_auto_tune_chunk_size.assert_called_once()
-    # Verify fitness function was called twice (once without chunk_size, once with)
+    mock_auto_tune_batch_size.assert_called_once()
+    # Verify fitness function was called twice (once without batch_size, once with)
     assert mock_get_fitness_function.call_count == 2
 
   @patch("proteinsmc.runner.initialize_sampler_state")

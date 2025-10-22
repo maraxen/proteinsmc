@@ -19,7 +19,7 @@ from proteinsmc.utils import jax_utils
 def distribute(
   core_fn: Callable,
   data: PyTree[Array],
-  chunk_size: int,
+  batch_size: int,
   static_args: PyTree | None = None,
 ) -> Array:
   """Distribute a computation across all available JAX devices.
@@ -31,7 +31,7 @@ def distribute(
       core_fn: The scientific logic function to be applied to a single data point.
       data: A PyTree of arrays to be processed.
       key: A JAX PRNG key.
-      chunk_size: The micro-batch size for processing on each device.
+      batch_size: The micro-batch size for processing on each device.
       static_args: A PyTree of static arguments for core_fn.
 
   Returns:
@@ -48,7 +48,7 @@ def distribute(
 
   @partial(jax.pmap, axis_name="devices")
   def pmapped_worker(data: PyTree[Array]) -> Array:
-    return jax_utils.chunked_map(core_fn, data, chunk_size, static_args=static_args)
+    return jax_utils.chunked_map(core_fn, data, batch_size, static_args=static_args)
 
   sharded_results = pmapped_worker(sharded_data)
 

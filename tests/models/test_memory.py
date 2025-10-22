@@ -23,7 +23,7 @@ def test_memory_config_initialization():
     device_memory_fraction=0.8,
     auto_tuning_config=AutoTuningConfig(
       enable_auto_tuning=False,
-      probe_chunk_sizes=(8, 16, 32),
+      probe_batch_sizes=(8, 16, 32),
       max_probe_iterations=2,
       memory_safety_factor=0.8,
       performance_tolerance=0.1,

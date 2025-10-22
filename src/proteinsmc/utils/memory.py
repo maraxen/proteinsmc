@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -13,6 +12,8 @@ import jax.numpy as jnp
 from proteinsmc.utils.jax_utils import chunked_map
 
 if TYPE_CHECKING:
+  from collections.abc import Callable
+
   from jaxtyping import Array, PRNGKeyArray, PyTree
 
   from proteinsmc.models.memory import AutoTuningConfig
@@ -22,7 +23,7 @@ if TYPE_CHECKING:
 class BenchmarkResult:
   """Results from a performance benchmark."""
 
-  chunk_size: int
+  batch_size: int
   avg_time_per_batch: float
   memory_usage_mb: float
   success: bool
@@ -69,7 +70,7 @@ def get_device_memory_mb() -> float:
     return 8 * 1024
 
 
-def suggest_chunk_size_heuristic(
+def suggest_batch_size_heuristic(
   population_size: int,
   sequence_length: int,
   config: AutoTuningConfig,
@@ -109,13 +110,13 @@ def suggest_chunk_size_heuristic(
     ),
   )
 
-  return min(config.probe_chunk_sizes, key=lambda x: abs(x - suggested))
+  return min(config.probe_batch_sizes, key=lambda x: abs(x - suggested))
 
 
-def benchmark_chunk_size(
+def benchmark_batch_size(
   func: Callable,
   test_data: PyTree[Array],
-  chunk_size: int,
+  batch_size: int,
   num_trials: int = 3,
   static_args: PyTree | None = None,
 ) -> BenchmarkResult:
@@ -124,7 +125,7 @@ def benchmark_chunk_size(
   Args:
     func: Function to benchmark
     test_data: Representative test data
-    chunk_size: Chunk size to test
+    batch_size: Chunk size to test
     num_trials: Number of trials to average
     static_args: Static arguments for the function
 
@@ -133,12 +134,12 @@ def benchmark_chunk_size(
 
   """
   try:
-    _ = chunked_map(func, test_data, chunk_size, static_args=static_args)
+    _ = chunked_map(func, test_data, batch_size, static_args=static_args)
 
     times = []
     for _ in range(num_trials):
       start_time = time.time()
-      result = chunked_map(func, test_data, chunk_size, static_args=static_args)
+      result = chunked_map(func, test_data, batch_size, static_args=static_args)
       jax.block_until_ready(result)
       end_time = time.time()
       times.append(end_time - start_time)
@@ -147,10 +148,10 @@ def benchmark_chunk_size(
 
     test_leaves = jax.tree_util.tree_leaves(test_data)
     sequence_length = test_leaves[0].shape[1] if len(test_leaves[0].shape) > 1 else 1
-    estimated_memory = estimate_memory_usage(chunk_size, sequence_length)
+    estimated_memory = estimate_memory_usage(batch_size, sequence_length)
 
     return BenchmarkResult(
-      chunk_size=chunk_size,
+      batch_size=batch_size,
       avg_time_per_batch=avg_time,
       memory_usage_mb=estimated_memory,
       success=True,
@@ -158,7 +159,7 @@ def benchmark_chunk_size(
 
   except (RuntimeError, ValueError, MemoryError) as e:
     return BenchmarkResult(
-      chunk_size=chunk_size,
+      batch_size=batch_size,
       avg_time_per_batch=float("inf"),
       memory_usage_mb=float("inf"),
       success=False,
@@ -166,7 +167,7 @@ def benchmark_chunk_size(
     )
 
 
-def auto_tune_chunk_size(
+def auto_tune_batch_size(
   func: Callable,
   test_data: PyTree[Array],
   config: AutoTuningConfig,
@@ -188,23 +189,23 @@ def auto_tune_chunk_size(
     test_leaves = jax.tree_util.tree_leaves(test_data)
     population_size = test_leaves[0].shape[0]
     sequence_length = test_leaves[0].shape[1] if len(test_leaves[0].shape) > 1 else 1
-    return suggest_chunk_size_heuristic(population_size, sequence_length, config)
+    return suggest_batch_size_heuristic(population_size, sequence_length, config)
 
   test_leaves = jax.tree_util.tree_leaves(test_data)
   population_size = test_leaves[0].shape[0]
   sequence_length = test_leaves[0].shape[1] if len(test_leaves[0].shape) > 1 else 1
-  heuristic_size = suggest_chunk_size_heuristic(population_size, sequence_length, config)
+  heuristic_size = suggest_batch_size_heuristic(population_size, sequence_length, config)
 
-  valid_sizes = [s for s in config.probe_chunk_sizes if s <= population_size]
+  valid_sizes = [s for s in config.probe_batch_sizes if s <= population_size]
   if not valid_sizes:
     return heuristic_size
 
   results = []
-  for chunk_size in valid_sizes:
-    result = benchmark_chunk_size(
+  for batch_size in valid_sizes:
+    result = benchmark_batch_size(
       func,
       test_data,
-      chunk_size,
+      batch_size,
       config.max_probe_iterations,
       static_args,
     )
@@ -220,7 +221,7 @@ def auto_tune_chunk_size(
   optimal = min(successful_results, key=lambda r: r.avg_time_per_batch)
 
   heuristic_result = next(
-    (r for r in successful_results if r.chunk_size == heuristic_size),
+    (r for r in successful_results if r.batch_size == heuristic_size),
     None,
   )
   if heuristic_result and heuristic_result.avg_time_per_batch <= (
@@ -228,7 +229,7 @@ def auto_tune_chunk_size(
   ):
     return heuristic_size
 
-  return optimal.chunk_size
+  return optimal.batch_size
 
 
 def create_test_population(

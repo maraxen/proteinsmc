@@ -32,7 +32,7 @@ from proteinsmc.sampling.particle_systems.smc import run_smc_loop
 from proteinsmc.utils.annealing import get_annealing_function
 from proteinsmc.utils.constants import NUCLEOTIDES_NUM_STATES
 from proteinsmc.utils.fitness import get_fitness_function
-from proteinsmc.utils.memory import auto_tune_chunk_size
+from proteinsmc.utils.memory import auto_tune_batch_size
 from proteinsmc.utils.mutation import mutate
 from proteinsmc.utils.translation import aa_to_nucleotide, nucleotide_to_aa, string_to_int_sequence
 
@@ -102,7 +102,7 @@ def _setup_fitness_function(
   translate_func: TranslateFuncSignature = (
     nucleotide_to_aa if config.n_states == NUCLEOTIDES_NUM_STATES else aa_to_nucleotide
   )
-  chunk_size = None
+  batch_size = None
   fitness_fn = get_fitness_function(
     evaluator_config=config.fitness_evaluator,
     n_states=config.n_states,
@@ -118,7 +118,7 @@ def _setup_fitness_function(
     is_batched = num_rates > 1
 
     test_data_shape = (
-      max(config.memory_config.auto_tuning_config.probe_chunk_sizes),
+      max(config.memory_config.auto_tuning_config.probe_batch_sizes),
       len(config.seed_sequence),
     )
     if is_batched:
@@ -128,19 +128,19 @@ def _setup_fitness_function(
       tune_key,
       jnp.zeros(test_data_shape, dtype=jnp.int8),
     )
-    chunk_size = auto_tune_chunk_size(
+    batch_size = auto_tune_batch_size(
       func=fitness_fn,
       test_data=test_data,
       config=config.memory_config.auto_tuning_config,
     )
-    logger.info("Auto-tuning selected chunk size: %d", chunk_size)
+    logger.info("Auto-tuning selected chunk size: %d", batch_size)
 
     # Re-create the fitness function with the optimal chunk size
     fitness_fn = get_fitness_function(
       evaluator_config=config.fitness_evaluator,
       n_states=config.n_states,
       translate_func=translate_func,
-      chunk_size=chunk_size,
+      batch_size=batch_size,
     )
 
   return key, fitness_fn

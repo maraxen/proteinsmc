@@ -186,7 +186,7 @@ def chunked_mutation_step(
   population: EvoSequence,
   mutation_rate: float,
   n_states: int,
-  chunk_size: int,
+  batch_size: int,
 ) -> EvoSequence:
   """Apply mutation to population using chunked map processing.
 
@@ -198,7 +198,7 @@ def chunked_mutation_step(
     population: Population to mutate.
     mutation_rate: Rate of mutation.
     n_states: Number of states (e.g., 20 for amino acids).
-    chunk_size: Size of chunks for processing.
+    batch_size: Size of chunks for processing.
 
   Returns:
     Mutated population.
@@ -217,6 +217,6 @@ def chunked_mutation_step(
   mutated_population = chunked_map(
     func=fn,
     data=(mutation_keys, population),
-    chunk_size=chunk_size,
+    batch_size=batch_size,
   )
   return mutated_population.astype(jnp.int8)

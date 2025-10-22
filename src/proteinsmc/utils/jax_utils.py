@@ -22,7 +22,7 @@ import jax
 def chunked_map(
   func: Callable,
   data: PyTree[Array],
-  chunk_size: int,
+  batch_size: int,
   static_args: dict | None = None,
 ) -> PyTree[Array]:
   """Process a large batch of data in smaller chunks to conserve memory.
@@ -34,7 +34,7 @@ def chunked_map(
     func: The function to apply to each element of the data. Must be mappable.
     data: The data to be processed. This can be a single array or a PyTree of
           arrays. All arrays must have a leading axis of the same size.
-    chunk_size: The size of each chunk to process. This is passed as `batch_size`
+    batch_size: The size of each chunk to process. This is passed as `batch_size`
                 to `jax.lax.map`.
     static_args: A dictionary of static keyword arguments to be passed to `func`
                   on each call. These are not chunked or mapped over.
@@ -57,7 +57,7 @@ def chunked_map(
       return func(*x, **kwargs)
     return func(x, **kwargs)
 
-  return lax.map(func_to_map, data, batch_size=chunk_size)
+  return lax.map(func_to_map, data, batch_size=batch_size)
 
 
 def generate_jax_uuid(key: PRNGKeyArray) -> tuple[UUIDArray, PRNGKeyArray]:

@@ -14,80 +14,80 @@ def simple_func(x):
 def test_chunked_map_basic():
     """Tests basic functionality of chunked_map and compares with jax.vmap."""
     data = jnp.arange(10)
-    chunk_size = 3
+    batch_size = 3
 
     expected = jax.vmap(simple_func)(data)
-    actual = chunked_map(simple_func, data, chunk_size)
+    actual = chunked_map(simple_func, data, batch_size)
 
     chex.assert_trees_all_close(actual, expected)
 
 def test_chunked_map_uneven_chunks():
     """Tests chunked_map with a data size that is not a multiple of the chunk size."""
     data = jnp.arange(13)
-    chunk_size = 5
+    batch_size = 5
 
     expected = jax.vmap(simple_func)(data)
-    actual = chunked_map(simple_func, data, chunk_size)
+    actual = chunked_map(simple_func, data, batch_size)
 
     chex.assert_trees_all_close(actual, expected)
 
 def test_chunked_map_empty_input():
     """Tests chunked_map with empty input data."""
     data = jnp.array([])
-    chunk_size = 5
+    batch_size = 5
 
     expected = jax.vmap(simple_func)(data)
-    actual = chunked_map(simple_func, data, chunk_size)
+    actual = chunked_map(simple_func, data, batch_size)
 
     chex.assert_trees_all_close(actual, expected)
 
 def test_chunked_map_pytree_dict_input():
     """Tests chunked_map with a PyTree (dict) as input."""
     data = {'a': jnp.arange(10), 'b': jnp.arange(10, 20)}
-    chunk_size = 4
+    batch_size = 4
 
     def pytree_func(tree):
         return tree['a'] + tree['b']
 
     expected = jax.vmap(pytree_func)(data)
-    actual = chunked_map(pytree_func, data, chunk_size)
+    actual = chunked_map(pytree_func, data, batch_size)
 
     chex.assert_trees_all_close(actual, expected)
 
 def test_chunked_map_pytree_tuple_input():
     """Tests chunked_map with a PyTree (tuple) as input."""
     data = (jnp.arange(10), jnp.arange(10, 20))
-    chunk_size = 4
+    batch_size = 4
 
     def pytree_func(a, b):
         return a + b
 
     expected = jax.vmap(lambda x: pytree_func(*x))(data)
-    actual = chunked_map(pytree_func, data, chunk_size)
+    actual = chunked_map(pytree_func, data, batch_size)
 
     chex.assert_trees_all_close(actual, expected)
 
 def test_chunked_map_static_args():
     """Tests chunked_map with static arguments."""
     data = jnp.arange(8)
-    chunk_size = 3
+    batch_size = 3
     static_arg = 5
 
     def func_with_static_arg(x, y):
         return x + y
 
     expected = jax.vmap(lambda x: func_with_static_arg(x, static_arg))(data)
-    actual = chunked_map(func_with_static_arg, data, chunk_size, static_args={'y': static_arg})
+    actual = chunked_map(func_with_static_arg, data, batch_size, static_args={'y': static_arg})
 
     chex.assert_trees_all_close(actual, expected)
 
 def test_chunked_map_zero_size_input():
     """Tests chunked_map with a zero-size leading axis."""
     data = jnp.zeros((0, 5))
-    chunk_size = 3
+    batch_size = 3
 
     expected = jax.vmap(simple_func)(data)
-    actual = chunked_map(simple_func, data, chunk_size)
+    actual = chunked_map(simple_func, data, batch_size)
 
     chex.assert_trees_all_close(actual, expected)
 
@@ -95,45 +95,45 @@ def test_chunked_map_zero_size_input():
 class TestChunkedMapEdgeCases:
     """Test edge cases for chunked_map."""
 
-    def test_chunked_map_large_chunk_size(self):
+    def test_chunked_map_large_batch_size(self):
         """Test chunked_map with chunk size larger than data."""
         data = jnp.arange(10)
-        chunk_size = 100
+        batch_size = 100
 
         expected = jax.vmap(simple_func)(data)
-        actual = chunked_map(simple_func, data, chunk_size)
+        actual = chunked_map(simple_func, data, batch_size)
 
         chex.assert_trees_all_close(actual, expected)
 
-    def test_chunked_map_chunk_size_one(self):
+    def test_chunked_map_batch_size_one(self):
         """Test chunked_map with chunk size of 1."""
         data = jnp.arange(10)
-        chunk_size = 1
+        batch_size = 1
 
         expected = jax.vmap(simple_func)(data)
-        actual = chunked_map(simple_func, data, chunk_size)
+        actual = chunked_map(simple_func, data, batch_size)
 
         chex.assert_trees_all_close(actual, expected)
 
     def test_chunked_map_invalid_static_args(self):
         """Test chunked_map with invalid static_args type."""
         data = jnp.arange(10)
-        chunk_size = 3
+        batch_size = 3
 
         with pytest.raises(TypeError, match="static_args must be a dictionary"):
-            chunked_map(simple_func, data, chunk_size, static_args="invalid")  # type: ignore[arg-type]
+            chunked_map(simple_func, data, batch_size, static_args="invalid")  # type: ignore[arg-type]
 
     def test_chunked_map_multiple_static_args(self):
         """Test chunked_map with multiple static arguments."""
         data = jnp.arange(8)
-        chunk_size = 3
+        batch_size = 3
 
         def func_with_multiple_args(x, y, z):
             return x + y * z
 
         expected = jax.vmap(lambda x: func_with_multiple_args(x, 2, 3))(data)
         actual = chunked_map(
-            func_with_multiple_args, data, chunk_size, static_args={'y': 2, 'z': 3}
+            func_with_multiple_args, data, batch_size, static_args={'y': 2, 'z': 3}
         )
 
         chex.assert_trees_all_close(actual, expected)
@@ -144,37 +144,37 @@ class TestChunkedMapEdgeCases:
             'a': jnp.arange(10),
             'b': {'c': jnp.arange(10, 20), 'd': jnp.arange(20, 30)}
         }
-        chunk_size = 4
+        batch_size = 4
 
         def nested_func(tree):
             return tree['a'] + tree['b']['c'] + tree['b']['d']
 
         expected = jax.vmap(nested_func)(data)
-        actual = chunked_map(nested_func, data, chunk_size)
+        actual = chunked_map(nested_func, data, batch_size)
 
         chex.assert_trees_all_close(actual, expected)
 
     def test_chunked_map_preserves_dtype(self):
         """Test that chunked_map preserves data types."""
         data = jnp.arange(10, dtype=jnp.float32)
-        chunk_size = 3
+        batch_size = 3
 
         def float_func(x):
             return x * 2.5
 
-        result = chunked_map(float_func, data, chunk_size)
+        result = chunked_map(float_func, data, batch_size)
         assert result.dtype == jnp.float32
 
     def test_chunked_map_multidimensional_input(self):
         """Test chunked_map with multidimensional input."""
         data = jnp.arange(60).reshape(10, 6)
-        chunk_size = 3
+        batch_size = 3
 
         def sum_func(x):
             return jnp.sum(x)
 
         expected = jax.vmap(sum_func)(data)
-        actual = chunked_map(sum_func, data, chunk_size)
+        actual = chunked_map(sum_func, data, batch_size)
 
         chex.assert_trees_all_close(actual, expected)
 

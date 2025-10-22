@@ -7,17 +7,17 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import jax.numpy as jnp
-from jaxtyping import Array, Bool, Float, PRNGKeyArray
+from jaxtyping import Array, Bool, Float, PRNGKeyArray, PyTree
 
 from proteinsmc.models.types import EvoSequence
 
 StackedFitness = Float[Array, "1+n_fitness_functions"]
 """Type alias for stacked fitness scores, including combined score on the 0 batch dimension."""
 NeedsTranslation = Bool[Array, "n_fitness_functions"]
-FitnessFn = Callable[[EvoSequence, PRNGKeyArray | None, Array | None], Float]
-CombineFn = Callable[[Array, PRNGKeyArray | None, Array | None], Float]
+FitnessFn = Callable[[EvoSequence, PRNGKeyArray | None, PyTree | Array | None], Float]
+CombineFn = Callable[[Array, PRNGKeyArray | None, PyTree | Array | None], Float]
 StackedFitnessFn = Callable[
-  [EvoSequence, PRNGKeyArray | None, Array | None],
+  [EvoSequence, PRNGKeyArray | None, PyTree | Array | None],
   StackedFitness,
 ]
 

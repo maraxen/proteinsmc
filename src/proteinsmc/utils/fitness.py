@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 import jax
 import jax.numpy as jnp
-from jax import jit, vmap
+from jax import jit
 from jaxtyping import Array, PRNGKeyArray
 
 from proteinsmc.scoring import cai, combine, esm, mpnn
-from proteinsmc.utils.jax_utils import chunked_map
 
 if TYPE_CHECKING:
+  from collections.abc import Callable
+
   from jaxtyping import Array, PRNGKeyArray
 
   from proteinsmc.models.fitness import (
@@ -42,7 +42,7 @@ def get_fitness_function(
   evaluator_config: FitnessEvaluator,
   n_states: int,
   translate_func: TranslateFuncSignature,
-  chunk_size: int | None = None,
+  batch_size: int | None = None,
 ) -> StackedFitnessFn:
   """Create a single, JIT-compatible fitness function."""
   score_fns: list[FitnessFn] = []
@@ -54,12 +54,33 @@ def get_fitness_function(
     score_fns.append(make_fn(**func_config.kwargs))
   needs_translation = evaluator_config.needs_translation(n_states)
 
+  needs_translation_tuple = tuple(bool(x) for x in needs_translation)
+
   combine_config = evaluator_config.combine_fn
   if combine_config.name not in COMBINE_FUNCTIONS:
     error_msg = f"Unknown combine function: {combine_config.name}"
     raise ValueError(error_msg)
   make_combine_fn = COMBINE_FUNCTIONS[combine_config.name]
   combine_fn: CombineFn = make_combine_fn(**combine_config.kwargs)
+
+  def make_score_branch(score_fn: FitnessFn, needs_trans: bool) -> Callable:  # noqa: FBT001
+    """Create a branch function for a specific score function index."""
+
+    def branch_fn(args: tuple[EvoSequence, PRNGKeyArray, Array | None]) -> Array:
+      """Branch function for computing scores."""
+      sequence, key_i, _context = args
+      seq = translate_func(sequence, key_i, _context) if needs_trans else sequence
+      keys_i = jax.random.split(key_i, seq.shape[0])
+
+      return jax.lax.map(
+        score_fn,
+        (seq, keys_i, _context),
+        batch_size=batch_size,
+      )
+
+    return branch_fn
+
+  score_branches = jax.lax.map(make_score_branch, (score_fns, needs_translation_tuple))
 
   @jit
   def final_fitness_fn(
@@ -69,63 +90,18 @@ def get_fitness_function(
   ) -> Array:
     keys = jax.random.split(key, len(score_fns) + 1)
 
-    def score_body(
-      i: int,
-      carry: tuple[list[Array], EvoSequence],
-    ) -> tuple[list[Array], EvoSequence]:
-      all_scores, sequence = carry
-      score_fn = score_fns[i]
-      seq = (
-        translate_func(sequence=sequence, _key=keys[i], _context=_context)
-        if needs_translation[i]
-        else sequence
-      )
+    def compute_score(i: int) -> Array:
+      """Compute scores for the i-th fitness function."""
+      return jax.lax.switch(i, score_branches, (sequence, keys[i], _context))
 
-      keys_i = jax.random.split(keys[i], seq.shape[0])
+    all_scores = jax.lax.map(compute_score, jnp.arange(len(score_fns)), batch_size=batch_size)
 
-      if chunk_size is not None:
-        scores = chunked_map(
-          score_fn,
-          (seq, keys_i),
-          chunk_size=chunk_size,
-          static_args={"_context": _context} if _context is not None else None,
-        )
-      else:
-        vmapped_scorer = vmap(score_fn, in_axes=(0, 0, None))
-        scores = vmapped_scorer(seq, keys_i, _context)
+    keys_for_combiner = jax.random.split(keys[-1], all_scores.shape[1])
 
-      all_scores = [*all_scores, scores]
-      return all_scores, sequence
-
-    all_scores, _ = jax.lax.fori_loop(
-      0,
-      len(score_fns),
-      score_body,
-      ([], sequence),
-    )
-
-    fitness_components = jnp.stack(all_scores, axis=0)
-
-    keys_for_combiner = jax.random.split(keys[-1], fitness_components.shape[1])
-
-    if chunk_size is not None:
-      combined_fitness = chunked_map(
-        combine_fn,
-        (fitness_components.T, keys_for_combiner),
-        chunk_size=chunk_size,
-        static_args={"_context": _context} if _context is not None else None,
-      )
-    else:
-      vmapped_combiner = vmap(combine_fn, in_axes=(0, 0, None))
-      combined_fitness = vmapped_combiner(fitness_components.T, keys_for_combiner, _context)
-
-    if (
-      _context is not None
-    ):  # TODO(mar): assume _context is our beta and fitness is logprob, this should be reworked
-      combined_fitness = combined_fitness * _context
+    combined_fitness = jax.vmap(combine_fn)(all_scores.T, keys_for_combiner, _context)
 
     return jnp.stack(
-      [combined_fitness, *fitness_components],
+      [combined_fitness, all_scores],
       axis=0,
     )
 
