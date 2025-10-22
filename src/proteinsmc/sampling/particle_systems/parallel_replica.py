@@ -243,7 +243,7 @@ def migrate(  # noqa: PLR0913
   updated_blackjax_state = island_states.blackjax_state._replace(particles=final_particles)  # type: ignore[union-attr]
 
   # Create new SamplerState with updated blackjax_state using .replace()
-  updated_states = island_states.replace(blackjax_state=updated_blackjax_state)
+  updated_states = island_states.replace(blackjax_state=updated_blackjax_state)  # type: ignore[call-arg]
 
   migration_info = MigrationInfo(
     island_from=island_from_log,
@@ -315,54 +315,36 @@ def run_prsmc_loop(  # noqa: PLR0913
       in_axes=(0, 0, 0),
     )(carry_state.blackjax_state, keys_islands, betas)
 
-    # Update fitness and metrics for each island
-    # Vmap over islands, then vmap over particles within each island
-    # fitness_fn returns (Array, None) - we need to extract the fitness values
-    # and ensure they have the correct shape (n_islands, population_size)
     def extract_fitness_for_island(particles: Array, key: PRNGKeyArray) -> Array:
       """Extract fitness values for all particles in one island."""
-      # Vmap over particles
-      fitness_list = vmap(lambda seq: fitness_fn(seq, key, None))(particles)
-      # fitness_list is a tuple (fitness_values, aux_data)
-      # Return first element to preserve input shape structure
-      return fitness_list[0]  # Shape: (population_size,) or (population_size, 1)
+      fitness_vec = vmap(lambda seq: fitness_fn(seq, key, None))(particles)
 
-    # Vmap over islands
+      return fitness_vec[0]
+
     fitness_values = vmap(extract_fitness_for_island, in_axes=(0, 0))(
       next_blackjax_states.particles,  # type: ignore[attr-access]
       keys_fitness_islands,
     )
-    # Now fitness_values has shape (n_islands, population_size, 1) or (n_islands, population_size)
 
-    # For metric calculations, we need to squeeze to ensure proper broadcasting
-    # Squeeze only if we have more than 2 dimensions
     fitness_for_metrics = (
       jnp.squeeze(fitness_values, axis=-1)
       if fitness_values.ndim > 2  # noqa: PLR2004
       else fitness_values
     )
-    # fitness_for_metrics has shape (n_islands, population_size)
-
-    # Calculate metrics while preserving the island dimension
-    # Ensure we don't collapse to scalar when n_islands=1
     ess = 1.0 / jnp.sum(next_blackjax_states.weights**2, axis=-1, keepdims=False)
-    # ess has shape (n_islands,)
     mean_fitness = jnp.nansum(
       fitness_for_metrics * next_blackjax_states.weights,
       axis=-1,
       keepdims=False,
     )
-    # mean_fitness has shape (n_islands,)
     max_fitness = jnp.max(
       jnp.array(jnp.where(jnp.isfinite(fitness_for_metrics), fitness_for_metrics, -jnp.inf)),
       axis=-1,
       keepdims=False,
     )
-    # max_fitness has shape (n_islands,)
 
     logZ_estimates = carry_state.additional_fields["logZ_estimate"] + infos.log_likelihood_increment  # noqa: N806
 
-    # Package the state after the SMC step
     state_after_smc = SamplerState(
       sequence=next_blackjax_states.particles,  # type: ignore[call-arg]
       fitness=fitness_values,
@@ -378,11 +360,9 @@ def run_prsmc_loop(  # noqa: PLR0913
       },
     )
 
-    # Perform replica exchange migration
     meta_beta = annealing_fn(step_idx)
     do_exchange = (step_idx + 1) % exchange_frequency == 0
 
-    # Create empty migration info for when no exchange happens
     empty_migration_info = MigrationInfo(
       island_from=jnp.zeros(n_exchange_attempts, dtype=jnp.int32),
       island_to=jnp.zeros(n_exchange_attempts, dtype=jnp.int32),
