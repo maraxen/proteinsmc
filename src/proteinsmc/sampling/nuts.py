@@ -8,12 +8,14 @@ NUTS sampler.
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import blackjax
 import jax
 import jax.numpy as jnp
+from blackjax.mcmc.hmc import HMCState
 from jax.experimental import io_callback as jax_io_callback
 
 from proteinsmc.models.sampler_base import SamplerState
@@ -42,6 +44,7 @@ def run_nuts_loop(  # noqa: PLR0913
   num_doublings: Int,
   initial_state: SamplerState,
   fitness_fn: StackedFitnessFn,
+  inverse_mass_matrix: jax.Array | None = None,
   _mutation_fn: MutationFn | None = None,
   io_callback: Callable | None = None,
 ) -> tuple[SamplerState, dict[str, jax.Array]]:
@@ -56,6 +59,7 @@ def run_nuts_loop(  # noqa: PLR0913
       num_doublings: Maximum number of tree doublings.
       initial_state: Initial position of the sampler.
       fitness_fn: Fitness function to evaluate sequences.
+      inverse_mass_matrix: Inverse mass matrix for NUTS (optional).
       _mutation_fn: Mutation function (unused for NUTS).
       io_callback: Optional callback function for writing outputs.
 
@@ -63,21 +67,58 @@ def run_nuts_loop(  # noqa: PLR0913
       A tuple containing the final state and empty metrics dictionary.
 
   """
+  # Initialize blackjax NUTS state if not already present (uses HMCState)
+  if initial_state.blackjax_state is None:
+    # Compute initial logdensity and gradient
+    def logdensity_fn_wrapped(position: jax.Array) -> jax.Array:
+      """Convert fitness_fn to blackjax's expected signature."""
+      fitness = fitness_fn(initial_state.key, position, None)
+      return fitness[0]
+
+    initial_logdensity = logdensity_fn_wrapped(initial_state.sequence)
+    logdensity_grad = jax.grad(logdensity_fn_wrapped)(initial_state.sequence)
+
+    nuts_state = HMCState(
+      position=initial_state.sequence,
+      logdensity=float(initial_logdensity),
+      logdensity_grad=logdensity_grad,
+    )
+    initial_state = dataclasses.replace(initial_state, blackjax_state=nuts_state)
+
   kernel = blackjax.nuts.build_kernel()
 
   def body_fn(step_idx: int, state: SamplerState) -> SamplerState:
     """Perform one step of the NUTS sampler."""
     key = jax.random.fold_in(state.key, step_idx)
+
+    # Create default inverse mass matrix if not provided
+    mass_matrix = inverse_mass_matrix
+    if mass_matrix is None:
+      # Use identity matrix with dimension matching the sequence
+      dim = state.sequence.size
+      mass_matrix = jnp.eye(dim)
+
+    # Wrap fitness function for this step
+    def logdensity_fn_step(position: jax.Array) -> jax.Array:
+      """Logdensity function for this NUTS step."""
+      fitness = fitness_fn(key, position, None)
+      return fitness[0]  # Return combined fitness
+
     new_blackjax_state, info = kernel(
       rng_key=key,
       state=state.blackjax_state,
-      logdensity_fn=fitness_fn,
+      logdensity_fn=logdensity_fn_step,
       step_size=step_size,
       max_num_doublings=num_doublings,
+      inverse_mass_matrix=mass_matrix,
     )
+
+    # Recompute full fitness to maintain proper shape
+    new_fitness = fitness_fn(key, new_blackjax_state.position, None)
+
     new_state = SamplerState(
       sequence=new_blackjax_state.position,
-      fitness=new_blackjax_state.logdensity,
+      fitness=new_fitness,
       key=key,
       blackjax_state=new_blackjax_state,
       step=jnp.array(step_idx + 1),

@@ -72,15 +72,32 @@ def get_fitness_function(
       seq = translate_func(sequence, key_i, _context) if needs_trans else sequence
       keys_i = jax.random.split(key_i, seq.shape[0])
 
+      # Use vmap to vectorize over the population dimension
+      # score_fn expects (sequence, key, context) per individual
+      # If _context is None, pass None for each individual
+      # Otherwise, broadcast context to all individuals
+      if batch_size is None:
+        # No chunking - use vmap
+        vmapped_score = jax.vmap(lambda s, k: score_fn(s, k, _context))
+        return vmapped_score(seq, keys_i)
+
+      # With chunking - use lax.map over vmapped function
+      def score_single(s: EvoSequence, k: PRNGKeyArray) -> Array:
+        return score_fn(s, k, _context)
+
       return jax.lax.map(
-        score_fn,
-        (seq, keys_i, _context),
+        lambda inputs: score_single(inputs[0], inputs[1]),
+        (seq, keys_i),
         batch_size=batch_size,
       )
 
     return branch_fn
 
-  score_branches = jax.lax.map(make_score_branch, (score_fns, needs_translation_tuple))
+  # Build score branches using list comprehension instead of jax.lax.map
+  score_branches = [
+    make_score_branch(score_fn, needs_trans)
+    for score_fn, needs_trans in zip(score_fns, needs_translation_tuple, strict=True)
+  ]
 
   @jit
   def final_fitness_fn(
@@ -98,10 +115,19 @@ def get_fitness_function(
 
     keys_for_combiner = jax.random.split(keys[-1], all_scores.shape[1])
 
-    combined_fitness = jax.vmap(combine_fn)(all_scores.T, keys_for_combiner, _context)
+    # Vmap combine_fn over population, but broadcast _context
+    # in_axes=(0, 0, None) means vmap over first two args, broadcast third
+    combined_fitness = jax.vmap(combine_fn, in_axes=(0, 0, None))(
+      all_scores.T, keys_for_combiner, _context
+    )
 
-    return jnp.stack(
-      [combined_fitness, all_scores],
+    # Reshape combined_fitness to (1, population_size) for concatenation
+    # all_scores has shape (n_fitness_functions, population_size)
+    # Result should be (1 + n_fitness_functions, population_size)
+    combined_fitness_reshaped = jnp.expand_dims(combined_fitness, axis=0)
+
+    return jnp.concatenate(
+      [combined_fitness_reshaped, all_scores],
       axis=0,
     )
 
