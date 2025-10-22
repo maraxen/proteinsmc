@@ -31,11 +31,11 @@ from .initiate import generate_template_population
 from .jax_utils import chunked_map
 from .memory import (
   BenchmarkResult,
-  auto_tune_chunk_size,
+  auto_tune_batch_size,
   create_test_population,
   estimate_memory_usage,
   get_device_memory_mb,
-  suggest_chunk_size_heuristic,
+  suggest_batch_size_heuristic,
 )
 from .metrics import (
   calculate_logZ_increment,
@@ -75,7 +75,7 @@ __all__ = [
   "ECOLI_MAX_FREQS_JAX_list",
   "_revert_x_codons_if_mutated",
   "aa_to_nucleotide",
-  "auto_tune_chunk_size",
+  "auto_tune_batch_size",
   "calculate_logZ_increment",
   "calculate_position_entropy",
   "chunked_map",
@@ -95,5 +95,5 @@ __all__ = [
   "safe_weighted_mean",
   "shannon_entropy",
   "static_schedule",
-  "suggest_chunk_size_heuristic",
+  "suggest_batch_size_heuristic",
 ]

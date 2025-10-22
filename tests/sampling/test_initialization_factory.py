@@ -534,7 +534,7 @@ class TestInitializeBlackjaxSMCState:
     )
 
     assert isinstance(state, BaseSMCState)
-    assert state.particles.shape == sample_population_proteins.shape
+    assert state.particles.shape == sample_population_proteins.shape # type: ignore
 
   def test_tempered_smc_algorithm(self, rng_key, sample_population_proteins) -> None:
     """Test tempered SMC algorithm initialization.

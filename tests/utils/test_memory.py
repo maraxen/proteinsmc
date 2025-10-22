@@ -10,12 +10,12 @@ from chex import assert_trees_all_close
 from proteinsmc.models.memory import AutoTuningConfig
 from proteinsmc.utils.memory import (
   BenchmarkResult,
-  auto_tune_chunk_size,
-  benchmark_chunk_size,
+  auto_tune_batch_size,
+  benchmark_batch_size,
   create_test_population,
   estimate_memory_usage,
   get_device_memory_mb,
-  suggest_chunk_size_heuristic,
+  suggest_batch_size_heuristic,
 )
 
 
@@ -63,51 +63,51 @@ class TestMemoryEstimation:
 class TestChunkSizeHeuristics:
   """Test chunk size heuristic functions."""
 
-  def test_suggest_chunk_size_heuristic_disabled(self) -> None:
+  def test_suggest_batch_size_heuristic_disabled(self) -> None:
     """Test heuristic with auto-tuning disabled."""
     config = AutoTuningConfig(enable_auto_tuning=False)
-    chunk_size = suggest_chunk_size_heuristic(
+    batch_size = suggest_batch_size_heuristic(
       population_size=1000,
       sequence_length=100,
       config=config,
     )
     # Should return minimum of population_size and 64
-    assert chunk_size == 64
+    assert batch_size == 64
 
-  def test_suggest_chunk_size_heuristic_enabled(self) -> None:
+  def test_suggest_batch_size_heuristic_enabled(self) -> None:
     """Test heuristic with auto-tuning enabled."""
     config = AutoTuningConfig(
       enable_auto_tuning=True,
-      probe_chunk_sizes=(16, 32, 64, 128),
+      probe_batch_sizes=(16, 32, 64, 128),
     )
-    chunk_size = suggest_chunk_size_heuristic(
+    batch_size = suggest_batch_size_heuristic(
       population_size=1000,
       sequence_length=100,
       config=config,
     )
     # Should return one of the probe sizes
-    assert chunk_size in config.probe_chunk_sizes
+    assert batch_size in config.probe_batch_sizes
 
-  def test_suggest_chunk_size_small_population(self) -> None:
+  def test_suggest_batch_size_small_population(self) -> None:
     """Test heuristic with small population."""
     config = AutoTuningConfig(
       enable_auto_tuning=True,
-      probe_chunk_sizes=(16, 32, 64, 128),
+      probe_batch_sizes=(16, 32, 64, 128),
     )
-    chunk_size = suggest_chunk_size_heuristic(
+    batch_size = suggest_batch_size_heuristic(
       population_size=20,
       sequence_length=100,
       config=config,
     )
     # Should not exceed population size
-    assert chunk_size <= 20
-    assert chunk_size == 16  # Closest probe size
+    assert batch_size <= 20
+    assert batch_size == 16  # Closest probe size
 
 
 class TestBenchmarking:
   """Test benchmarking functions."""
 
-  def test_benchmark_chunk_size_success(self) -> None:
+  def test_benchmark_batch_size_success(self) -> None:
     """Test successful benchmark."""
 
     def test_func(x: jax.Array) -> jax.Array:
@@ -116,21 +116,21 @@ class TestBenchmarking:
     key = jax.random.PRNGKey(0)
     test_data = create_test_population(100, 50, key)
 
-    result = benchmark_chunk_size(
+    result = benchmark_batch_size(
       func=test_func,
       test_data=test_data,
-      chunk_size=32,
+      batch_size=32,
       num_trials=2,
     )
 
     assert isinstance(result, BenchmarkResult)
     assert result.success
-    assert result.chunk_size == 32
+    assert result.batch_size == 32
     assert result.avg_time_per_batch > 0
     assert result.memory_usage_mb > 0
     assert result.error_message is None
 
-  def test_benchmark_chunk_size_with_static_args(self) -> None:
+  def test_benchmark_batch_size_with_static_args(self) -> None:
     """Test benchmark with static arguments."""
 
     def test_func(x: jax.Array, scale: float) -> jax.Array:
@@ -139,18 +139,18 @@ class TestBenchmarking:
     key = jax.random.PRNGKey(0)
     test_data = create_test_population(100, 50, key)
 
-    result = benchmark_chunk_size(
+    result = benchmark_batch_size(
       func=test_func,
       test_data=test_data,
-      chunk_size=32,
+      batch_size=32,
       num_trials=2,
       static_args={"scale": 2.5},
     )
 
     assert result.success
-    assert result.chunk_size == 32
+    assert result.batch_size == 32
 
-  def test_benchmark_chunk_size_failure(self) -> None:
+  def test_benchmark_batch_size_failure(self) -> None:
     """Test benchmark with failing function."""
 
     def failing_func(x: jax.Array) -> jax.Array:
@@ -159,10 +159,10 @@ class TestBenchmarking:
     key = jax.random.PRNGKey(0)
     test_data = create_test_population(100, 50, key)
 
-    result = benchmark_chunk_size(
+    result = benchmark_batch_size(
       func=failing_func,
       test_data=test_data,
-      chunk_size=32,
+      batch_size=32,
       num_trials=1,
     )
 
@@ -176,7 +176,7 @@ class TestBenchmarking:
 class TestAutoTuning:
   """Test auto-tuning functions."""
 
-  def test_auto_tune_chunk_size_disabled(self) -> None:
+  def test_auto_tune_batch_size_disabled(self) -> None:
     """Test auto-tuning with disabled config."""
 
     def test_func(x: jax.Array) -> jax.Array:
@@ -187,19 +187,19 @@ class TestAutoTuning:
 
     config = AutoTuningConfig(
       enable_auto_tuning=False,
-      probe_chunk_sizes=(16, 32, 64, 128),
+      probe_batch_sizes=(16, 32, 64, 128),
     )
 
-    chunk_size = auto_tune_chunk_size(
+    batch_size = auto_tune_batch_size(
       func=test_func,
       test_data=test_data,
       config=config,
     )
 
     # Should use heuristic
-    assert chunk_size in config.probe_chunk_sizes
+    assert batch_size in config.probe_batch_sizes
 
-  def test_auto_tune_chunk_size_enabled(self) -> None:
+  def test_auto_tune_batch_size_enabled(self) -> None:
     """Test auto-tuning with enabled config."""
 
     def test_func(x: jax.Array) -> jax.Array:
@@ -210,22 +210,22 @@ class TestAutoTuning:
 
     config = AutoTuningConfig(
       enable_auto_tuning=True,
-      probe_chunk_sizes=(16, 32, 64, 128),
+      probe_batch_sizes=(16, 32, 64, 128),
       max_probe_iterations=2,
     )
 
-    chunk_size = auto_tune_chunk_size(
+    batch_size = auto_tune_batch_size(
       func=test_func,
       test_data=test_data,
       config=config,
     )
 
     # Should return one of the probe sizes
-    assert chunk_size in config.probe_chunk_sizes
+    assert batch_size in config.probe_batch_sizes
     # Should be reasonable
-    assert 16 <= chunk_size <= 128
+    assert 16 <= batch_size <= 128
 
-  def test_auto_tune_chunk_size_with_static_args(self) -> None:
+  def test_auto_tune_batch_size_with_static_args(self) -> None:
     """Test auto-tuning with static arguments."""
 
     def test_func(x: jax.Array, multiplier: int) -> jax.Array:
@@ -236,20 +236,20 @@ class TestAutoTuning:
 
     config = AutoTuningConfig(
       enable_auto_tuning=True,
-      probe_chunk_sizes=(16, 32, 64),
+      probe_batch_sizes=(16, 32, 64),
       max_probe_iterations=2,
     )
 
-    chunk_size = auto_tune_chunk_size(
+    batch_size = auto_tune_batch_size(
       func=test_func,
       test_data=test_data,
       config=config,
       static_args={"multiplier": 3},
     )
 
-    assert chunk_size in config.probe_chunk_sizes
+    assert batch_size in config.probe_batch_sizes
 
-  def test_auto_tune_chunk_size_small_population(self) -> None:
+  def test_auto_tune_batch_size_small_population(self) -> None:
     """Test auto-tuning with population smaller than probe sizes."""
 
     def test_func(x: jax.Array) -> jax.Array:
@@ -260,20 +260,20 @@ class TestAutoTuning:
 
     config = AutoTuningConfig(
       enable_auto_tuning=True,
-      probe_chunk_sizes=(16, 32, 64, 128),
+      probe_batch_sizes=(16, 32, 64, 128),
       max_probe_iterations=2,
     )
 
-    chunk_size = auto_tune_chunk_size(
+    batch_size = auto_tune_batch_size(
       func=test_func,
       test_data=test_data,
       config=config,
     )
 
     # Should not exceed population size
-    assert chunk_size <= 20
+    assert batch_size <= 20
 
-  def test_auto_tune_chunk_size_all_fail(self) -> None:
+  def test_auto_tune_batch_size_all_fail(self) -> None:
     """Test auto-tuning when all benchmarks fail."""
 
     def failing_func(x: jax.Array) -> jax.Array:
@@ -284,18 +284,18 @@ class TestAutoTuning:
 
     config = AutoTuningConfig(
       enable_auto_tuning=True,
-      probe_chunk_sizes=(16, 32, 64),
+      probe_batch_sizes=(16, 32, 64),
       max_probe_iterations=1,
     )
 
-    chunk_size = auto_tune_chunk_size(
+    batch_size = auto_tune_batch_size(
       func=failing_func,
       test_data=test_data,
       config=config,
     )
 
     # Should fall back to heuristic
-    assert chunk_size in config.probe_chunk_sizes
+    assert batch_size in config.probe_batch_sizes
 
 
 class TestTestPopulationCreation:

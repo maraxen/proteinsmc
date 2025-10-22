@@ -112,7 +112,7 @@ class BaseSamplerConfig:
       raise TypeError(msg)
     if not isinstance(
       self.combinations_mode,
-      (str, Sequence),
+      str | Sequence,
     ) or (
       isinstance(self.combinations_mode, str) and self.combinations_mode not in ("zip", "product")
     ):

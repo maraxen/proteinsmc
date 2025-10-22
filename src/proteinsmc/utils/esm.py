@@ -93,7 +93,7 @@ class Linear(AbstractFromTorch):
     """Apply the linear transformation."""
     o = einops.einsum(x, self.weight, "... In, Out In -> ... Out")
     if self.bias is not None:
-      o = o + jnp.broadcast_to(self.bias, x.shape[:-1] + (self.bias.shape[-1],))
+      o = o + jnp.broadcast_to(self.bias, (*x.shape[:-1], self.bias.shape[-1]))
     return o
 
 
@@ -370,7 +370,7 @@ def load_model(model_name: str, key: PRNGKeyArray) -> ESMC:
 
 def robust_deserialise_filter_spec(f: BinaryIO, leaf: Any) -> Any:  # noqa: ANN401
   """Force loaded arrays to match the shape and dtype of the template leaf."""
-  if isinstance(leaf, (jax.Array, np.ndarray)):
+  if isinstance(leaf, jax.Array | np.ndarray):
     loaded_leaf = jnp.load(f, allow_pickle=False)
     return jnp.broadcast_to(loaded_leaf, leaf.shape).astype(leaf.dtype)
   return eqx.default_deserialise_filter_spec(f, leaf)

@@ -428,15 +428,15 @@ class TestChunkedMutationStep:
 
     mutation_rate = 0.4
     n_states = 4
-    chunk_size = 2
+    batch_size = 2
 
-    result = chunked_mutation_step(rng_key, population, mutation_rate, n_states, chunk_size)
+    result = chunked_mutation_step(rng_key, population, mutation_rate, n_states, batch_size)
 
     assert_shape(result, population.shape)
     assert result.dtype == jnp.int8
     assert jnp.all((result >= 0) & (result < n_states))
 
-  def test_different_chunk_sizes(self, rng_key) -> None:
+  def test_different_batch_sizes(self, rng_key) -> None:
     """Test chunked mutation with different chunk sizes.
 
     Args:
@@ -449,15 +449,15 @@ class TestChunkedMutationStep:
         AssertionError: If different chunk sizes fail.
 
     Example:
-        >>> test_different_chunk_sizes(jax.random.PRNGKey(42))
+        >>> test_different_batch_sizes(jax.random.PRNGKey(42))
 
     """
     population = jnp.zeros((10, 20), dtype=jnp.int8)
     mutation_rate = 0.3
     n_states = 4
 
-    for chunk_size in [1, 2, 5, 10]:
-      result = chunked_mutation_step(rng_key, population, mutation_rate, n_states, chunk_size)
+    for batch_size in [1, 2, 5, 10]:
+      result = chunked_mutation_step(rng_key, population, mutation_rate, n_states, batch_size)
       assert_shape(result, population.shape)
       assert result.dtype == jnp.int8
 
@@ -480,9 +480,9 @@ class TestChunkedMutationStep:
     population = jnp.zeros((100, 50), dtype=jnp.int8)
     mutation_rate = 0.2
     n_states = 20
-    chunk_size = 10
+    batch_size = 10
 
-    result = chunked_mutation_step(rng_key, population, mutation_rate, n_states, chunk_size)
+    result = chunked_mutation_step(rng_key, population, mutation_rate, n_states, batch_size)
 
     assert_shape(result, population.shape)
     assert result.dtype == jnp.int8

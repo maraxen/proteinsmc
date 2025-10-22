@@ -46,7 +46,7 @@ class AutoTuningConfig:
   """Configuration for automatic chunk size tuning."""
 
   enable_auto_tuning: bool = field(default=True)
-  probe_chunk_sizes: tuple[int, ...] = field(default=(16, 32, 64, 128, 256))
+  probe_batch_sizes: tuple[int, ...] = field(default=(16, 32, 64, 128, 256))
   max_probe_iterations: int = field(default=3)
   memory_safety_factor: float = field(default=0.8)
   performance_tolerance: float = field(default=0.1)

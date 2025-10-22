@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 import jax.numpy as jnp
 
 if TYPE_CHECKING:
-  from jaxtyping import Array, Float, PRNGKeyArray
+  from jaxtyping import Array, Float, PRNGKeyArray, PyTree
 
   from proteinsmc.models.fitness import CombineFn
 
@@ -23,7 +23,7 @@ def make_sum_combine(**_kwargs: Any) -> CombineFn:  # noqa: ANN401
   def sum_combine(
     fitness_scores: Float,
     _key: PRNGKeyArray | None = None,
-    _context: Array | None = None,
+    _context: PyTree | Array | None = None,
   ) -> Float:
     """Combine function that sums input along axis 0."""
     return jnp.sum(fitness_scores, axis=0)
@@ -32,28 +32,28 @@ def make_sum_combine(**_kwargs: Any) -> CombineFn:  # noqa: ANN401
 
 
 def make_weighted_combine(
-  fitness_weights: Float | None = None,
+  weights: Float | list[float] | None = None,
 ) -> CombineFn:
   """Make combine function that combines fitness scores with optional weights.
 
   Args:
-      fitness_weights: Optional weights for combining fitness scores.
+      weights: Optional weights for combining fitness scores.
 
   Returns:
       A function that combines fitness scores using the provided weights.
 
   """
+  fitness_weights = jnp.array(weights) if weights is not None else None
 
   def weighted_combine(
     fitness_components: Float,
     _key: PRNGKeyArray | None = None,
-    _context: Array | None = None,
+    _context: PyTree | Array | None = None,
   ) -> Float:
     """Combine individual fitness scores into a single score using weights.
 
     Args:
         fitness_components: Dictionary of individual fitness scores.
-        fitness_weights: Optional weights for combining fitness scores.
 
     Returns:
         Combined fitness score.

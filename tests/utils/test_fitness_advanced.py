@@ -12,7 +12,7 @@ from proteinsmc.models.types import EvoSequence
 from proteinsmc.utils.fitness import get_fitness_function
 
 
-def _identity_translate(*, sequence: EvoSequence, **_kwargs) -> EvoSequence:  # type: ignore[misc]
+def _identity_translate(sequence: EvoSequence, _key=None, _context=None) -> EvoSequence:  # type: ignore[misc]
   """Simple identity translation function for testing."""
   return sequence
 
@@ -48,7 +48,7 @@ class TestChunkedFitnessEvaluation:
       evaluator_config=evaluator,
       n_states=4,
       translate_func=_identity_translate,  # type: ignore[arg-type]
-      chunk_size=None,
+      batch_size=None,
     )
 
     # Create fitness function with chunking
@@ -56,11 +56,15 @@ class TestChunkedFitnessEvaluation:
       evaluator_config=evaluator,
       n_states=4,
       translate_func=_identity_translate,  # type: ignore[arg-type]
-      chunk_size=2,
+      batch_size=2,
     )
 
     key = jax.random.PRNGKey(42)
-    sequence = jnp.array([[0, 1, 2, 3], [1, 2, 3, 0], [2, 3, 0, 1], [3, 0, 1, 2]], dtype=jnp.int8)
+    # Use length 6 sequences (multiple of 3 for nucleotide->protein translation)
+    sequence = jnp.array(
+      [[0, 1, 2, 3, 0, 1], [1, 2, 3, 0, 1, 2], [2, 3, 0, 1, 2, 3], [3, 0, 1, 2, 3, 0]],
+      dtype=jnp.int8,
+    )
 
     result_no_chunk = fitness_fn_no_chunk(key, sequence, None)
     result_chunked = fitness_fn_chunked(key, sequence, None)
@@ -95,19 +99,22 @@ class TestChunkedFitnessEvaluation:
       evaluator_config=evaluator,
       n_states=4,
       translate_func=_identity_translate,  # type: ignore[arg-type]
-      chunk_size=5,
+      batch_size=5,
     )
 
     key = jax.random.PRNGKey(42)
-    # Create a large population
-    sequence = jnp.array([[i % 4, (i + 1) % 4, (i + 2) % 4, (i + 3) % 4] for i in range(20)], dtype=jnp.int8)
+    # Create a large population with length 6 sequences (multiple of 3)
+    sequence = jnp.array(
+      [[i % 4, (i + 1) % 4, (i + 2) % 4, (i + 3) % 4, i % 4, (i + 1) % 4] for i in range(20)],
+      dtype=jnp.int8,
+    )
 
     result = fitness_fn(key, sequence, None)
 
     # Should have one row per sequence + components
     assert_shape(result, (2, 20))
 
-  def test_chunked_with_different_chunk_sizes(self) -> None:
+  def test_chunked_with_different_batch_sizes(self) -> None:
     """Test chunked evaluation with different chunk sizes.
     
     Args:
@@ -120,7 +127,7 @@ class TestChunkedFitnessEvaluation:
         AssertionError: If different chunk sizes produce different results.
     
     Example:
-        >>> test_chunked_with_different_chunk_sizes()
+        >>> test_chunked_with_different_batch_sizes()
     
     """
     fitness_fn_config = FitnessFunction(name="cai", n_states=4)
@@ -131,15 +138,19 @@ class TestChunkedFitnessEvaluation:
     )
 
     key = jax.random.PRNGKey(42)
-    sequence = jnp.array([[0, 1, 2, 3], [1, 2, 3, 0], [2, 3, 0, 1], [3, 0, 1, 2]], dtype=jnp.int8)
+    # Use length 6 sequences (multiple of 3)
+    sequence = jnp.array(
+      [[0, 1, 2, 3, 0, 1], [1, 2, 3, 0, 1, 2], [2, 3, 0, 1, 2, 3], [3, 0, 1, 2, 3, 0]],
+      dtype=jnp.int8,
+    )
 
     results = []
-    for chunk_size in [1, 2, 4]:
+    for batch_size in [1, 2, 4]:
       fitness_fn = get_fitness_function(
         evaluator_config=evaluator,
         n_states=4,
         translate_func=_identity_translate,  # type: ignore[arg-type]
-        chunk_size=chunk_size,
+        batch_size=batch_size,
       )
       result = fitness_fn(key, sequence, None)
       results.append(result)
@@ -183,7 +194,8 @@ class TestMultipleFitnessComponents:
     )
 
     key = jax.random.PRNGKey(42)
-    sequence = jnp.array([[0, 1, 2, 3], [1, 2, 3, 0]], dtype=jnp.int8)
+    # Use length 6 sequences (multiple of 3)
+    sequence = jnp.array([[0, 1, 2, 3, 0, 1], [1, 2, 3, 0, 1, 2]], dtype=jnp.int8)
 
     result = fitness_fn(key, sequence, None)
 
@@ -221,7 +233,8 @@ class TestMultipleFitnessComponents:
     )
 
     key = jax.random.PRNGKey(42)
-    sequence = jnp.array([[0, 1, 2, 3], [1, 2, 3, 0]], dtype=jnp.int8)
+    # Use length 6 sequences (multiple of 3)
+    sequence = jnp.array([[0, 1, 2, 3, 0, 1], [1, 2, 3, 0, 1, 2]], dtype=jnp.int8)
 
     result = fitness_fn(key, sequence, None)
 
@@ -262,10 +275,11 @@ class TestContextDependentFitness:
     )
 
     key = jax.random.PRNGKey(42)
-    sequence = jnp.array([[0, 1, 2, 3], [1, 2, 3, 0]], dtype=jnp.int8)
+    # Use length 6 sequences (multiple of 3)
+    sequence = jnp.array([[0, 1, 2, 3, 0, 1], [1, 2, 3, 0, 1, 2]], dtype=jnp.int8)
 
-    result_no_context = fitness_fn(key, sequence, _context=None)
-    result_with_context = fitness_fn(key, sequence, _context=jnp.array(0.5))
+    result_no_context = fitness_fn(key, sequence, None)
+    result_with_context = fitness_fn(key, sequence, jnp.array(0.5))
 
     # With context, combined fitness should be scaled
     # Components remain unchanged
@@ -305,7 +319,8 @@ class TestContextDependentFitness:
     )
 
     key = jax.random.PRNGKey(42)
-    sequence = jnp.array([[0, 1, 2, 3], [1, 2, 3, 0]], dtype=jnp.int8)
+    # Use length 6 sequences (multiple of 3)
+    sequence = jnp.array([[0, 1, 2, 3, 0, 1], [1, 2, 3, 0, 1, 2]], dtype=jnp.int8)
 
     result_base = fitness_fn(key, sequence, jnp.array(1.0))
 
@@ -344,8 +359,9 @@ class TestTranslationIntegration:
 
     # Check needs_translation method
     needs_trans = evaluator.needs_translation(n_states=4)
-    assert isinstance(needs_trans, list)
-    assert len(needs_trans) == 1
+    # Should be a JAX array, not a list
+    assert isinstance(needs_trans, jnp.ndarray)
+    assert needs_trans.shape[0] == 1
 
   def test_fitness_with_translation(self) -> None:
     """Test fitness evaluation with custom translation function.
@@ -364,7 +380,7 @@ class TestTranslationIntegration:
     
     """
 
-    def custom_translate(*, sequence: EvoSequence, **_kwargs) -> EvoSequence:  # type: ignore[misc]
+    def custom_translate(sequence: EvoSequence, _key=None, _context=None) -> EvoSequence:  # type: ignore[misc]
       """Custom translation that doubles values."""
       return sequence * 2
 
@@ -382,7 +398,8 @@ class TestTranslationIntegration:
     )
 
     key = jax.random.PRNGKey(42)
-    sequence = jnp.array([[0, 1, 2, 3], [1, 2, 3, 0]], dtype=jnp.int8)
+    # Use length 6 sequences (multiple of 3)
+    sequence = jnp.array([[0, 1, 2, 3, 0, 1], [1, 2, 3, 0, 1, 2]], dtype=jnp.int8)
 
     result = fitness_fn(key, sequence, None)
 
