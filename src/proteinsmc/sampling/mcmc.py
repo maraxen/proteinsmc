@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import dataclasses
 from typing import TYPE_CHECKING
 
 import blackjax
 import jax
 import jax.numpy as jnp
+from blackjax.mcmc.random_walk import RWState
 from jax.experimental import io_callback as jax_io_callback
 
 from proteinsmc.models.sampler_base import SamplerState
@@ -40,20 +42,51 @@ def run_mcmc_loop(
       A tuple containing the final state and empty metrics dictionary.
 
   """
+  # Initialize blackjax RW state if not already present
+  if initial_state.blackjax_state is None:
+    # Compute initial logdensity
+    initial_fitness = fitness_fn(initial_state.key, initial_state.sequence, None)
+
+    rw_state = RWState(
+      position=initial_state.sequence,
+      logdensity=float(initial_fitness[0]),
+    )
+    initial_state = dataclasses.replace(initial_state, blackjax_state=rw_state)
+
+  # Build the random walk Metropolis-Hastings kernel
   kernel = blackjax.mcmc.random_walk.build_rmh()
 
   def body_fn(step_idx: int, state: SamplerState) -> SamplerState:
     """Perform one step of the MCMC sampler."""
     key = jax.random.fold_in(state.key, step_idx)
+
+    # Wrap fitness function for blackjax
+    def logdensity_fn_step(position: jax.Array) -> jax.Array:
+      """Logdensity function for this MCMC step."""
+      fitness = fitness_fn(key, position, None)
+      return fitness[0]  # Return combined fitness
+
+    # Wrap mutation function to preserve dtype
+    def transition_generator_wrapped(key_mutation: jax.Array, position: jax.Array) -> jax.Array:
+      """Mutation function that preserves the dtype of the input."""
+      mutated = mutation_fn(key_mutation, position)
+      # Cast back to original dtype if needed
+      return mutated.astype(position.dtype)
+
+    # The kernel returns (new_state, info)
     new_blackjax_state, _ = kernel(
       rng_key=key,
       state=state.blackjax_state,  # pyright: ignore[reportArgumentType]
-      logdensity_fn=fitness_fn,
-      transition_generator=mutation_fn,
+      logdensity_fn=logdensity_fn_step,
+      transition_generator=transition_generator_wrapped,
     )
+
+    # Recompute full fitness to maintain proper shape
+    new_fitness = fitness_fn(key, new_blackjax_state.position, None)  # pyright: ignore[reportArgumentType]
+
     new_state = SamplerState(
       sequence=new_blackjax_state.position,  # pyright: ignore[reportArgumentType]
-      fitness=new_blackjax_state.logdensity,  # pyright: ignore[reportArgumentType]
+      fitness=new_fitness,
       key=key,
       blackjax_state=new_blackjax_state,
       step=jnp.array(step_idx + 1),

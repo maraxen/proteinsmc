@@ -25,25 +25,32 @@ def make_sum_combine(**_kwargs: Any) -> CombineFn:  # noqa: ANN401
     _key: PRNGKeyArray | None = None,
     _context: PyTree | Array | None = None,
   ) -> Float:
-    """Combine function that sums input along axis 0."""
-    return jnp.sum(fitness_scores, axis=0)
+    """Combine function that sums input along axis 0.
+
+    If context is provided, it scales the combined result.
+    """
+    combined = jnp.sum(fitness_scores, axis=0)
+    if _context is not None:
+      combined = combined * _context
+    return combined
 
   return sum_combine
 
 
 def make_weighted_combine(
-  weights: Float | list[float] | None = None,
+  fitness_weights: Float | list[float] | None = None,
+  **_kwargs: Any,  # noqa: ANN401
 ) -> CombineFn:
   """Make combine function that combines fitness scores with optional weights.
 
   Args:
-      weights: Optional weights for combining fitness scores.
+      fitness_weights: Optional weights for combining fitness scores.
 
   Returns:
       A function that combines fitness scores using the provided weights.
 
   """
-  fitness_weights = jnp.array(weights) if weights is not None else None
+  weights_array = jnp.array(fitness_weights) if fitness_weights is not None else None
 
   def weighted_combine(
     fitness_components: Float,
@@ -52,6 +59,8 @@ def make_weighted_combine(
   ) -> Float:
     """Combine individual fitness scores into a single score using weights.
 
+    If context is provided, it scales the combined result.
+
     Args:
         fitness_components: Dictionary of individual fitness scores.
 
@@ -59,14 +68,17 @@ def make_weighted_combine(
         Combined fitness score.
 
     """
-    if fitness_weights is not None:
+    if weights_array is not None:
       combined_fitness = jnp.tensordot(
-        fitness_weights,
+        weights_array,
         fitness_components,
         axes=1,
       )
     else:
       combined_fitness = jnp.sum(fitness_components, axis=0)
+
+    if _context is not None:
+      combined_fitness = combined_fitness * _context
 
     return combined_fitness
 

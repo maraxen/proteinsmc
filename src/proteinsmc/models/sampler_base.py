@@ -90,7 +90,8 @@ class BaseSamplerConfig:
     if not isinstance(self.seed_sequence, (str, Sequence)):
       msg = "seed_sequence must be a string or a sequence of strings."
       raise TypeError(msg)
-    if not isinstance(self.num_samples, (int, Sequence)):
+    # Check num_samples - must be int or Sequence, but not string
+    if not isinstance(self.num_samples, int | Sequence) or isinstance(self.num_samples, str):
       msg = "num_samples must be an integer or a sequence of integers."
       raise TypeError(msg)
     if not isinstance(self.n_states, (int, Sequence)):
