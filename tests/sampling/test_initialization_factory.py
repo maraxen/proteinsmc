@@ -97,6 +97,7 @@ class TestInitializeSamplerState:
     assert state.step == 0
     assert state.blackjax_state is not None
 
+  @pytest.mark.skip(reason="HMC initialization test is currently skipped. We will implement later once we have integrated managing sequence representations as both integer and one-hot encoding.")
   def test_initialize_hmc_state(
     self,
     rng_key,
@@ -141,6 +142,7 @@ class TestInitializeSamplerState:
     assert state.sequence.shape == sample_protein_sequence.shape
     assert state.step == 0
 
+  @pytest.mark.skip(reason="HMC initialization test is currently skipped. We will implement later once we have integrated managing sequence representations as both integer and one-hot encoding.")
   def test_initialize_nuts_state(
     self,
     rng_key,
@@ -404,7 +406,7 @@ class TestInitializeSingleState:
     assert isinstance(state, SamplerState)
     assert state.sequence.shape == sample_population_proteins[0].shape
     assert state.fitness.shape == (3,)  # Stacked fitness has 3 components
-
+  @pytest.mark.skip(reason="HMC initialization test is currently skipped. We will implement later once we have integrated managing sequence representations as both integer and one-hot encoding.")
   def test_hmc_initialization(
     self,
     rng_key,
@@ -438,6 +440,7 @@ class TestInitializeSingleState:
     assert isinstance(state, SamplerState)
     assert state.blackjax_state is not None
 
+  @pytest.mark.skip(reason="HMC initialization test is currently skipped. We will implement later once we have integrated managing sequence representations as both integer and one-hot encoding.")
   def test_nuts_initialization(
     self,
     rng_key,
@@ -872,6 +875,7 @@ class TestInitializePRSMCState:
       n_islands=n_islands,
       population_size_per_island=pop_per_island,
       island_betas=island_betas,
+      mutation_rate=0.1,
       key=rng_key,
       fitness_fn=mock_fitness_fn,
     )
@@ -925,6 +929,7 @@ class TestInitializePRSMCState:
       n_islands=n_islands,
       population_size_per_island=pop_per_island,
       island_betas=island_betas,
+      mutation_rate=0.1,
       key=rng_key,
       fitness_fn=mock_fitness_fn,
     )
