@@ -63,7 +63,6 @@ def resample(
 def create_smc_loop_func(
   algorithm: SMCAlgorithmType,
   resampling_approach: str,
-  weight_fn: StackedFitnessFn,
   mutation_fn: MutationFn,
 ) -> Callable[[BlackjaxSMCState, PRNGKeyArray], tuple[BlackjaxSMCState, SMCInfo]]:
   """Create a JIT-compiled SMC loop function."""
@@ -71,7 +70,6 @@ def create_smc_loop_func(
     case "BaseSMC" | "AnnealedSMC" | "ParallelReplicaSMC":
       return partial(
         smc_step,
-        weight_fn=weight_fn,
         update_fn=mutation_fn,
         resample_fn=partial(resample, resampling_approach),
       )  # type: ignore[return-value]
@@ -94,26 +92,20 @@ def run_smc_loop(  # noqa: PLR0913
   initial_state: SamplerState,
   fitness_fn: StackedFitnessFn,
   mutation_fn: MutationFn,
+  writer_callback: Callable,
   annealing_fn: AnnealingFn | None = None,
-  writer_callback: Callable | None = None,
 ) -> tuple[SamplerState, SMCInfo]:
   """JIT-compiled SMC loop."""
   # TODO: Get mutation_fn and fitness_fn loaded as vmapped transformation, we should standardize this across the codebase, following whatever is clearest, best for maintainability/extensibility, and follows best practices and handle keys
   # because handling keys is crucial for reproducibility and debugging, we should standardize it across the codebase
   # mutation_fn: (sequences, keys, context) -> new_sequences
   # fitness_fn: (keys, sequences, context) -> weights, but blackjax expects ONLY particles to be fed into the weights fn
-  vmappped_mutation_fn = jax.vmap(mutation_fn, in_axes=(0, 0, None))
-  fitness_fn = partial(fitness_fn, key=jax.random.PRNGKey(0))
+  vmap_mutation_fn = jax.vmap(mutation_fn, in_axes=(0, 0, None))
 
-  def weight_fn(sequence: PopulationSequences) -> Array:
-    """Weight function for the SMC step."""
-    return fitness_fn(sequence)[0]
-
-  smc_loop_func = create_smc_loop_func(
+  smc_loop_func_partial = create_smc_loop_func(
     algorithm=algorithm,
     resampling_approach=resampling_approach,
-    weight_fn=weight_fn,
-    mutation_fn=vmappped_mutation_fn,
+    mutation_fn=vmap_mutation_fn,
   )
 
   def scan_body(state: SamplerState, i: Int) -> tuple[SamplerState, SMCInfo]:
@@ -122,14 +114,20 @@ def run_smc_loop(  # noqa: PLR0913
       state.key,
       3,
     )
+    fitness_keys = jax.random.split(key_for_fitness_fn, state.sequence.shape[0])
 
     def weight_fn(
       sequence: PopulationSequences,
     ) -> Array:
       """Weight function for the SMC step."""
-      return fitness_fn(key_for_fitness_fn, sequence, current_beta)
+      return jax.vmap(fitness_fn, in_axes=(0, 0, None))(fitness_keys, sequence, current_beta)
 
-    next_state, info = smc_loop_func(
+    smc_loop_func_partial_with_weights = partial(
+      smc_loop_func_partial,
+      weight_fn=weight_fn,  # type: ignore[arg-type]
+    )
+
+    next_state, info = smc_loop_func_partial_with_weights(
       key_for_blackjax,
       state.blackjax_state,  # type: ignore[arg-type]
     )
@@ -142,16 +140,14 @@ def run_smc_loop(  # noqa: PLR0913
         "beta": current_beta if current_beta is not None else jnp.array(-1.0),
       },
     )
-    if writer_callback is not None:
-      smc_step_output = SMCOutput(
+    io_callback(
+      writer_callback,
+      None,
+      SMCOutput(
         state=next_smc_state,
         info=info,
-      )
-      io_callback(
-        writer_callback,
-        None,
-        smc_step_output,
-      )
+      ),
+    )
     return next_smc_state, info
 
   final_state, collected_metrics = jax.lax.fori_loop(
@@ -163,7 +159,7 @@ def run_smc_loop(  # noqa: PLR0913
       SMCInfo(
         ancestors=jnp.zeros((initial_state.sequence.shape[0],), dtype=jnp.int32),
         log_likelihood_increment=0.0,
-        update_info={},
+        update_info=UpdateInfo(),
       ),
     ),
   )

@@ -175,7 +175,6 @@ def _initialize_single_state(
   initial_sequence = initial_population[0]
 
   # Compute initial fitness
-  initial_fitness = fitness_fn(initial_sequence, key_fitness, None)
 
   # Create a logdensity function for blackjax (uses combined fitness at index 0)
   def logdensity_fn(seq: EvoSequence) -> Float:
@@ -188,7 +187,6 @@ def _initialize_single_state(
 
   return SamplerState(
     sequence=initial_sequence,
-    fitness=initial_fitness,  # TODO: eliminate this because it should be covered by blackjax states
     key=key_next,
     blackjax_state=blackjax_initial_state,
     step=jnp.array(0, dtype=jnp.int32),
@@ -379,7 +377,6 @@ def _initialize_prsmc_state(  # noqa: PLR0913 # TODO: refactor to match the SMC 
   # Construct initial island states
   return SamplerState(
     sequence=initial_populations,  # Shape: (n_islands, population_size_per_island, seq_len)
-    fitness=initial_fitness_batch,  # Shape: (n_islands, population_size_per_island, n_fitness+1)
     key=island_keys,  # Shape: (n_islands, 2)
     blackjax_state=initial_blackjax_states,
     step=jnp.zeros(n_islands, dtype=jnp.int32),
