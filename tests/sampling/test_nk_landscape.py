@@ -1,7 +1,7 @@
 import jax
 import jax.numpy as jnp
 import pytest
-from proteinsmc.sampling.nk_landscape import (
+from proteinsmc.utils.nk_landscape import (
     generate_nk_interactions,
     generate_nk_model,
     calculate_nk_fitness_single,

@@ -3,17 +3,17 @@
 import json
 import shutil
 import subprocess
+import time
 from collections.abc import Callable, Generator
 from dataclasses import asdict, fields, is_dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import jax.tree_util as jtu
-import msgpack
+import jax
 import msgpack_numpy
-import numpy as np
 from array_record.python.array_record_module import ArrayRecordReader, ArrayRecordWriter
+from flax.serialization import msgpack_restore, msgpack_serialize
 from jaxtyping import PyTree
 
 msgpack_numpy.patch()
@@ -109,15 +109,17 @@ def create_writer_callback(path: str) -> tuple[ArrayRecordWriter, Callable]:
         pytree_payload: The payload data to write (will be serialized with msgpack).
 
     """
-    # Convert JAX arrays to numpy arrays for msgpack serialization
-    pytree_numpy = jtu.tree_map(lambda x: np.array(x), pytree_payload)
-    packed_bytes = msgpack.packb(pytree_numpy)
+    leaves, _tree_def = jax.tree_util.tree_flatten(pytree_payload)
+    processed_dict = {
+      "leaves": leaves,
+    }
+    packed_bytes = msgpack_serialize(processed_dict)
     writer.write(packed_bytes)
 
   return writer, writer_callback
 
 
-def read_lineage_data(path: str) -> Generator[dict[str, Any], None, None]:
+def read_lineage_data(path: str) -> Generator[PyTree, None, None]:
   """Read and deserialize all records from a lineage file.
 
   Args:
@@ -133,7 +135,7 @@ def read_lineage_data(path: str) -> Generator[dict[str, Any], None, None]:
     num_records = reader.num_records()
     for _ in range(num_records):
       packed_bytes = reader.read()  # read() with no args returns next record
-      full_record = msgpack.unpackb(packed_bytes)
+      full_record = msgpack_restore(packed_bytes)
       yield full_record
   except IndexError:
     # No more records or empty file
