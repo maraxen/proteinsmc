@@ -135,7 +135,7 @@ def run_smc_loop(  # noqa: PLR0913
       sequence=next_state.particles,  # type: ignore[call-arg]
       key=next_key,
       blackjax_state=next_state,
-      step=i,
+      step=i + 1,
       additional_fields={
         "beta": current_beta if current_beta is not None else jnp.array(-1.0),
       },
@@ -159,7 +159,7 @@ def run_smc_loop(  # noqa: PLR0913
       SMCInfo(
         ancestors=jnp.zeros((initial_state.sequence.shape[0],), dtype=jnp.int32),
         log_likelihood_increment=0.0,
-        update_info=UpdateInfo(),
+        update_info=None,
       ),
     ),
   )

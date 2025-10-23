@@ -17,224 +17,11 @@ from proteinsmc.sampling.particle_systems.parallel_replica import (
   MigrationInfo,
   PRSMCOutput,
   migrate,
-  mutation_update_fn,
   run_prsmc_loop,
-  weight_fn,
 )
 
 if TYPE_CHECKING:
   from jaxtyping import Array, PRNGKeyArray
-
-
-class TestMutationUpdateFn:
-  """Test the mutation_update_fn for parallel replica SMC."""
-
-  def test_mutation_update_fn_protein(self) -> None:
-    """Test mutation_update_fn with protein sequences.
-
-    Args:
-        None
-
-    Returns:
-        None
-
-    Raises:
-        AssertionError: If mutation output shape or type is incorrect.
-
-    Example:
-        >>> test_mutation_update_fn_protein()
-
-    """
-    key = jax.random.PRNGKey(42)
-    n_particles = 10
-    seq_length = 5
-    keys = jax.random.split(key, n_particles)
-    sequences = jax.random.randint(key, (n_particles, seq_length), 0, 20)
-    mutation_rates = jnp.full((n_particles,), 0.1)
-    update_parameters = {"mutation_rate": mutation_rates}
-
-    mutated, _ = mutation_update_fn(keys, sequences, update_parameters, q_states=20)
-
-    chex.assert_shape(mutated, (n_particles, seq_length))
-    chex.assert_type(mutated, jnp.int8)
-    # At least some mutations should have occurred (probabilistically)
-    assert not jnp.array_equal(mutated, sequences)
-
-  def test_mutation_update_fn_nucleotide(self) -> None:
-    """Test mutation_update_fn with nucleotide sequences.
-
-    Args:
-        None
-
-    Returns:
-        None
-
-    Raises:
-        AssertionError: If mutation output shape or type is incorrect.
-
-    Example:
-        >>> test_mutation_update_fn_nucleotide()
-
-    """
-    key = jax.random.PRNGKey(123)
-    n_particles = 8
-    seq_length = 10
-    keys = jax.random.split(key, n_particles)
-    sequences = jax.random.randint(key, (n_particles, seq_length), 0, 4)
-    mutation_rates = jnp.full((n_particles,), 0.2)
-    update_parameters = {"mutation_rate": mutation_rates}
-
-    mutated, _ = mutation_update_fn(keys, sequences, update_parameters, q_states=4)
-
-    chex.assert_shape(mutated, (n_particles, seq_length))
-    chex.assert_type(mutated, jnp.int8)
-    # Verify values are within valid nucleotide range
-    assert jnp.all((mutated >= 0) & (mutated < 4))
-
-  def test_mutation_update_fn_zero_rate(self) -> None:
-    """Test mutation_update_fn with zero mutation rate.
-
-    Args:
-        None
-
-    Returns:
-        None
-
-    Raises:
-        AssertionError: If sequences change despite zero mutation rate.
-
-    Example:
-        >>> test_mutation_update_fn_zero_rate()
-
-    """
-    key = jax.random.PRNGKey(999)
-    n_particles = 5
-    seq_length = 8
-    keys = jax.random.split(key, n_particles)
-    sequences = jax.random.randint(key, (n_particles, seq_length), 0, 20)
-    mutation_rates = jnp.zeros((n_particles,))
-    update_parameters = {"mutation_rate": mutation_rates}
-
-    mutated, _ = mutation_update_fn(keys, sequences, update_parameters, q_states=20)
-
-    # With zero mutation rate, sequences should remain unchanged
-    chex.assert_trees_all_equal(mutated, sequences)
-
-
-class TestWeightFn:
-  """Test the weight_fn for SMC step weighting."""
-
-  def test_weight_fn_finite_fitness(self) -> None:
-    """Test weight_fn with finite fitness values.
-
-    Args:
-        None
-
-    Returns:
-        None
-
-    Raises:
-        AssertionError: If weight calculation is incorrect.
-
-    Example:
-        >>> test_weight_fn_finite_fitness()
-
-    """
-    sequence = jnp.array([1, 2, 3, 4, 5])
-    fitness_value = jnp.array(2.0)
-    beta = jnp.array(0.5)
-
-    def mock_fitness_fn(seq: Array) -> tuple[Array, None]:
-      return fitness_value, None
-
-    weight = weight_fn(sequence, mock_fitness_fn, beta)
-
-    expected_weight = beta * fitness_value
-    chex.assert_trees_all_close(weight, expected_weight, rtol=1e-5)
-    assert weight.dtype == jnp.float32
-
-  def test_weight_fn_negative_infinity_fitness(self) -> None:
-    """Test weight_fn with negative infinity fitness.
-
-    Args:
-        None
-
-    Returns:
-        None
-
-    Raises:
-        AssertionError: If weight is not negative infinity.
-
-    Example:
-        >>> test_weight_fn_negative_infinity_fitness()
-
-    """
-    sequence = jnp.array([1, 2, 3])
-    fitness_value = jnp.array(-jnp.inf)
-    beta = jnp.array(1.0)
-
-    def mock_fitness_fn(seq: Array) -> tuple[Array, None]:
-      return fitness_value, None
-
-    weight = weight_fn(sequence, mock_fitness_fn, beta)
-
-    assert jnp.isneginf(weight)
-
-  def test_weight_fn_zero_beta(self) -> None:
-    """Test weight_fn with zero beta (cold temperature).
-
-    Args:
-        None
-
-    Returns:
-        None
-
-    Raises:
-        AssertionError: If weight is not zero.
-
-    Example:
-        >>> test_weight_fn_zero_beta()
-
-    """
-    sequence = jnp.array([1, 2, 3])
-    fitness_value = jnp.array(5.0)
-    beta = jnp.array(0.0)
-
-    def mock_fitness_fn(seq: Array) -> tuple[Array, None]:
-      return fitness_value, None
-
-    weight = weight_fn(sequence, mock_fitness_fn, beta)
-
-    chex.assert_trees_all_close(weight, jnp.array(0.0, dtype=jnp.bfloat16), rtol=1e-5)
-
-  def test_weight_fn_jit_compatible(self) -> None:
-    """Test that weight_fn is JIT-compatible.
-
-    Args:
-        None
-
-    Returns:
-        None
-
-    Raises:
-        AssertionError: If JIT compilation fails.
-
-    Example:
-        >>> test_weight_fn_jit_compatible()
-
-    """
-    sequence = jnp.array([1, 2, 3, 4, 5])
-    fitness_value = jnp.array(3.0)
-    beta = jnp.array(0.8)
-
-    def mock_fitness_fn(seq: Array) -> tuple[Array, None]:
-      return fitness_value, None
-
-    jitted_weight_fn = jax.jit(weight_fn, static_argnums=1)
-    weight = jitted_weight_fn(sequence, mock_fitness_fn, beta)
-
-    expected_weight = jnp.asarray(beta * fitness_value, dtype=jnp.bfloat16)
-    chex.assert_trees_all_close(weight, expected_weight, rtol=1e-2)
 
 
 class TestMigrate:
@@ -279,7 +66,6 @@ class TestMigrate:
 
     return SamplerState(
       sequence=particles,
-      fitness=jnp.ones((n_islands, population_size)),
       key=jax.random.PRNGKey(42),
       blackjax_state=blackjax_state,
       step=jnp.array(0, dtype=jnp.int32),
@@ -315,8 +101,8 @@ class TestMigrate:
       sequences: Array,
       key: PRNGKeyArray,
       _: None,
-    ) -> tuple[Array, None]:
-      return jnp.ones((sequences.shape[0],)), None
+    ) -> Array:
+      return jnp.ones((sequences.shape[0],))
 
     updated_state, num_accepted, migration_info = migrate(
       mock_island_state,
@@ -371,9 +157,9 @@ class TestMigrate:
       sequences: Array,
       key: PRNGKeyArray,
       _: None,
-    ) -> tuple[Array, None]:
+    ) -> Array:
       # Return different fitness for different sequences
-      return jnp.array([1.0, 2.0, 3.0])[: sequences.shape[0]], None
+      return jnp.array([1.0, 2.0, 3.0])[: sequences.shape[0]]
 
     updated_state, num_accepted, migration_info = migrate(
       mock_island_state,
@@ -423,9 +209,9 @@ class TestMigrate:
       sequences: Array,
       key: PRNGKeyArray,
       _: None,
-    ) -> tuple[Array, None]:
+    ) -> Array:
       # Return infinite fitness
-      return jnp.full((sequences.shape[0],), jnp.inf), None
+      return jnp.full((sequences.shape[0],), jnp.inf)
 
     updated_state, num_accepted, migration_info = migrate(
       mock_island_state,
@@ -468,8 +254,8 @@ class TestMigrate:
       sequences: Array,
       key: PRNGKeyArray,
       _: None,
-    ) -> tuple[Array, None]:
-      return jnp.ones((sequences.shape[0],)), None
+    ) -> Array:
+      return jnp.ones((sequences.shape[0],))
 
     jitted_migrate = jax.jit(
       migrate,
@@ -549,7 +335,6 @@ class TestRunPRSMCLoop:
 
     return SamplerState(
       sequence=particles,
-      fitness=jnp.ones((n_islands, population_size, 1), dtype=jnp.float32),  # Match output shape
       key=island_keys,  # Per-island keys: shape (n_islands, 2)
       blackjax_state=blackjax_state,
       step=jnp.zeros(n_islands, dtype=jnp.int32),  # Per-island step counter
@@ -579,7 +364,6 @@ class TestRunPRSMCLoop:
 
     """
     num_steps = 2
-    sequence_type = "protein"
     resampling_approach = "multinomial"
     population_size = 4
     n_islands = 2
@@ -590,9 +374,14 @@ class TestRunPRSMCLoop:
       sequence: Array,
       key: PRNGKeyArray,
       _: None,
-    ) -> tuple[Array, None]:
+    ) -> Array:
       """Mock fitness function that returns a scalar fitness value for a single sequence."""
-      return jnp.array([1.0], dtype=jnp.float32), None
+      return jnp.array(1.0, dtype=jnp.float32)
+
+    def mock_mutation_fn(
+        key: PRNGKeyArray, sequence: Array, context: None
+    ) -> tuple[Array, None]:
+        return sequence, None
 
     def mock_annealing_fn(step: int) -> Array:
       return jnp.array(1.0)
@@ -603,13 +392,13 @@ class TestRunPRSMCLoop:
     final_state = run_prsmc_loop(
       num_steps=num_steps,
       initial_state=mock_initial_state,
-      sequence_type=sequence_type,
       resampling_approach=resampling_approach,
       population_size=population_size,
       n_islands=n_islands,
       exchange_frequency=exchange_frequency,
       n_exchange_attempts=n_exchange_attempts,
       fitness_fn=mock_fitness_fn,
+      mutation_fn=mock_mutation_fn,
       annealing_fn=mock_annealing_fn,
       writer_callback=mock_writer_callback,
     )
@@ -666,7 +455,6 @@ class TestRunPRSMCLoop:
 
     single_island_state = SamplerState(
       sequence=particles,
-      fitness=jnp.ones((n_islands, population_size, 1), dtype=jnp.float32),
       key=jax.random.split(jax.random.PRNGKey(42), n_islands),
       blackjax_state=blackjax_state,
       step=jnp.array(0, dtype=jnp.int32),
@@ -680,7 +468,6 @@ class TestRunPRSMCLoop:
     )
 
     num_steps = 2
-    sequence_type = "protein"
     resampling_approach = "multinomial"
     exchange_frequency = 1
     n_exchange_attempts = 2
@@ -689,9 +476,14 @@ class TestRunPRSMCLoop:
       sequence: Array,
       key: PRNGKeyArray | None,
       beta: Array | None,
-    ) -> tuple[Array, None]:
+    ) -> Array:
       """Mock fitness function that returns a scalar fitness value and None."""
-      return jnp.array([1.0], dtype=jnp.float32), None
+      return jnp.array(1.0, dtype=jnp.float32)
+
+    def mock_mutation_fn(
+        key: PRNGKeyArray, sequence: Array, context: None
+    ) -> tuple[Array, None]:
+        return sequence, None
 
     def mock_annealing_fn(step: int) -> float:
       """Mock annealing function."""
@@ -703,13 +495,13 @@ class TestRunPRSMCLoop:
     final_state = run_prsmc_loop(
       num_steps=num_steps,
       initial_state=single_island_state,
-      sequence_type=sequence_type,
       resampling_approach=resampling_approach,
       population_size=population_size,
       n_islands=n_islands,
       exchange_frequency=exchange_frequency,
       n_exchange_attempts=n_exchange_attempts,
       fitness_fn=mock_fitness_fn,
+      mutation_fn=mock_mutation_fn,
       annealing_fn=mock_annealing_fn,
       writer_callback=mock_writer_callback,
     )
@@ -721,105 +513,69 @@ class TestRunPRSMCLoop:
     else:
       assert final_state.step == num_steps
 
-  def test_run_prsmc_loop_nucleotide_sequence(
-    self,
-    mock_initial_state: SamplerState,
+  def test_e2e_prsmc_sampler_improves_fitness_and_migrates(
+      self, mock_initial_state: SamplerState
   ) -> None:
-    """Test run_prsmc_loop with nucleotide sequences.
+      """An end-to-end test to validate that the PRSMC sampler improves population fitness and performs migrations."""
+      num_steps = 20
+      n_islands, population_size, seq_length = mock_initial_state.sequence.shape
 
-    Args:
-        mock_initial_state: Fixture providing mock initial state.
+      # A simple fitness function where lower sequence values are better
+      def simple_fitness_fn(
+          key: PRNGKeyArray, sequence: Array, beta: float | None
+      ) -> Array:
+          return -jnp.mean(sequence, axis=-1, dtype=jnp.float32)
 
-    Returns:
-        None
+      # A mutation function that randomly perturbs the sequence
+      def mutation_fn(
+          key: PRNGKeyArray, sequence: Array, context: None
+      ) -> tuple[Array, None]:
+          mutation = jax.random.randint(
+              key, sequence.shape, -3, 3, dtype=jnp.int8
+          )
+          return jnp.clip(sequence + mutation, 0, 19), None
 
-    Raises:
-        AssertionError: If loop fails with nucleotide sequences.
+      def mock_annealing_fn(step: int) -> Array:
+          return jnp.array(1.0)
 
-    Example:
-        >>> test_run_prsmc_loop_nucleotide_sequence(mock_initial_state)
+      # A writer callback to store the number of accepted swaps
+      accepted_swaps = []
 
-    """
-    # Modify state for nucleotide sequences
-    n_islands = 2
-    population_size = 4
-    seq_length = 6
+      def mock_writer_callback(data: dict) -> None:
+          accepted_swaps.append(data["num_accepted_swaps"])
 
-    # Use int8 dtype for sequences (nucleotide range 0-4)
-    particles = jax.random.randint(
-      jax.random.PRNGKey(0),
-      (n_islands, population_size, seq_length),
-      0,
-      4,  # Nucleotide range
-      dtype=jnp.int8,
-    )
-    
-    # Create batched weights and update_parameters for each island
-    weights_per_island = jnp.ones((n_islands, population_size), dtype=jnp.float32) / population_size
-    mutation_rates_per_island = jnp.full((n_islands, population_size), 0.1, dtype=jnp.float32)
-    
-    # Create BlackJAX states for each island using vmap
-    blackjax_state = vmap(
-      lambda p, w, mr: SMCState(
-        particles=p,
-        weights=w,
-        update_parameters={"mutation_rate": mr},
+      # Calculate initial mean fitness
+      initial_fitness = jax.vmap(simple_fitness_fn, in_axes=(None, 0, None))(
+          None, mock_initial_state.sequence.reshape(-1, seq_length), None
       )
-    )(particles, weights_per_island, mutation_rates_per_island)
+      initial_mean_fitness = jnp.mean(initial_fitness)
 
-    nucleotide_state = SamplerState(
-      sequence=particles,
-      fitness=jnp.ones((n_islands, population_size, 1), dtype=jnp.float32),
-      key=jax.random.split(jax.random.PRNGKey(42), n_islands),
-      blackjax_state=blackjax_state,
-      step=jnp.array(0, dtype=jnp.int32),
-      additional_fields={
-        "beta": jnp.array([0.5, 1.0]),
-        "mean_fitness": jnp.ones((n_islands,)),
-        "max_fitness": jnp.ones((n_islands,)),
-        "ess": jnp.full((n_islands,), population_size / 2.0),
-        "logZ_estimate": jnp.zeros((n_islands,)),
-      },
-    )
+      # Run the PRSMC loop
+      final_state = run_prsmc_loop(
+          num_steps=num_steps,
+          initial_state=mock_initial_state,
+          resampling_approach="systematic",
+          population_size=population_size,
+          n_islands=n_islands,
+          exchange_frequency=1,
+          n_exchange_attempts=5,
+          fitness_fn=simple_fitness_fn,
+          mutation_fn=mutation_fn,
+          annealing_fn=mock_annealing_fn,
+          writer_callback=mock_writer_callback,
+      )
 
-    num_steps = 1
-    sequence_type = "nucleotide"
-    resampling_approach = "multinomial"
-    exchange_frequency = 1
-    n_exchange_attempts = 2
+      # Calculate final mean fitness
+      final_fitness = jax.vmap(simple_fitness_fn, in_axes=(None, 0, None))(
+          None, final_state.sequence.reshape(-1, seq_length), None
+      )
+      final_mean_fitness = jnp.mean(final_fitness)
 
-    def mock_fitness_fn(
-      sequence: Array,
-      key: PRNGKeyArray | None,
-      beta: Array | None,
-    ) -> tuple[Array, None]:
-      """Mock fitness function that returns a scalar fitness value and None."""
-      return jnp.array([1.0], dtype=jnp.float32), None
+      # Assert that the average fitness has improved
+      assert final_mean_fitness > initial_mean_fitness
+      # Assert that replica exchange has occurred
+      assert sum(accepted_swaps) > 0
 
-    def mock_annealing_fn(step: int) -> float:
-      """Mock annealing function."""
-      return 1.0
-
-    def mock_writer_callback(data: dict) -> None:
-      pass
-
-    final_state = run_prsmc_loop(
-      num_steps=num_steps,
-      initial_state=nucleotide_state,
-      sequence_type=sequence_type,
-      resampling_approach=resampling_approach,
-      population_size=population_size,
-      n_islands=n_islands,
-      exchange_frequency=exchange_frequency,
-      n_exchange_attempts=n_exchange_attempts,
-      fitness_fn=mock_fitness_fn,
-      annealing_fn=mock_annealing_fn,
-      writer_callback=mock_writer_callback,
-    )
-
-    assert isinstance(final_state, SamplerState)
-    # Verify output sequences are still in nucleotide range
-    assert jnp.all((final_state.sequence >= 0) & (final_state.sequence < 4))
 
 
 class TestMigrationInfo:
@@ -931,7 +687,6 @@ class TestPRSMCOutput:
 
     state = SamplerState(
       sequence=particles,
-      fitness=jnp.ones((n_islands, population_size)),
       key=jax.random.PRNGKey(42),
       blackjax_state=blackjax_state,
       step=jnp.array(1, dtype=jnp.int32),

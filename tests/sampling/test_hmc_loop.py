@@ -39,10 +39,10 @@ def simple_fitness_fn():
   return fitness_fn
 
 
-@pytest.skip(reason="Tests need to be updated for new HMC loop implementation.")
 class TestRunHMCLoop:
   """Test the run_hmc_loop function."""
 
+  @pytest.mark.skip(reason="Tests need to be updated for new HMC loop implementation.")
   def test_loop_executes(self, simple_fitness_fn) -> None:
     """Test that the HMC loop executes successfully.
     
@@ -79,6 +79,7 @@ class TestRunHMCLoop:
     assert_shape(final_state.sequence, (5,))
     assert isinstance(metrics, dict)
 
+  @pytest.mark.skip(reason="Tests need to be updated for new HMC loop implementation.")
   def test_loop_with_io_callback(self, simple_fitness_fn) -> None:
     """Test HMC loop with I/O callback.
     
@@ -120,6 +121,7 @@ class TestRunHMCLoop:
     assert final_state.step == 3
     assert len(callback_data) == 3
 
+  @pytest.mark.skip(reason="Tests need to be updated for new HMC loop implementation.")
   def test_loop_state_progression(self, simple_fitness_fn) -> None:
     """Test that state progresses correctly through HMC loop.
     
@@ -154,6 +156,7 @@ class TestRunHMCLoop:
       )
       assert final_state.step == num_samples
 
+  @pytest.mark.skip(reason="Tests need to be updated for new HMC loop implementation.")
   def test_loop_returns_empty_metrics(self, simple_fitness_fn) -> None:
     """Test that HMC loop returns empty metrics dictionary.
     
@@ -189,6 +192,7 @@ class TestRunHMCLoop:
     assert metrics == {}
     assert isinstance(metrics, dict)
 
+  @pytest.mark.skip(reason="Tests need to be updated for new HMC loop implementation.")
   def test_loop_ignores_mutation_fn(self, simple_fitness_fn) -> None:
     """Test that HMC loop ignores mutation_fn parameter.
     

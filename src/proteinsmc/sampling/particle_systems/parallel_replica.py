@@ -60,40 +60,6 @@ class PRSMCOutput:
   migration_info: MigrationInfo  # Migration events for this step
 
 
-def mutation_update_fn(
-  keys: PRNGKeyArray,
-  sequences: Array,
-  update_parameters: dict[str, Array],
-  q_states: Int,
-) -> tuple[Array, None]:
-  """Apply mutation to the resampled sequences."""
-  mutated_sequence = jax.vmap(
-    partial(mutate, q_states=q_states),
-    in_axes=(0, 0, 0),
-  )(keys, sequences, update_parameters["mutation_rate"])
-
-  return mutated_sequence, None
-
-
-def weight_fn(
-  sequence: Array,
-  fitness_fn_partial: Callable,
-  beta: Float,
-) -> Array:
-  """Weight function for the SMC step for a single particle."""
-  fitness_values, _ = fitness_fn_partial(sequence)
-  # Squeeze to ensure we have a scalar fitness value
-  fitness_scalar = jnp.squeeze(fitness_values)
-  return jnp.array(
-    jnp.where(
-      jnp.isneginf(fitness_scalar),
-      -jnp.inf,
-      beta * fitness_scalar,
-    ),
-    dtype=jnp.float32,
-  )
-
-
 def migrate(  # noqa: PLR0913
   island_states: SamplerState,
   meta_beta: Float,
@@ -161,22 +127,24 @@ def migrate(  # noqa: PLR0913
     particle1 = current_particles[idx1, particle_idx[0]]
     particle2 = current_particles[idx2, particle_idx[1]]
 
-    fitness1, _ = fitness_fn(jnp.expand_dims(particle1, 0), key_acceptance, None)
-    fitness2, _ = fitness_fn(jnp.expand_dims(particle2, 0), key_acceptance, None)
+    fitness1 = fitness_fn(jnp.expand_dims(particle1, 0), key_acceptance, None)
+    fitness2 = fitness_fn(jnp.expand_dims(particle2, 0), key_acceptance, None)
 
     log_acceptance_ratio = (
-      meta_beta * (all_betas[idx1] - all_betas[idx2]) * (fitness2[0] - fitness1[0])
+      meta_beta * (all_betas[idx1] - all_betas[idx2]) * (fitness2 - fitness1)
     )
     log_acceptance_ratio = jnp.array(
       jnp.where(
-        jnp.isinf(fitness1[0]) | jnp.isinf(fitness2[0]),
+        jnp.isinf(fitness1) | jnp.isinf(fitness2),
         -jnp.inf,
         log_acceptance_ratio,
       ),
       dtype=jnp.float32,
     )
+    log_acceptance_ratio = jnp.squeeze(log_acceptance_ratio)
 
     accept = jnp.log(jax.random.uniform(key_acceptance)) < log_acceptance_ratio
+    accept = jnp.squeeze(accept)
 
     new_particles = lax.cond(
       accept,
@@ -260,22 +228,18 @@ def migrate(  # noqa: PLR0913
 def run_prsmc_loop(  # noqa: PLR0913
   num_steps: int,
   initial_state: SamplerState,
-  sequence_type: SequenceType,
   resampling_approach: str,
   population_size: Int,
   n_islands: Int,
   exchange_frequency: Int,
   n_exchange_attempts: Int,
   fitness_fn: StackedFitnessFn,
+  mutation_fn: Callable,
   annealing_fn: AnnealingFn,
   writer_callback: Callable,
 ) -> SamplerState:
   """JIT-compiled Parallel Replica SMC loop."""
-  q_states = 4 if sequence_type == "nucleotide" else 20
-  mutation_partial = partial(
-    mutation_update_fn,
-    q_states=q_states,
-  )
+  vmap_mutation_fn = vmap(mutation_fn, in_axes=(0, 0, None))
 
   def _prsmc_step(
     carry_state: SamplerState,
@@ -290,36 +254,49 @@ def run_prsmc_loop(  # noqa: PLR0913
     key_next_loop = split_keys[:, 3, :]  # (n_islands, 2) - for next iteration
     betas = carry_state.additional_fields["beta"]
 
-    def single_island_weight_fn(beta: Float, key: PRNGKeyArray, sequence: Array) -> Array:
-      fitness_fn_partial = partial(fitness_fn, key, None)
-      return weight_fn(sequence, fitness_fn_partial, beta)
-
-    # Batch the weight function for all particles
-    def batched_island_weight_fn(beta: Float, key: PRNGKeyArray, sequences: Array) -> Array:
-      """Weight function that takes all particles and returns all weights."""
-      return vmap(lambda seq: single_island_weight_fn(beta, key, seq))(sequences)
+    def single_island_weight_fn(
+        beta: Float, keys: PRNGKeyArray, sequences: Array
+    ) -> Array:
+        """Weight function that takes all particles and returns all weights."""
+        population_size = sequences.shape[0]
+        fitness_keys = jax.random.split(keys, population_size)
+        return vmap(fitness_fn, in_axes=(0, 0, None))(
+            fitness_keys, sequences, beta
+        )
 
     smc_step_fn = partial(
-      blackjax_smc_step,
-      update_fn=mutation_partial,
-      resample_fn=partial(resample, resampling_approach),
+        blackjax_smc_step,
+        update_fn=vmap_mutation_fn,
+        resample_fn=partial(resample, resampling_approach),
     )
 
     # Apply one SMC step to each island
     next_blackjax_states, infos = vmap(
-      lambda state, key, beta: smc_step_fn(
-        rng_key=key,
-        state=state,
-        weight_fn=partial(batched_island_weight_fn, beta, key),
-      ),
-      in_axes=(0, 0, 0),
-    )(carry_state.blackjax_state, keys_islands, betas)
+        lambda state, key, beta, fitness_keys: smc_step_fn(
+            rng_key=key,
+            state=state,
+            weight_fn=partial(
+                single_island_weight_fn,
+                jnp.squeeze(beta),
+                jnp.squeeze(fitness_keys),
+            ),
+        ),
+        in_axes=(0, 0, 0, 0),
+    )(
+        carry_state.blackjax_state,
+        keys_islands,
+        betas,
+        keys_fitness_islands,
+    )
 
     def extract_fitness_for_island(particles: Array, key: PRNGKeyArray) -> Array:
-      """Extract fitness values for all particles in one island."""
-      fitness_vec = vmap(lambda seq: fitness_fn(seq, key, None))(particles)
-
-      return fitness_vec[0]
+        """Extract fitness values for all particles in one island."""
+        population_size = particles.shape[0]
+        fitness_keys = jax.random.split(key, population_size)
+        fitness_vec = vmap(fitness_fn, in_axes=(0, 0, None))(
+            fitness_keys, particles, None
+        )
+        return fitness_vec
 
     fitness_values = vmap(extract_fitness_for_island, in_axes=(0, 0))(
       next_blackjax_states.particles,  # type: ignore[attr-access]
@@ -347,7 +324,6 @@ def run_prsmc_loop(  # noqa: PLR0913
 
     state_after_smc = SamplerState(
       sequence=next_blackjax_states.particles,  # type: ignore[call-arg]
-      fitness=fitness_values,
       key=key_next_loop,
       blackjax_state=next_blackjax_states,
       step=carry_state.step + 1,
