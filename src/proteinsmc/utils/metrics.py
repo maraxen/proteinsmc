@@ -133,5 +133,103 @@ def shannon_entropy(seqs: EvoSequence) -> Float:
     position_entropies = vmap(calculate_position_entropy)(seqs.T)
     entropy = jnp.sum(position_entropies)
     return jnp.divide(entropy, seq_length)
-  logger.warning("Warning: shannon_entropy received unexpected type %s", type(seqs))
   return jnp.array(0.0, dtype=jnp.float32)
+
+
+def kl_divergence(p: Array, q: Array) -> Array:
+  """Calculate Kullback-Leibler Divergence between two distributions.
+
+  This measures how one probability distribution diverges from a second, expected probability distribution.
+
+  Args:
+      p: First probability distribution.
+      q: Second probability distribution.
+
+  Returns:
+      KL Divergence value.
+
+  """
+  p_norm = p / jnp.sum(p)
+  q_norm = q / jnp.sum(q)
+
+  epsilon = 1e-10
+  p_norm = jnp.clip(p_norm, epsilon, 1.0)
+  q_norm = jnp.clip(q_norm, epsilon, 1.0)
+
+  return jnp.sum(p_norm * (jnp.log(p_norm) - jnp.log(q_norm)))
+
+
+def jeffreys_divergence(p: Array, q: Array) -> Array:
+  """Calculate Jeffrey's Divergence between two distributions.
+
+  This effectively quantifies the magnitude of evolutionary change.
+
+  Args:
+      p: First probability distribution.
+      q: Second probability distribution.
+
+  Returns:
+      Jeffrey's Divergence value.
+
+  """
+  return kl_divergence(p, q) + kl_divergence(q, p)
+
+
+def jensen_shannon_divergence(p: Array, q: Array) -> Array:
+  """Calculate Jensen-Shannon Divergence between two distributions.
+
+  This provides a symmetric and smoothed measure of divergence.
+
+  Args:
+      p: First probability distribution.
+      q: Second probability distribution.
+
+  Returns:
+      Jensen-Shannon Divergence value.
+
+  """
+  m = 0.5 * (p + q)
+  return 0.5 * kl_divergence(p, m) + 0.5 * kl_divergence(q, m)
+
+
+def calculate_barrier_crossing_frequency(
+  fitness_history: Array, fitness_threshold: Float = None
+) -> Float:
+  """Calculate frequency of fitness barrier crossings.
+
+  Args:
+      fitness_history: Array of fitness values over generations.
+      fitness_threshold: Optional threshold defining a barrier.
+
+  Returns:
+      Frequency of barrier crossings.
+
+  """
+  if fitness_threshold is None:
+    # Auto-determine threshold as median fitness
+    fitness_threshold = jnp.median(fitness_history)
+
+  # Count sign changes in (fitness - threshold)
+  diff = fitness_history - fitness_threshold
+  crossings = jnp.sum(jnp.diff(jnp.sign(diff)) != 0)
+
+  # Return frequency (crossings per generation)
+  return crossings / (len(fitness_history) - 1)
+
+
+def outcome_shannon_entropy(outcomes: Array) -> Float:
+  """Calculate Shannon entropy of evolutionary outcomes.
+
+  Args:
+      outcomes: Array of observed evolutionary outcomes (e.g., fitness values).
+
+  Returns:
+      Shannon entropy value.
+
+  """
+  # Calculate probabilities of unique outcomes
+  _, counts = jnp.unique(outcomes, return_counts=True)
+  probabilities = counts / jnp.sum(counts)
+
+  # Calculate Shannon entropy
+  return -jnp.sum(probabilities * jnp.log2(probabilities + 1e-10))

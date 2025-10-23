@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import enum
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
@@ -38,20 +37,19 @@ BlackjaxSMCState = (
   BaseSMCState | TemperedSMCState | InnerMCMCState | PartialPosteriorsSMCState | PretuningSMCState
 )
 
-
-class SMCAlgorithm(enum.Enum):
-  """Enum for SMC algorithms."""
-
-  BASE = "BaseSMC"
-  ADAPTIVE_TEMPERED = "AdaptiveTemperedSMC"
-  ANNEALING = "AnnealedSMC"
-  PARALLEL_REPLICA = "ParallelReplicaSMC"
-  FROM_MCMC = "FromMCMC"
-  INNER_MCMC = "InnerMCMC"
-  PARTIAL_POSTERIORS = "PartialPosteriors"
-  PRETUNING = "PretuningSMC"
-  TEMPERED = "TemperedSMC"
-  CUSTOM = "CustomSMC"
+# Type alias for SMC algorithm variants
+SMCAlgorithmType = Literal[
+  "BaseSMC",
+  "AdaptiveTemperedSMC",
+  "AnnealedSMC",
+  "ParallelReplicaSMC",
+  "FromMCMC",
+  "InnerMCMC",
+  "PartialPosteriors",
+  "PretuningSMC",
+  "TemperedSMC",
+  "CustomSMC",
+]
 
 
 @dataclass(frozen=True)
@@ -61,9 +59,7 @@ class SMCConfig(BaseSamplerConfig):
   population_size: int = field(default=64)
   """Number of sequences in the population."""
   sampler_type: str = "smc"
-  algorithm: Literal["AdaptiveTemperedSMC", "ParallelReplicaSMC", "CustomSMC"] = (
-    "AdaptiveTemperedSMC"
-  )
+  algorithm: SMCAlgorithmType = "BaseSMC"
   annealing_config: AnnealingConfig | None = None
   """Annealing schedule configuration."""
   resampling_approach: Literal["systematic", "multinomial", "stratified", "residual"] = (
