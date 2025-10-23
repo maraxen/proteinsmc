@@ -31,23 +31,6 @@ if TYPE_CHECKING:
   from proteinsmc.models.smc import PopulationSequences, SMCAlgorithmType
 
 
-# register SMCInfo as a pytree node
-def _smcinfo_flatten(smc_info: SMCInfo):
-  return (smc_info.ancestors, smc_info.log_likelihood_increment, smc_info.update_info), None
-
-
-def _smcinfo_unflatten(aux_data, children):
-  ancestors, lli, update_info = children
-  return SMCInfo(ancestors, lli, update_info)
-
-
-jax.tree_util.register_pytree_node(
-  SMCInfo,
-  _smcinfo_flatten,
-  _smcinfo_unflatten,
-)
-
-
 @dataclass
 class SMCOutput:
   """Output of a single SMC step."""
