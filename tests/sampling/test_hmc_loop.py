@@ -65,7 +65,6 @@ class TestRunHMCLoop:
 
     initial_state = SamplerState(
       sequence=sequence,
-      fitness=fitness,
       key=key,
       step=jnp.array(0),
     )
@@ -98,11 +97,9 @@ class TestRunHMCLoop:
     """
     key = jax.random.PRNGKey(42)
     sequence = jnp.array([1.0, 2.0, 3.0, 4.0, 5.0], dtype=jnp.float32)
-    fitness = simple_fitness_fn(key, sequence)
 
     initial_state = SamplerState(
       sequence=sequence,
-      fitness=fitness,
       key=key,
       step=jnp.array(0),
     )
@@ -145,7 +142,6 @@ class TestRunHMCLoop:
 
     initial_state = SamplerState(
       sequence=sequence,
-      fitness=fitness,
       key=key,
       step=jnp.array(0),
     )
@@ -180,7 +176,6 @@ class TestRunHMCLoop:
 
     initial_state = SamplerState(
       sequence=sequence,
-      fitness=fitness,
       key=key,
       step=jnp.array(0),
     )
@@ -216,7 +211,6 @@ class TestRunHMCLoop:
 
     initial_state = SamplerState(
       sequence=sequence,
-      fitness=fitness,
       key=key,
       step=jnp.array(0),
     )

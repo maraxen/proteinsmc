@@ -92,7 +92,6 @@ class TestRunMCMCLoop:
 
     initial_state = SamplerState(
       sequence=sequence,
-      fitness=fitness,
       key=key,
       step=jnp.array(0),
     )
@@ -131,7 +130,6 @@ class TestRunMCMCLoop:
 
     initial_state = SamplerState(
       sequence=sequence,
-      fitness=fitness,
       key=key,
       step=jnp.array(0),
     )
@@ -177,7 +175,6 @@ class TestRunMCMCLoop:
 
     initial_state = SamplerState(
       sequence=sequence,
-      fitness=fitness,
       key=key,
       step=jnp.array(0),
     )
