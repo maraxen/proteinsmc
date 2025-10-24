@@ -152,15 +152,15 @@ def kl_divergence(p: Array, q: Array) -> Array:
   # Handle edge case where distributions are all zeros (e.g., empty sequences)
   p_sum = jnp.sum(p)
   q_sum = jnp.sum(q)
-  
+
   # If both are zero, they're identical (no divergence)
   if jnp.allclose(p_sum, 0.0) and jnp.allclose(q_sum, 0.0):
     return jnp.array(0.0)
-  
+
   # If only one is zero, divergence is infinite (return large value)
   if jnp.allclose(p_sum, 0.0) or jnp.allclose(q_sum, 0.0):
     return jnp.array(jnp.inf)
-  
+
   p_norm = p / p_sum
   q_norm = q / q_sum
 

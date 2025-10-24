@@ -6,7 +6,6 @@ from pathlib import Path
 import jax.numpy as jnp
 
 from proteinsmc.io import read_lineage_data
-from proteinsmc.oed.structs import OEDDesign
 from proteinsmc.utils import metrics
 
 
@@ -19,7 +18,9 @@ def test_deserialization_and_metrics(output_dir: str = "oed_results") -> None:
 
   if not arrayrecord_files:
     print(f"❌ No arrayrecord files found in {output_dir}")
-    print(f"   Run a quick test first: python src/proteinsmc/oed/run.py --num_initial_experiments 1 --num_oed_iterations 0")
+    print(
+      "   Run a quick test first: python src/proteinsmc/oed/run.py --num_initial_experiments 1 --num_oed_iterations 0"
+    )
     sys.exit(1)
 
   print(f"✅ Found {len(arrayrecord_files)} arrayrecord files")
@@ -34,6 +35,7 @@ def test_deserialization_and_metrics(output_dir: str = "oed_results") -> None:
   except Exception as e:
     print(f"\n❌ Deserialization failed: {e}")
     import traceback
+
     traceback.print_exc()
     sys.exit(1)
 
@@ -62,7 +64,7 @@ def test_deserialization_and_metrics(output_dir: str = "oed_results") -> None:
   final_sequences = last_record["sequences"]
   final_fitness = last_record["fitness"]
 
-  print(f"\n📈 Data shapes:")
+  print("\n📈 Data shapes:")
   print(f"   Initial sequences: {initial_sequences.shape} (dtype={initial_sequences.dtype})")
   print(f"   Initial fitness: {initial_fitness.shape} (dtype={initial_fitness.dtype})")
   print(f"   Final sequences: {final_sequences.shape} (dtype={final_sequences.dtype})")
@@ -77,12 +79,8 @@ def test_deserialization_and_metrics(output_dir: str = "oed_results") -> None:
 
   # Approach 1: Histogram-based
   n_bins = 20
-  initial_fitness_hist, _ = jnp.histogram(
-    initial_fitness, bins=n_bins, density=False
-  )
-  final_fitness_hist, _ = jnp.histogram(
-    final_fitness, bins=n_bins, density=False
-  )
+  initial_fitness_hist, _ = jnp.histogram(initial_fitness, bins=n_bins, density=False)
+  final_fitness_hist, _ = jnp.histogram(final_fitness, bins=n_bins, density=False)
   initial_fitness_hist = initial_fitness_hist.astype(jnp.float32)
   final_fitness_hist = final_fitness_hist.astype(jnp.float32)
 
@@ -119,21 +117,21 @@ def test_deserialization_and_metrics(output_dir: str = "oed_results") -> None:
   print(f"   JSD from original population: {jsd:.6f}")
 
   # Check for NaNs
-  print(f"\n🔍 NaN check:")
+  print("\n🔍 NaN check:")
   print(f"   Info gain is NaN: {jnp.isnan(info_gain_hist)}")
   print(f"   Barrier freq is NaN: {jnp.isnan(barrier_freq)}")
   print(f"   Final entropy is NaN: {jnp.isnan(final_entropy)}")
   print(f"   JSD is NaN: {jnp.isnan(jsd)}")
 
   if jnp.isnan(info_gain_hist):
-    print(f"\n⚠️  Info gain is NaN - debugging:")
+    print("\n⚠️  Info gain is NaN - debugging:")
     print(f"   Initial hist: {initial_fitness_hist}")
     print(f"   Final hist: {final_fitness_hist}")
     print(f"   Sum initial: {jnp.sum(initial_fitness_hist)}")
     print(f"   Sum final: {jnp.sum(final_fitness_hist)}")
 
   if jnp.isnan(jsd):
-    print(f"\n⚠️  JSD is NaN - debugging:")
+    print("\n⚠️  JSD is NaN - debugging:")
     print(f"   p: {p}")
     print(f"   q_dist: {q_dist}")
     print(f"   Sum p: {jnp.sum(p)}")
