@@ -11,7 +11,7 @@ from typing import Any
 
 import msgpack_numpy
 from array_record.python.array_record_module import ArrayRecordReader, ArrayRecordWriter
-from flax.serialization import msgpack_restore, msgpack_serialize
+from flax.serialization import msgpack_restore, msgpack_serialize, to_state_dict
 from jaxtyping import PyTree
 
 from proteinsmc.models.sampler_base import SamplerOutput
@@ -109,7 +109,8 @@ def create_writer_callback(path: str) -> tuple[ArrayRecordWriter, Callable]:
         sampler_output: The SamplerOutput data to write (will be serialized with msgpack).
 
     """
-    serialized = msgpack_serialize(sampler_output)
+    state_dict = to_state_dict(sampler_output)
+    serialized = msgpack_serialize(state_dict)
     writer.write(serialized)
 
   return writer, writer_callback
