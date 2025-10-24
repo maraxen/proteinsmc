@@ -1,0 +1,67 @@
+{
+  "timestamp": "2025-10-23T10:18:06.883607",
+  "git_commit_hash": "8ab748d0f1c0022dec15e796f2eef14c57f58970",
+  "sampler_type": "smc",
+  "config": {
+    "prng_seed": 0,
+    "sampler_type": "smc",
+    "device_mesh_shape": null,
+    "axis_names": null,
+    "memory_config": {
+      "batch_size": 64,
+      "enable_batched_computation": true,
+      "device_memory_fraction": 0.8,
+      "auto_tuning_config": {
+        "enable_auto_tuning": true,
+        "probe_batch_sizes": [
+          16,
+          32,
+          64,
+          128,
+          256
+        ],
+        "max_probe_iterations": 3,
+        "memory_safety_factor": 0.8,
+        "performance_tolerance": 0.1
+      }
+    },
+    "fitness_evaluator": {
+      "fitness_functions": [
+        {
+          "name": "nk",
+          "n_states": 2,
+          "kwargs": {
+            "landscape": {
+              "interactions": "[[2]\n [0]\n [3]\n [2]]",
+              "fitness_tables": "[[[0.09083593 0.362208  ]\n  [0.62160695 0.1584264 ]]\n\n [[0.46911383 0.18134463]\n  [0.6051682  0.96511364]]\n\n [[0.4039625  0.17080724]\n  [0.8507167  0.8336115 ]]\n\n [[0.9288218  0.5314436 ]\n  [0.33923793 0.7788229 ]]]"
+            },
+            "n": 4,
+            "k": 1
+          }
+        }
+      ],
+      "combine_fn": {
+        "name": "sum",
+        "kwargs": {}
+      }
+    },
+    "seed_sequence": "",
+    "num_samples": 2,
+    "n_states": 2,
+    "mutation_rate": 0.1,
+    "diversification_ratio": 0.1,
+    "sequence_type": "nucleotide",
+    "combinations_mode": "zip",
+    "annealing_config": {
+      "annealing_fn": "linear",
+      "beta_min": 0.1,
+      "beta_max": 1.0,
+      "n_steps": 2,
+      "kwargs": {}
+    },
+    "population_size": 8,
+    "algorithm": "AdaptiveTemperedSMC",
+    "resampling_approach": "multinomial",
+    "smc_algo_kwargs": {}
+  }
+}

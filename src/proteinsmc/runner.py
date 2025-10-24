@@ -84,14 +84,7 @@ def _setup_writer_callback(path: Path) -> tuple[ArrayRecordWriter, Callable]:
   """Set up the writer callback for data tracking."""
   writer, writer_callback = create_writer_callback(str(path))
 
-  def _io_callback(
-    payload: dict[str, jax.Array],
-  ) -> None:
-    """JAX-compatible IO callback function."""
-    payload_np = {k: jax.device_get(v) for k, v in payload.items()}
-    writer_callback(payload=payload_np)
-
-  return writer, _io_callback
+  return writer, writer_callback
 
 
 def _setup_fitness_function(
@@ -107,6 +100,7 @@ def _setup_fitness_function(
     evaluator_config=config.fitness_evaluator,
     n_states=config.n_states,
     translate_func=translate_func,
+    batch_size=batch_size,
   )
 
   if config.memory_config.auto_tuning_config.enable_auto_tuning:
@@ -277,14 +271,45 @@ def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int 
     )
 
     logger.info("Starting sampler loop...")
-    final_state, _ = run_fn(
-      config=config,
-      initial_state=initial_states,
-      fitness_fn=fitness_fn,
-      mutation_fn=mutation_fn,
-      annealing_fn=annealing_fn,
-      io_callback=io_callback,
-    )
+    # Materialize initial states (one per sequence_type). For now we run the
+    # sampler for the first sequence type only (most experiments use a single
+    # sequence type). The per-sampler run functions expect explicit args
+    # rather than a single config object.
+    initial_states_list = list(initial_states)
+
+    if config.sampler_type == "smc":
+      # run_smc_loop expects: num_samples, algorithm, resampling_approach,
+      # initial_state, fitness_fn, mutation_fn, annealing_fn, writer_callback
+      num_samples = (
+        config.num_samples if isinstance(config.num_samples, int) else config.num_samples[0]
+      )
+      # Type narrowing: at this point we know config is SMCConfig
+      algorithm = config.algorithm  # type: ignore[attr-defined]
+      resampling_approach = config.resampling_approach  # type: ignore[attr-defined]
+      initial_state = initial_states_list[0]
+
+      final_state, _ = run_fn(
+        num_samples,
+        algorithm,
+        resampling_approach,
+        initial_state,
+        fitness_fn,
+        mutation_fn,
+        annealing_fn,
+        io_callback,
+      )
+    else:
+      # Fallback: call the run function with commonly used kwargs for other
+      # sampler implementations. This preserves backward compatibility with
+      # the previous invocation style used in tests/mocks.
+      final_state, _ = run_fn(
+        config=config,
+        initial_state=initial_states_list,
+        fitness_fn=fitness_fn,
+        mutation_fn=mutation_fn,
+        annealing_fn=annealing_fn,
+        io_callback=io_callback,
+      )
     jax.block_until_ready(final_state)
     logger.info("Sampler loop finished.")
 
