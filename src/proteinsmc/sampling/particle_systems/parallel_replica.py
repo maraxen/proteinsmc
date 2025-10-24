@@ -209,184 +209,226 @@ def migrate(  # noqa: PLR0913
   )
 
 
-def run_prsmc_loop(  # noqa: PLR0913
-  num_steps: int,
-  initial_state: SamplerState,
-  resampling_approach: str,
-  population_size: Int,
-  n_islands: Int,
-  exchange_frequency: Int,
-  n_exchange_attempts: Int,
-  fitness_fn: StackedFitnessFn,
-  mutation_fn: MutationFn,
-  annealing_fn: AnnealingFn,
-  writer_callback: Callable,
-) -> SamplerState:
-  """JIT-compiled Parallel Replica SMC loop."""
-  vmap_mutation_fn = jax.vmap(mutation_fn, in_axes=(0, 0, None))
+@partial(
+    jax.jit,
+    static_argnames=(
+        "chunk_size",
+        "resampling_approach",
+        "population_size",
+        "n_islands",
+        "exchange_frequency",
+        "n_exchange_attempts",
+        "fitness_fn",
+        "mutation_fn",
+        "annealing_fn",
+    ),
+)
+def _run_prsmc_chunk(
+    chunk_size: int,
+    initial_state: SamplerState,
+    resampling_approach: str,
+    population_size: Int,
+    n_islands: Int,
+    exchange_frequency: Int,
+    n_exchange_attempts: Int,
+    fitness_fn: StackedFitnessFn,
+    mutation_fn: MutationFn,
+    annealing_fn: AnnealingFn,
+) -> tuple[SamplerState, SamplerOutput]:
+    """JIT-compiled Parallel Replica SMC loop for a single chunk."""
+    vmap_mutation_fn = jax.vmap(mutation_fn, in_axes=(0, 0, None))
 
-  def _prsmc_step(
-    carry_state: SamplerState,
-    step_idx: Int,
-  ) -> tuple[SamplerState, None]:
-    # carry_state.key has shape (n_islands, 2) - split per island
-    # vmap over islands to split keys: (n_islands, 2) -> 4 x (n_islands, 2)
-    split_keys = vmap(lambda k: jax.random.split(k, 4))(carry_state.key)
-    keys_islands = split_keys[:, 0, :]  # (n_islands, 2) - for SMC step
-    keys_fitness_islands = split_keys[:, 1, :]  # (n_islands, 2) - for fitness eval
-    key_exchange = split_keys[0, 2, :]  # (2,) - single key for exchange (scalar across islands)
-    key_next_loop = split_keys[:, 3, :]  # (n_islands, 2) - for next iteration
-    betas = carry_state.additional_fields["beta"]
+    def _prsmc_step(
+        carry_state: SamplerState, _: Int
+    ) -> tuple[SamplerState, SamplerOutput]:
+        split_keys = vmap(lambda k: jax.random.split(k, 4))(carry_state.key)
+        keys_islands = split_keys[:, 0, :]
+        _ = split_keys[:, 1, :]
+        key_exchange = split_keys[0, 2, :]
+        key_next_loop = split_keys[:, 3, :]
+        betas = carry_state.additional_fields["beta"]
 
-    def single_island_weight_fn(beta: Float, key: PRNGKeyArray, sequence: Array) -> Array:
-      return fitness_fn(key, sequence, beta)
+        def single_island_weight_fn(
+            beta: Float, key: PRNGKeyArray, sequence: Array
+        ) -> Array:
+            return fitness_fn(key, sequence, beta)
 
-    # Batch the weight function for all particles
-    def batched_island_weight_fn(beta: Float, key: PRNGKeyArray, sequences: Array) -> Array:
-      """Weight function that takes all particles and returns all weights."""
-      fitness_keys = jax.random.split(key, sequences.shape[0])
-      return vmap(single_island_weight_fn, in_axes=(None, 0, 0))(beta, fitness_keys, sequences)
+        def batched_island_weight_fn(
+            beta: Float, key: PRNGKeyArray, sequences: Array
+        ) -> Array:
+            fitness_keys = jax.random.split(key, sequences.shape[0])
+            return vmap(single_island_weight_fn, in_axes=(None, 0, 0))(
+                beta, fitness_keys, sequences
+            )
 
-    smc_step_fn = partial(
-      blackjax_smc_step,
-      update_fn=vmap_mutation_fn,
-      resample_fn=partial(resample, resampling_approach),
-    )
-
-    # Apply one SMC step to each island
-    next_blackjax_states, infos = vmap(
-      lambda state, key, beta: smc_step_fn(
-        rng_key=key,
-        state=state,
-        weight_fn=partial(batched_island_weight_fn, beta, key),
-      ),
-      in_axes=(0, 0, 0),
-    )(carry_state.blackjax_state, keys_islands, betas)
-
-    ess = 1.0 / jnp.sum(next_blackjax_states.weights**2, axis=-1, keepdims=False)
-    mean_fitness = jnp.nansum(
-      next_blackjax_states.weights,
-      axis=-1,
-      keepdims=False,
-    )
-    max_fitness = jnp.max(
-      jnp.array(
-        jnp.where(
-          jnp.isfinite(next_blackjax_states.weights), next_blackjax_states.weights, -jnp.inf
+        smc_step_fn = partial(
+            blackjax_smc_step,
+            update_fn=vmap_mutation_fn,
+            resample_fn=partial(resample, resampling_approach),
         )
-      ),
-      axis=-1,
-      keepdims=False,
+
+        next_blackjax_states, infos = vmap(
+            lambda state, key, beta: smc_step_fn(
+                rng_key=key,
+                state=state,
+                weight_fn=partial(batched_island_weight_fn, beta, key),
+            ),
+            in_axes=(0, 0, 0),
+        )(carry_state.blackjax_state, keys_islands, betas)
+
+        ess = 1.0 / jnp.sum(next_blackjax_states.weights ** 2, axis=-1, keepdims=False)
+        mean_fitness = jnp.nansum(
+            next_blackjax_states.weights,
+            axis=-1,
+            keepdims=False,
+        )
+        max_fitness = jnp.max(
+            jnp.array(
+                jnp.where(
+                    jnp.isfinite(next_blackjax_states.weights),
+                    next_blackjax_states.weights,
+                    -jnp.inf,
+                )
+            ),
+            axis=-1,
+            keepdims=False,
+        )
+
+        logZ_estimates = (
+            carry_state.additional_fields["logZ_estimate"]
+            + infos.log_likelihood_increment
+        )
+
+        state_after_smc = SamplerState(
+            sequence=next_blackjax_states.particles,
+            key=key_next_loop,
+            blackjax_state=next_blackjax_states,
+            step=carry_state.step + 1,
+            additional_fields={
+                "beta": betas,
+                "mean_fitness": mean_fitness,
+                "max_fitness": max_fitness,
+                "ess": ess,
+                "logZ_estimate": logZ_estimates,
+            },
+        )
+
+        meta_beta = annealing_fn(current_step=carry_state.step, _context=None)
+        do_exchange = (carry_state.step + 1) % exchange_frequency == 0
+
+        empty_island_from = jnp.zeros(n_exchange_attempts, dtype=jnp.int32)
+        empty_island_to = jnp.zeros(n_exchange_attempts, dtype=jnp.int32)
+        empty_particle_from = jnp.zeros(n_exchange_attempts, dtype=jnp.int32)
+        empty_particle_to = jnp.zeros(n_exchange_attempts, dtype=jnp.int32)
+        empty_accepted = jnp.zeros(n_exchange_attempts, dtype=jnp.bool_)
+        empty_log_ratio = jnp.zeros(n_exchange_attempts, dtype=jnp.float32)
+
+        (
+            state_after_migration,
+            num_accepted_swaps,
+            island_from,
+            island_to,
+            particle_from,
+            particle_to,
+            accepted,
+            log_ratio,
+        ) = lax.cond(
+            do_exchange & (n_islands > 1),
+            lambda: migrate(
+                state_after_smc,
+                meta_beta,
+                key_exchange,
+                n_islands,
+                population_size,
+                n_exchange_attempts,
+                fitness_fn,
+            ),
+            lambda: (
+                state_after_smc,
+                jnp.array(0, dtype=jnp.int32),
+                empty_island_from,
+                empty_island_to,
+                empty_particle_from,
+                empty_particle_to,
+                empty_accepted,
+                empty_log_ratio,
+            ),
+        )
+        num_attempted_swaps = jnp.array(
+            jnp.where(
+                do_exchange & (n_islands > 1),
+                n_exchange_attempts,
+                0,
+            ),
+            dtype=jnp.int32,
+        )
+
+        step_output = SamplerOutput(
+            step=state_after_migration.step,
+            sequences=state_after_migration.sequence,
+            key=key_next_loop[0],
+            fitness=next_blackjax_states.weights,
+            weights=next_blackjax_states.weights,
+            log_likelihood_increment=jnp.atleast_1d(infos.log_likelihood_increment)[
+                0
+            ],
+            ancestors=infos.ancestors,
+            ess=ess,
+            beta=betas[0],
+            num_attempted_swaps=num_attempted_swaps,
+            num_accepted_swaps=num_accepted_swaps,
+            migration_island_from=island_from,
+            migration_island_to=island_to,
+            migration_particle_idx_from=particle_from,
+            migration_particle_idx_to=particle_to,
+            migration_accepted=accepted,
+            migration_log_acceptance_ratio=log_ratio,
+            mean_fitness=mean_fitness[0],
+            max_fitness=max_fitness[0],
+            log_z_estimate=logZ_estimates[0],
+        )
+
+        return state_after_migration, step_output
+
+    final_state, collected_outputs = lax.scan(
+        _prsmc_step, initial_state, jnp.arange(chunk_size)
     )
+    return final_state, collected_outputs
 
-    logZ_estimates = carry_state.additional_fields["logZ_estimate"] + infos.log_likelihood_increment  # noqa: N806
 
-    state_after_smc = SamplerState(
-      sequence=next_blackjax_states.particles,  # type: ignore[call-arg]
-      key=key_next_loop,
-      blackjax_state=next_blackjax_states,
-      step=carry_state.step + 1,
-      additional_fields={
-        "beta": betas,
-        "mean_fitness": mean_fitness,
-        "max_fitness": max_fitness,
-        "ess": ess,
-        "logZ_estimate": logZ_estimates,
-      },
-    )
+def run_prsmc_loop(  # noqa: PLR0913
+    num_steps: int,
+    initial_state: SamplerState,
+    resampling_approach: str,
+    population_size: Int,
+    n_islands: Int,
+    exchange_frequency: Int,
+    n_exchange_attempts: Int,
+    fitness_fn: StackedFitnessFn,
+    mutation_fn: MutationFn,
+    annealing_fn: AnnealingFn,
+    writer_callback: Callable,
+    chunk_size: int = 100,
+) -> SamplerState:
+    """Orchestrator for the Parallel Replica SMC loop, running in chunks."""
+    num_chunks = (num_steps + chunk_size - 1) // chunk_size
+    current_state = initial_state
 
-    meta_beta = annealing_fn(current_step=step_idx, _context=None)  # type: ignore[call-arg]
-    do_exchange = (step_idx + 1) % exchange_frequency == 0
+    for i in range(num_chunks):
+        current_chunk_size = min(chunk_size, num_steps - i * chunk_size)
+        final_state, collected_outputs = _run_prsmc_chunk(
+            chunk_size=current_chunk_size,
+            initial_state=current_state,
+            resampling_approach=resampling_approach,
+            population_size=population_size,
+            n_islands=n_islands,
+            exchange_frequency=exchange_frequency,
+            n_exchange_attempts=n_exchange_attempts,
+            fitness_fn=fitness_fn,
+            mutation_fn=mutation_fn,
+            annealing_fn=annealing_fn,
+        )
+        writer_callback(collected_outputs)
+        current_state = final_state
 
-    # Empty migration arrays for when no exchange happens
-    empty_island_from = jnp.zeros(n_exchange_attempts, dtype=jnp.int32)
-    empty_island_to = jnp.zeros(n_exchange_attempts, dtype=jnp.int32)
-    empty_particle_from = jnp.zeros(n_exchange_attempts, dtype=jnp.int32)
-    empty_particle_to = jnp.zeros(n_exchange_attempts, dtype=jnp.int32)
-    empty_accepted = jnp.zeros(n_exchange_attempts, dtype=jnp.bool_)
-    empty_log_ratio = jnp.zeros(n_exchange_attempts, dtype=jnp.float32)
-
-    (
-      state_after_migration,
-      num_accepted_swaps,
-      island_from,
-      island_to,
-      particle_from,
-      particle_to,
-      accepted,
-      log_ratio,
-    ) = lax.cond(
-      do_exchange & (n_islands > 1),
-      lambda: migrate(
-        state_after_smc,
-        meta_beta,
-        key_exchange,
-        n_islands,
-        population_size,
-        n_exchange_attempts,
-        fitness_fn,
-      ),
-      lambda: (
-        state_after_smc,
-        jnp.array(0, dtype=jnp.int32),
-        empty_island_from,
-        empty_island_to,
-        empty_particle_from,
-        empty_particle_to,
-        empty_accepted,
-        empty_log_ratio,
-      ),
-    )
-    num_attempted_swaps = jnp.array(
-      jnp.where(
-        do_exchange & (n_islands > 1),
-        n_exchange_attempts,
-        0,
-      ),
-      dtype=jnp.int32,
-    )
-
-    step_output = SamplerOutput(  # type: ignore[name-defined]
-      step=jnp.array(step_idx + 1, dtype=jnp.int32),
-      sequences=state_after_migration.sequence,  # type: ignore[arg-type]
-      key=key_next_loop[0],  # Use first island's key
-      fitness=next_blackjax_states.weights,  # type: ignore[attr-defined]
-      weights=next_blackjax_states.weights,  # type: ignore[attr-defined]
-      log_likelihood_increment=jnp.atleast_1d(infos.log_likelihood_increment)[0],
-      ancestors=infos.ancestors,  # Already batched over islands
-      ess=ess,
-      beta=betas[0],  # Use first island's beta
-      num_attempted_swaps=num_attempted_swaps,
-      num_accepted_swaps=num_accepted_swaps,
-      migration_island_from=island_from,
-      migration_island_to=island_to,
-      migration_particle_idx_from=particle_from,
-      migration_particle_idx_to=particle_to,
-      migration_accepted=accepted,
-      migration_log_acceptance_ratio=log_ratio,
-      mean_fitness=mean_fitness[0],  # Use first island
-      max_fitness=max_fitness[0],  # Use first island
-      log_z_estimate=logZ_estimates[0],  # Use first island
-    )
-
-    io_callback(
-      writer_callback,
-      None,
-      step_output,
-    )
-
-    return state_after_migration, None
-
-  current_state = initial_state
-
-  def loop_body(i: int, state: SamplerState) -> SamplerState:
-    """Loop body for fori_loop."""
-    next_state, _ = _prsmc_step(state, i)
-    return next_state
-
-  return lax.fori_loop(
-    0,
-    num_steps,
-    loop_body,
-    current_state,
-  )
+    return current_state
