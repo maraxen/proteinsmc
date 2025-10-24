@@ -159,7 +159,7 @@ def run_smc_loop(  # noqa: PLR0913
       SMCInfo(
         ancestors=jnp.zeros((initial_state.sequence.shape[0],), dtype=jnp.int32),
         log_likelihood_increment=0.0,
-        update_info=None,
+        update_info=UpdateInfo(),
       ),
     ),
   )
