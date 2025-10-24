@@ -9,7 +9,6 @@ import blackjax
 import jax
 import jax.numpy as jnp
 from blackjax.mcmc.random_walk import RWState
-from jax.experimental import io_callback as jax_io_callback
 
 from proteinsmc.models.sampler_base import SamplerOutput, SamplerState
 
@@ -56,55 +55,73 @@ def run_mcmc_loop(
   # Build the random walk Metropolis-Hastings kernel
   kernel = blackjax.mcmc.random_walk.build_rmh()
 
-  def body_fn(step_idx: int, state: SamplerState) -> SamplerState:
-    """Perform one step of the MCMC sampler."""
-    key = jax.random.fold_in(state.key, step_idx)
+  def body_fn(carry: SamplerState, _inputs: None = None) -> tuple[SamplerState, SamplerOutput]:
+    """Perform one step of the MCMC sampler.
 
-    # Wrap fitness function for blackjax
+    Args:
+      carry: Current SamplerState.
+
+    Returns:
+      Tuple of updated SamplerState and SamplerOutput.
+
+    """
+    key, subkey = jax.random.split(carry.key)
+
     def logdensity_fn_step(position: jax.Array) -> jax.Array:
       """Logdensity function for this MCMC step."""
       fitness = fitness_fn(key, position, None)
-      return fitness[0]  # Return combined fitness
+      return fitness[0]
 
-    # Wrap mutation function to preserve dtype
     def transition_generator_wrapped(key_mutation: jax.Array, position: jax.Array) -> jax.Array:
       """Mutation function that preserves the dtype of the input."""
       mutated = mutation_fn(key_mutation, position)
-      # Cast back to original dtype if needed
       return mutated.astype(position.dtype)
 
-    # The kernel returns (new_state, info)
     new_blackjax_state, _ = kernel(
       rng_key=key,
-      state=state.blackjax_state,  # pyright: ignore[reportArgumentType]
+      state=carry.blackjax_state,  # pyright: ignore[reportArgumentType]
       logdensity_fn=logdensity_fn_step,
       transition_generator=transition_generator_wrapped,
     )
 
-    # Recompute full fitness to maintain proper shape
     new_fitness = fitness_fn(key, new_blackjax_state.position, None)  # pyright: ignore[reportArgumentType]
 
     new_state = SamplerState(
       sequence=new_blackjax_state.position,  # pyright: ignore[reportArgumentType]
-      key=key,
+      key=subkey,
       blackjax_state=new_blackjax_state,
-      step=jnp.array(step_idx + 1),
+      step=jnp.array(carry.step + 1),
     )
 
-    if io_callback is not None:
-      output = SamplerOutput(
-        step=jnp.array(step_idx + 1, dtype=jnp.int32),
-        sequences=new_blackjax_state.position,  # type: ignore[arg-type]
-        fitness=new_fitness,
-        key=key,
-      )
-      jax_io_callback(
-        io_callback,
-        None,
-        output,
-      )
+    output = SamplerOutput(
+      step=jnp.array(carry.step + 1, dtype=jnp.int32),
+      sequences=new_blackjax_state.position,  # type: ignore[arg-type]
+      fitness=new_fitness,
+      key=subkey,
+    )
 
-    return new_state
+    return new_state, output
 
-  final_state = jax.lax.fori_loop(0, num_samples, body_fn, initial_state)
-  return final_state, {}
+  # Use scan to accumulate outputs
+  final_state, outputs = jax.lax.scan(body_fn, initial_state)
+
+  # If io_callback is provided, write outputs using Python for loop
+  if io_callback is not None:
+    for i in range(num_samples):
+      # Extract single step output
+      single_output = SamplerOutput(
+        step=outputs.step[i],
+        sequences=outputs.sequences[i],
+        fitness=outputs.fitness[i],
+        key=outputs.key[i],
+      )
+      io_callback(single_output)
+
+  # Return final state and outputs as dict
+  metrics = {
+    "steps": outputs.step,
+    "sequences": outputs.sequences,
+    "fitness": outputs.fitness,
+    "key": outputs.key,
+  }
+  return final_state, metrics

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from itertools import product
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -229,7 +230,8 @@ def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int 
   key = jax.random.PRNGKey(seed)
   output_path = Path(output_dir)
   output_path.mkdir(parents=True, exist_ok=True)
-
+  run_uuid = uuid.uuid4()
+  logger.info("Run UUID: %s", run_uuid)
   # Create metadata file with run configuration and git commit hash
   create_metadata_file(config, output_path)
 
@@ -242,7 +244,7 @@ def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int 
     if hasattr(config, "annealing_config") and config.annealing_config is not None
     else None
   )
-  writer, io_callback = _setup_writer_callback(output_path / "data.arrayrecord")
+  writer, io_callback = _setup_writer_callback(output_path / f"data_{run_uuid}.arrayrecord")
   try:
     logger.info(
       "Starting run of type '%s'...",
