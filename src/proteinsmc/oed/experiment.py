@@ -1,9 +1,8 @@
 """OED experiment runner module.
 
 This module contains helpers to run small, testable OED experiments on NK
-landscapes. The implementation below intentionally simulates a single
-generation rather than invoking the full sampling runner so unit tests run
-quickly and deterministically.
+landscapes. The implementation now reads from actual SMC outputs stored on disk
+to calculate metrics from the full sampling trajectory.
 """
 
 from pathlib import Path
@@ -11,6 +10,7 @@ from pathlib import Path
 import jax
 import jax.numpy as jnp
 
+from proteinsmc.io import read_lineage_data
 from proteinsmc.models import (
   AutoTuningConfig,
   FitnessEvaluator,
@@ -101,56 +101,53 @@ def run_oed_experiment(design: OEDDesign, output_dir: str, seed: int = 42) -> OE
   # SMC and writes outputs to disk in `output_dir`.
   config = convert_design_to_config(design, fitness_evaluator, seed)
   # run_experiment has side effects (I/O). It will create metadata and run the sampler.
-  run_experiment(config, output_dir, seed)
+  # It now returns the run UUID which we use to locate the output file.
+  run_uuid = run_experiment(config, output_dir, seed)
 
-  # We'll attempt to read back any results via a lightweight simulation if the
-  # full SMC outputs are not readily available in memory here.
-  key = jax.random.PRNGKey(seed)
-  # Initialize a random population of sequences (integers in [0, q))
-  key, seq_key = jax.random.split(key)
-  initial_sequences = jax.random.randint(
-    seq_key,
-    shape=(design.population_size, design.N),
-    minval=0,
-    maxval=design.q,
-    dtype=jnp.int8,
-  )
+  # Read the actual SMC output from disk
+  output_file = Path(output_dir) / f"data_{run_uuid}.arrayrecord"
+  records = list(read_lineage_data(str(output_file)))
 
-  # Compute initial fitness
-  initial_fitness = calculate_nk_fitness_population(
-    initial_sequences, landscape, design.N, design.K
-  )
+  if not records:
+    msg = f"No records found in {output_file}"
+    raise ValueError(msg)
 
-  # Simulate one generation of random mutations to produce final population
-  key, mut_key = jax.random.split(key)
-  mutation_mask = jax.random.bernoulli(
-    mut_key, p=design.mutation_rate, shape=initial_sequences.shape
-  )
-  random_states = jax.random.randint(
-    mut_key,
-    shape=initial_sequences.shape,
-    minval=0,
-    maxval=design.q,
-    dtype=jnp.int8,
-  )
-  final_sequences = jnp.where(mutation_mask, random_states, initial_sequences)
-  final_fitness = calculate_nk_fitness_population(final_sequences, landscape, design.N, design.K)
+  # Extract first and last generation data
+  # Records contain stacked generations: shape (n_generations, population_size, ...)
+  first_record = records[0]
+  last_record = records[-1] if len(records) > 1 else first_record
 
-  # Create a simple fitness history (initial, final)
-  fitness_history = jnp.stack([initial_fitness, final_fitness])
+  # Get sequences and fitness from first and last steps
+  # Shape: (n_generations, population_size, N) for sequences
+  # Shape: (n_generations, population_size) for fitness
+  initial_sequences = first_record["sequences"][0]  # First generation
+  initial_fitness = first_record["fitness"][0]
+  final_sequences = last_record["sequences"][-1]  # Last generation
+  final_fitness = last_record["fitness"][-1]
 
-  # Extract data for metrics calculation
-  # (we already have initial_* and final_* variables)
+  # Build fitness history across all records (mean fitness per generation)
+  # fitness_history should be shape (n_generations,) for barrier crossing calculation
+  fitness_history_full = jnp.concatenate([rec["fitness"] for rec in records], axis=0)
+  fitness_history = jnp.mean(fitness_history_full, axis=1)  # Average across population
 
-  # Calculate metrics
   # Calculate metrics using existing utilities
-  info_gain = metrics.jeffreys_divergence(
-    jnp.atleast_1d(initial_fitness).astype(jnp.float32),
-    jnp.atleast_1d(final_fitness).astype(jnp.float32),
+  # For information gain, use histogram-based approach on fitness distributions
+  n_bins = 20
+  initial_fitness_hist, _ = jnp.histogram(
+    initial_fitness, bins=n_bins, density=False
   )
+  final_fitness_hist, _ = jnp.histogram(
+    final_fitness, bins=n_bins, density=False
+  )
+  info_gain = metrics.jeffreys_divergence(
+    initial_fitness_hist.astype(jnp.float32),
+    final_fitness_hist.astype(jnp.float32),
+  )
+
   barrier_freq = metrics.calculate_barrier_crossing_frequency(fitness_history)
   final_entropy = metrics.shannon_entropy(final_sequences)
-  # Compute a simple JSD between flattened empirical counts of symbols.
+
+  # Compute JSD between flattened empirical counts of symbols
   p = jnp.bincount(initial_sequences.ravel(), minlength=design.q).astype(jnp.float32)
   q = jnp.bincount(final_sequences.ravel(), minlength=design.q).astype(jnp.float32)
   jsd = metrics.jensen_shannon_divergence(p, q)

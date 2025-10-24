@@ -22,7 +22,7 @@ from proteinsmc.oed.structs import OEDDesign, OEDPredictedVariables
 # --- Constants and Configuration ---
 
 PARAMETER_BOUNDS = {
-  "N": (0, 4),
+  "N": (10, 50),  # Sequence length - ensure meaningful sequences for metrics
   "K": (0, 1),
   "q": (2, 3),
   "population_size": (50, 100),
