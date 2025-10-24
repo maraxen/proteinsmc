@@ -22,7 +22,6 @@ from proteinsmc.oed.nk import create_landscape_from_design
 from proteinsmc.oed.structs import OEDDesign, OEDPredictedVariables
 from proteinsmc.runner import run_experiment
 from proteinsmc.utils import metrics
-from proteinsmc.utils.nk_landscape import calculate_nk_fitness_population
 
 # Threshold for deciding whether an alphabet size indicates a protein
 ALPHABET_THRESHOLD = 4
@@ -133,12 +132,8 @@ def run_oed_experiment(design: OEDDesign, output_dir: str, seed: int = 42) -> OE
   # Calculate metrics using existing utilities
   # For information gain, use histogram-based approach on fitness distributions
   n_bins = 20
-  initial_fitness_hist, _ = jnp.histogram(
-    initial_fitness, bins=n_bins, density=False
-  )
-  final_fitness_hist, _ = jnp.histogram(
-    final_fitness, bins=n_bins, density=False
-  )
+  initial_fitness_hist, _ = jnp.histogram(initial_fitness, bins=n_bins, density=False)
+  final_fitness_hist, _ = jnp.histogram(final_fitness, bins=n_bins, density=False)
   info_gain = metrics.jeffreys_divergence(
     initial_fitness_hist.astype(jnp.float32),
     final_fitness_hist.astype(jnp.float32),

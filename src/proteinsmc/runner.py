@@ -232,9 +232,10 @@ def _get_inputs(config: BaseSamplerConfig) -> tuple[dict[str, Any], list[str]]:
 
 def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int = 0) -> str:
   """Run a sampling experiment based on the provided configuration.
-  
+
   Returns:
       str: The UUID of the run, which can be used to locate the output file.
+
   """
   key = jax.random.PRNGKey(seed)
   output_path = Path(output_dir)
@@ -314,7 +315,7 @@ def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int 
     jax.block_until_ready(final_state)
     logger.info("Sampler loop finished.")
 
-  # 6. Write results to disk
+    # 6. Write results to disk
 
     logger.info("Run completed successfully.")
   finally:
