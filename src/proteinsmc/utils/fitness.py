@@ -7,14 +7,13 @@ from typing import TYPE_CHECKING
 import jax
 import jax.numpy as jnp
 from jax import jit
-from jaxtyping import Array, PRNGKeyArray
 
 from proteinsmc.scoring import cai, combine, esm, mpnn, nk
 
 if TYPE_CHECKING:
   from collections.abc import Callable
 
-  from jaxtyping import Array, PRNGKeyArray
+  from jaxtyping import Array, Int, PRNGKeyArray
 
   from proteinsmc.models.fitness import (
     CombineFn,
@@ -41,7 +40,7 @@ COMBINE_FUNCTIONS: dict[str, Callable[..., CombineFn]] = {
 
 def get_fitness_function(
   evaluator_config: FitnessEvaluator,
-  n_states: int,
+  n_states: int | Int,
   translate_func: TranslateFuncSignature,
   batch_size: int | None = None,
 ) -> StackedFitnessFn:
@@ -67,24 +66,12 @@ def get_fitness_function(
   def make_score_branch(score_fn: FitnessFn, needs_trans: bool) -> Callable:  # noqa: FBT001
     """Create a branch function for a specific score function index."""
 
-    def branch_fn(args: tuple[EvoSequence, PRNGKeyArray, Array | None]) -> Array:
+    def branch_fn(args: tuple[PRNGKeyArray, EvoSequence, Array | None]) -> Array:
       """Branch function for computing scores."""
-      sequence, key_i, _context = args
+      key_i, sequence, _context = args
       seq = translate_func(sequence, key_i, _context) if needs_trans else sequence
-      keys_i = jax.random.split(key_i, seq.shape[0])
-
-      if batch_size is None:
-        vmapped_score = jax.vmap(lambda s, k: score_fn(s, k, _context))
-        return vmapped_score(seq, keys_i)
-
-      def score_single(s: EvoSequence, k: PRNGKeyArray) -> Array:
-        return score_fn(s, k, _context)
-
-      return jax.lax.map(
-        lambda inputs: score_single(inputs[0], inputs[1]),
-        (seq, keys_i),
-        batch_size=batch_size,
-      )
+      # Call score_fn directly on the single sequence (outer vmap handles population)
+      return score_fn(key_i, seq, _context)
 
     return branch_fn
 
@@ -95,20 +82,20 @@ def get_fitness_function(
 
   @jit
   def final_fitness_fn(
-    sequence: EvoSequence,
     key: PRNGKeyArray,
+    sequence: EvoSequence,
     _context: Array | None = None,
   ) -> Array:
     keys = jax.random.split(key, len(score_fns) + 1)
 
     # Optimize for single fitness function case (no switch needed)
     if len(score_fns) == 1:
-      all_scores = score_branches[0]((sequence, keys[0], _context))[jnp.newaxis, ...]
+      all_scores = score_branches[0]((keys[0], sequence, _context))[jnp.newaxis]
     else:
 
       def compute_score(i: Array | int) -> Array:
         """Compute scores for the i-th fitness function."""
-        return jax.lax.switch(i, score_branches, (sequence, keys[i], _context))
+        return jax.lax.switch(i, score_branches, (keys[i], sequence, _context))
 
       # If batch_size is None, use vmap instead of lax.map to avoid dynamic shape issues
       if batch_size is None:
@@ -116,22 +103,11 @@ def get_fitness_function(
       else:
         all_scores = jax.lax.map(compute_score, jnp.arange(len(score_fns)), batch_size=batch_size)
 
-    keys_for_combiner = jax.random.split(keys[-1], all_scores.shape[1])
+    # Combine the scores from different fitness functions
+    # all_scores has shape (n_fitness_functions,) for a single sequence
+    combined_fitness = combine_fn(all_scores, keys[-1], _context)
 
-    # Vmap combine_fn over population, but broadcast _context
-    # in_axes=(0, 0, None) means vmap over first two args, broadcast third
-    combined_fitness = jax.vmap(combine_fn, in_axes=(0, 0, None))(
-      all_scores.T, keys_for_combiner, _context
-    )
-
-    # Reshape combined_fitness to (1, population_size) for concatenation
-    # all_scores has shape (n_fitness_functions, population_size)
-    # Result should be (1 + n_fitness_functions, population_size)
-    combined_fitness_reshaped = jnp.expand_dims(combined_fitness, axis=0)
-
-    return jnp.concatenate(
-      [combined_fitness_reshaped, all_scores],
-      axis=0,
-    )
+    # Return stacked: [combined, score1, score2, ...]
+    return jnp.concatenate([jnp.array([combined_fitness]), all_scores])
 
   return final_fitness_fn

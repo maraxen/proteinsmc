@@ -12,7 +12,6 @@ import jax
 import jax.numpy as jnp
 
 from proteinsmc.models import (
-  AnnealingConfig,
   AutoTuningConfig,
   FitnessEvaluator,
   MemoryConfig,
@@ -23,7 +22,6 @@ from proteinsmc.oed.nk import create_landscape_from_design
 from proteinsmc.oed.structs import OEDDesign, OEDPredictedVariables
 from proteinsmc.runner import run_experiment
 from proteinsmc.utils import metrics
-from proteinsmc.utils.constants import INT_TO_AA_CHAR_MAP
 from proteinsmc.utils.nk_landscape import calculate_nk_fitness_population
 
 # Threshold for deciding whether an alphabet size indicates a protein
@@ -31,7 +29,11 @@ ALPHABET_THRESHOLD = 4
 
 
 def convert_design_to_config(
-  design: OEDDesign, fitness_evaluator: FitnessEvaluator, seed: int = 42
+  design: OEDDesign,
+  fitness_evaluator: FitnessEvaluator,
+  seed: int = 42,
+  *,
+  nucleotide_enabled: bool = False,
 ) -> SMCConfig:
   """Convert OED design parameters to sampler configuration.
 
@@ -39,6 +41,7 @@ def convert_design_to_config(
       design: OED design parameters.
       fitness_evaluator: Fitness evaluator for the experiment.
       seed: Random seed.
+      nucleotide_enabled: Whether nucleotide sequences are enabled.
 
   Returns:
       SMCConfig object configured according to design parameters.
@@ -50,21 +53,20 @@ def convert_design_to_config(
   sequence = jax.random.choice(
     jax.random.PRNGKey(seed), jnp.arange(design.q), shape=(design.N,), replace=True
   ).astype(jnp.int8)
-  str_sequence = "".join([INT_TO_AA_CHAR_MAP[int(s)] for s in sequence])  # Convert to string
   return SMCConfig(
     prng_seed=seed,
-    seed_sequence=str_sequence,
+    seed_sequence=sequence,
     num_samples=design.n_generations,
     n_states=design.q,
     mutation_rate=design.mutation_rate,
     diversification_ratio=design.diversification_ratio,
-    sequence_type="protein" if design.q > ALPHABET_THRESHOLD else "nucleotide",
+    sequence_type="protein"
+    if design.q > ALPHABET_THRESHOLD or not nucleotide_enabled
+    else "nucleotide",
     fitness_evaluator=fitness_evaluator,
     population_size=design.population_size,
     memory_config=memory_config,
-    annealing_config=AnnealingConfig(
-      annealing_fn="linear", beta_max=1.0, n_steps=design.n_generations
-    ),
+    annealing_config=None,
   )
 
 

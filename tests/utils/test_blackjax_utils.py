@@ -30,7 +30,7 @@ class TestMakeBlackjaxLogProbFn:
 
     """
     # Create a simple mock fitness function
-    def mock_fitness_fn(sequence, key, context):
+    def mock_fitness_fn(key, sequence, context):
       # Return combined fitness and components
       combined = jnp.sum(sequence.astype(jnp.float32))
       components = jnp.array([combined / 2, combined / 2])
@@ -66,7 +66,7 @@ class TestMakeBlackjaxLogProbFn:
         >>> test_with_different_sequence_lengths(jax.random.PRNGKey(42))
 
     """
-    def mock_fitness_fn(sequence, key, context):
+    def mock_fitness_fn(key, sequence, context):
       combined = jnp.sum(sequence.astype(jnp.float32))
       return jnp.array([combined, combined / 2])
 
@@ -95,7 +95,7 @@ class TestMakeBlackjaxLogProbFn:
         >>> test_deterministic_with_same_key(jax.random.PRNGKey(42))
 
     """
-    def mock_fitness_fn(sequence, key, context):
+    def mock_fitness_fn(key, sequence, context):
       # Add some randomness based on key
       noise = jax.random.normal(key, shape=())
       combined = jnp.sum(sequence.astype(jnp.float32)) + noise
@@ -129,7 +129,7 @@ class TestMakeBlackjaxLogProbFn:
         >>> test_jit_compatibility(jax.random.PRNGKey(42))
 
     """
-    def mock_fitness_fn(sequence, key, context):
+    def mock_fitness_fn(key, sequence, context):
       combined = jnp.sum(sequence.astype(jnp.float32))
       return jnp.array([combined, combined / 2])
 
@@ -159,7 +159,7 @@ class TestMakeBlackjaxLogProbFn:
         >>> test_with_empty_sequence(jax.random.PRNGKey(42))
 
     """
-    def mock_fitness_fn(sequence, key, context):
+    def mock_fitness_fn(key, sequence, context):
       combined = jnp.sum(sequence.astype(jnp.float32))
       return jnp.array([combined, combined / 2])
 
