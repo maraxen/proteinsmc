@@ -105,57 +105,60 @@ class TestMigrate:
         chex.assert_shape(log_ratio, (n_exchange_attempts,))
 
 
+@pytest.fixture
+def mock_prsmc_initial_state() -> SamplerState:
+    """Create a mock initial state for PRSMC loop."""
+    n_islands = 2
+    population_size = 4
+    seq_length = 3
+
+    particles = jax.random.randint(
+        jax.random.PRNGKey(0),
+        (n_islands, population_size, seq_length),
+        0,
+        20,
+        dtype=jnp.int8,
+    )
+    weights = jnp.ones((n_islands, population_size)) / population_size
+
+    def create_island_state(particles_island, weights_island):
+        return SMCState(
+            particles=particles_island,
+            weights=weights_island,
+            update_parameters={},
+        )
+
+    blackjax_state = vmap(create_island_state)(particles, weights)
+
+    betas = jnp.array([0.5, 1.0])
+    mean_fitness = jnp.ones((n_islands,))
+    max_fitness = jnp.ones((n_islands,))
+    ess = jnp.full((n_islands,), population_size / 2.0)
+    logZ_estimate = jnp.zeros((n_islands,))
+
+    island_keys = jax.random.split(jax.random.PRNGKey(42), n_islands)
+
+    return SamplerState(
+        sequence=particles,
+        key=island_keys,
+        blackjax_state=blackjax_state,
+        step=jnp.array(0, dtype=jnp.int32),
+        additional_fields={
+            "beta": betas,
+            "mean_fitness": mean_fitness,
+            "max_fitness": max_fitness,
+            "ess": ess,
+            "logZ_estimate": logZ_estimate,
+        },
+    )
+
+
 class TestRunPRSMCLoop:
     """Test the run_prsmc_loop function."""
 
-    @pytest.fixture
-    def mock_initial_state(self) -> SamplerState:
-        """Create a mock initial state for PRSMC loop."""
-        n_islands = 2
-        population_size = 4
-        seq_length = 3
-
-        particles = jax.random.randint(
-            jax.random.PRNGKey(0),
-            (n_islands, population_size, seq_length),
-            0,
-            20,
-            dtype=jnp.int8,
-        )
-        weights = jnp.ones((n_islands, population_size)) / population_size
-
-        def create_island_state(particles_island, weights_island):
-            return SMCState(
-                particles=particles_island,
-                weights=weights_island,
-                update_parameters={},
-            )
-
-        blackjax_state = vmap(create_island_state)(particles, weights)
-
-        betas = jnp.array([0.5, 1.0])
-        mean_fitness = jnp.ones((n_islands,))
-        max_fitness = jnp.ones((n_islands,))
-        ess = jnp.full((n_islands,), population_size / 2.0)
-        logZ_estimate = jnp.zeros((n_islands,))
-
-        island_keys = jax.random.split(jax.random.PRNGKey(42), n_islands)
-
-        return SamplerState(
-            sequence=particles,
-            key=island_keys,
-            blackjax_state=blackjax_state,
-            step=jnp.array(0, dtype=jnp.int32),
-            additional_fields={
-                "beta": betas,
-                "mean_fitness": mean_fitness,
-                "max_fitness": max_fitness,
-                "ess": ess,
-                "logZ_estimate": logZ_estimate,
-            },
-        )
-
-    def test_run_prsmc_loop_basic(self, mock_initial_state: SamplerState) -> None:
+    def test_run_prsmc_loop_basic(
+        self, mock_prsmc_initial_state: SamplerState
+    ) -> None:
         """Test basic run_prsmc_loop functionality."""
         num_steps = 2
         resampling_approach = "multinomial"
@@ -182,15 +185,15 @@ class TestRunPRSMCLoop:
 
         final_state = run_prsmc_loop(
             num_steps=num_steps,
-            initial_state=mock_initial_state,
+            initial_state=mock_prsmc_initial_state,
             resampling_approach=resampling_approach,
             population_size=population_size,
             n_islands=n_islands,
             exchange_frequency=exchange_frequency,
             n_exchange_attempts=n_exchange_attempts,
-            fitness_fn=mock_fitness_fn, # type:ignore
-            mutation_fn=mock_mutation_fn, # type:ignore
-            annealing_fn=mock_annealing_fn, # type:ignore
+            fitness_fn=mock_fitness_fn,  # type:ignore
+            mutation_fn=mock_mutation_fn,  # type:ignore
+            annealing_fn=mock_annealing_fn,  # type:ignore
             writer_callback=mock_writer_callback,
         )
 
@@ -198,10 +201,16 @@ class TestRunPRSMCLoop:
         assert final_state.step == num_steps
         chex.assert_shape(
             final_state.sequence,
-            (n_islands, population_size, mock_initial_state.sequence.shape[-1]),
+            (
+                n_islands,
+                population_size,
+                mock_prsmc_initial_state.sequence.shape[-1],
+            ),
         )
 
-    def test_run_prsmc_loop_end_to_end(self, mock_initial_state: SamplerState) -> None:
+    def test_run_prsmc_loop_end_to_end(
+        self, mock_prsmc_initial_state: SamplerState
+    ) -> None:
         """Test the run_prsmc_loop with a simple end-to-end case."""
         num_steps = 5
         resampling_approach = "systematic"
@@ -234,7 +243,7 @@ class TestRunPRSMCLoop:
 
         final_state = run_prsmc_loop(
             num_steps=num_steps,
-            initial_state=mock_initial_state,
+            initial_state=mock_prsmc_initial_state,
             resampling_approach=resampling_approach,
             population_size=population_size,
             n_islands=n_islands,
@@ -252,7 +261,9 @@ class TestRunPRSMCLoop:
         # Check that the fitness of the particles has generally increased
         initial_fitness = jnp.mean(
             vmap(vmap(fitness_fn, in_axes=(None, 0, None)), in_axes=(None, 0, 0))(
-                jax.random.PRNGKey(0), mock_initial_state.sequence, jnp.array([1.0, 1.0])
+                jax.random.PRNGKey(0),
+                mock_prsmc_initial_state.sequence,
+                jnp.array([1.0, 1.0]),
             )
         )
         final_fitness = jnp.mean(

@@ -75,34 +75,35 @@ class TestCreateSMCLoopFunc:
             )
 
 
+@pytest.fixture
+def mock_initial_state() -> SamplerState:
+    """Create a mock initial state for the SMC loop."""
+    population_size = 4
+    seq_length = 3
+    particles = jax.random.randint(
+        jax.random.PRNGKey(0),
+        (population_size, seq_length),
+        0,
+        20,
+        dtype=jnp.int8,
+    )
+    weights = jnp.ones(population_size) / population_size
+    blackjax_state = SMCState(
+        particles=particles,
+        weights=weights,
+        update_parameters=None,
+    )
+    return SamplerState(
+        sequence=particles,
+        key=jax.random.PRNGKey(42),
+        blackjax_state=blackjax_state,
+        step=jnp.array(0, dtype=jnp.int32),
+        additional_fields={"beta": jnp.array(-1.0, dtype=jnp.float32)},
+    )
+
+
 class TestRunSMCLoop:
     """Test the run_smc_loop function."""
-
-    @pytest.fixture
-    def mock_initial_state(self) -> SamplerState:
-        """Create a mock initial state for the SMC loop."""
-        population_size = 4
-        seq_length = 3
-        particles = jax.random.randint(
-            jax.random.PRNGKey(0),
-            (population_size, seq_length),
-            0,
-            20,
-            dtype=jnp.int8,
-        )
-        weights = jnp.ones(population_size) / population_size
-        blackjax_state = SMCState(
-            particles=particles,
-            weights=weights,
-            update_parameters=None,
-        )
-        return SamplerState(
-            sequence=particles,
-            key=jax.random.PRNGKey(42),
-            blackjax_state=blackjax_state,
-            step=jnp.array(0, dtype=jnp.int32),
-            additional_fields={"beta": jnp.array(-1.0, dtype=jnp.float32)},
-        )
 
     def test_run_smc_loop_basic(self, mock_initial_state: SamplerState) -> None:
         """Test basic run_smc_loop functionality."""
@@ -123,7 +124,7 @@ class TestRunSMCLoop:
         def mock_writer_callback(data: dict) -> None:
             pass
 
-        final_state, _ = run_smc_loop(
+        final_state = run_smc_loop(
             num_samples=num_samples,
             algorithm=algorithm,
             resampling_approach=resampling_approach,
@@ -168,7 +169,7 @@ class TestRunSMCLoop:
             assert hasattr(output, "sequences")
             assert hasattr(output, "fitness")
 
-        final_state, final_info = run_smc_loop(
+        final_state = run_smc_loop(
             num_samples=num_samples,
             algorithm=algorithm,
             resampling_approach=resampling_approach,
@@ -180,7 +181,6 @@ class TestRunSMCLoop:
         )
 
         assert isinstance(final_state, SamplerState)
-        assert isinstance(final_info, SMCInfo)
         assert final_state.step == num_samples
 
         # Check that the fitness of the particles has generally increased
