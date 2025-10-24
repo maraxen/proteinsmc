@@ -230,8 +230,12 @@ def _get_inputs(config: BaseSamplerConfig) -> tuple[dict[str, Any], list[str]]:
   return jax_inputs, sequence_type_inputs
 
 
-def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int = 0) -> None:
-  """Run a sampling experiment based on the provided configuration."""
+def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int = 0) -> str:
+  """Run a sampling experiment based on the provided configuration.
+  
+  Returns:
+      str: The UUID of the run, which can be used to locate the output file.
+  """
   key = jax.random.PRNGKey(seed)
   output_path = Path(output_dir)
   output_path.mkdir(parents=True, exist_ok=True)
@@ -307,12 +311,14 @@ def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int 
         annealing_fn,
       )
 
-      jax.block_until_ready(final_state)
-      logger.info("Sampler loop finished.")
+    jax.block_until_ready(final_state)
+    logger.info("Sampler loop finished.")
 
-    # 6. Write results to disk
+  # 6. Write results to disk
 
     logger.info("Run completed successfully.")
   finally:
     writer.close()
     logger.info("Output writer closed.")
+
+  return str(run_uuid)
