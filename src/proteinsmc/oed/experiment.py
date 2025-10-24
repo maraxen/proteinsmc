@@ -69,7 +69,9 @@ def convert_design_to_config(
   )
 
 
-def run_oed_experiment(design: OEDDesign, output_dir: str, seed: int = 42) -> OEDPredictedVariables:
+def run_oed_experiment(
+  design: OEDDesign, output_dir: str, seed: int = 42
+) -> tuple[OEDPredictedVariables, str]:
   """Run OED experiment and calculate metrics.
 
   Args:
@@ -78,7 +80,7 @@ def run_oed_experiment(design: OEDDesign, output_dir: str, seed: int = 42) -> OE
       seed: Random seed.
 
   Returns:
-      OEDPredictedVariables with calculated metrics.
+      Tuple of (OEDPredictedVariables with calculated metrics, run UUID).
 
   """
   # Ensure output directory exists (kept for API compatibility)
@@ -147,9 +149,11 @@ def run_oed_experiment(design: OEDDesign, output_dir: str, seed: int = 42) -> OE
   q = jnp.bincount(final_sequences.ravel(), minlength=design.q).astype(jnp.float32)
   jsd = metrics.jensen_shannon_divergence(p, q)
 
-  return OEDPredictedVariables(
+  predicted_vars = OEDPredictedVariables(
     information_gain=info_gain,
     barrier_crossing_frequency=barrier_freq,
     final_sequence_entropy=final_entropy,
     jsd_from_original_population=jsd,
   )
+
+  return predicted_vars, run_uuid
