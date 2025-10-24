@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 import jax
 import numpy as np
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
   from proteinsmc.models.types import EvoSequence
   from proteinsmc.utils.annealing import AnnealingConfig
 
-from proteinsmc.models.fitness import FitnessEvaluator, StackedFitness
+from proteinsmc.models.fitness import FitnessEvaluator
 
 BlackjaxSMCState = (
   BaseSMCState | TemperedSMCState | InnerMCMCState | PartialPosteriorsSMCState | PretuningSMCState
@@ -199,7 +199,6 @@ class SamplerState:
   """
 
   sequence: EvoSequence
-  fitness: StackedFitness
   key: PRNGKeyArray
   blackjax_state: BlackjaxState | BlackjaxSMCState | RWState | None = None
   step: jax.Array = struct.field(default_factory=lambda: jax.numpy.array(0, dtype=jax.numpy.int32))

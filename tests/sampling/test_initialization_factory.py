@@ -9,7 +9,7 @@ from blackjax.smc.base import SMCState as BaseSMCState
 
 from proteinsmc.models.fitness import StackedFitness
 from proteinsmc.models.sampler_base import SamplerState
-from proteinsmc.models.smc import SMCAlgorithm
+from proteinsmc.models.smc import SMCAlgorithmType
 from proteinsmc.sampling.initialization_factory import (
   _initialize_blackjax_smc_state,
   _initialize_prsmc_state,
@@ -216,7 +216,7 @@ class TestInitializeSamplerState:
       seed_sequence=sample_protein_sequence,
       mutation_rate=0.1,
       population_size=10,
-      algorithm=SMCAlgorithm.BASE,
+      algorithm="BaseSMC",
       smc_algo_kwargs={},
       n_islands=None,
       population_size_per_island=None,
@@ -261,7 +261,7 @@ class TestInitializeSamplerState:
       seed_sequence=sample_protein_sequence,
       mutation_rate=0.1,
       population_size=10,
-      algorithm=SMCAlgorithm.TEMPERED,
+      algorithm="TemperedSMC",
       smc_algo_kwargs={},
       n_islands=None,
       population_size_per_island=None,
@@ -529,7 +529,7 @@ class TestInitializeBlackjaxSMCState:
     """
     state = _initialize_blackjax_smc_state(
       key=rng_key,
-      algorithm=SMCAlgorithm.BASE,
+      algorithm="BaseSMC",
       initial_population=sample_population_proteins,
     )
 
@@ -555,7 +555,7 @@ class TestInitializeBlackjaxSMCState:
     """
     state = _initialize_blackjax_smc_state(
       key=rng_key,
-      algorithm=SMCAlgorithm.TEMPERED,
+      algorithm="TemperedSMC",
       initial_population=sample_population_proteins,
     )
 
@@ -585,7 +585,7 @@ class TestInitializeBlackjaxSMCState:
     """
     state = _initialize_blackjax_smc_state(
       key=rng_key,
-      algorithm=SMCAlgorithm.ADAPTIVE_TEMPERED,
+      algorithm="AdaptiveTemperedSMC",
       initial_population=sample_population_proteins,
     )
 
@@ -615,7 +615,7 @@ class TestInitializeBlackjaxSMCState:
     """
     state = _initialize_blackjax_smc_state(
       key=rng_key,
-      algorithm=SMCAlgorithm.PARTIAL_POSTERIORS,
+      algorithm="PartialPosteriors",
       initial_population=sample_population_proteins,
       smc_algo_kwargs={"num_datapoints": 10},
     )
@@ -647,7 +647,7 @@ class TestInitializeBlackjaxSMCState:
     with pytest.raises(NotImplementedError, match="Inner MCMC SMC algorithm"):
       _initialize_blackjax_smc_state(
         key=rng_key,
-        algorithm=SMCAlgorithm.INNER_MCMC,
+        algorithm="InnerMCMC",
         initial_population=sample_population_proteins,
       )
 
@@ -675,7 +675,7 @@ class TestInitializeBlackjaxSMCState:
     with pytest.raises(NotImplementedError, match="Pretuning SMC algorithm"):
       _initialize_blackjax_smc_state(
         key=rng_key,
-        algorithm=SMCAlgorithm.PRETUNING,
+        algorithm="PretuningSMC",
         initial_population=sample_population_proteins,
       )
 
@@ -703,7 +703,7 @@ class TestInitializeBlackjaxSMCState:
     with pytest.raises(ValueError, match="custom_init_fn"):
       _initialize_blackjax_smc_state(
         key=rng_key,
-        algorithm=SMCAlgorithm.CUSTOM,
+        algorithm="CustomSMC",
         initial_population=sample_population_proteins,
         smc_algo_kwargs={},
       )
@@ -745,7 +745,7 @@ class TestInitializeBlackjaxSMCState:
 
     state = _initialize_blackjax_smc_state(
       key=rng_key,
-      algorithm=SMCAlgorithm.CUSTOM,
+      algorithm="CustomSMC",
       initial_population=sample_population_proteins,
       smc_algo_kwargs={"custom_init_fn": custom_init_fn},
     )
@@ -784,7 +784,7 @@ class TestInitializeSMCState:
       initial_population=sample_population_proteins,
       beta=0.5,
       mutation_rate=0.1,
-      algorithm=SMCAlgorithm.BASE,
+      algorithm="BaseSMC",
       smc_algo_kwargs={},
       key=rng_key,
       fitness_fn=mock_fitness_fn,
@@ -824,7 +824,7 @@ class TestInitializeSMCState:
       initial_population=sample_population_proteins,
       beta=None,
       mutation_rate=0.1,
-      algorithm=SMCAlgorithm.BASE,
+      algorithm="BaseSMC",
       smc_algo_kwargs={},
       key=rng_key,
       fitness_fn=mock_fitness_fn,
