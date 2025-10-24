@@ -25,7 +25,7 @@ if TYPE_CHECKING:
   from blackjax.mcmc.random_walk import RWState
   from jaxtyping import PRNGKeyArray
 
-  from proteinsmc.models.types import EvoSequence
+  from proteinsmc.models.types import BatchEvoSequence, EvoSequence
   from proteinsmc.utils.annealing import AnnealingConfig
 
 from proteinsmc.models.fitness import FitnessEvaluator
@@ -64,11 +64,11 @@ class BaseSamplerConfig:
   )
   """Fitness evaluator to assess the quality of sampled sequences."""
 
-  seed_sequence: str | Sequence[str] = field(default="")
-  num_samples: int | Sequence[int] = field(default=100)
-  n_states: int = field(default=20)
-  mutation_rate: float | Sequence[float] = field(default=0.1)
-  diversification_ratio: float | Sequence[float] = field(default=0.0)
+  seed_sequence: str | Sequence[str] | EvoSequence | BatchEvoSequence = field(default="")
+  num_samples: int | Sequence[int] | jax.Array = field(default=100)
+  n_states: int | Sequence[int] | jax.Array = field(default=20)
+  mutation_rate: float | Sequence[float] | jax.Array = field(default=0.1)
+  diversification_ratio: float | Sequence[float] | jax.Array = field(default=0.0)
   sequence_type: Literal["protein", "nucleotide"] | Sequence[Literal["protein", "nucleotide"]] = (
     field(
       default="protein",
@@ -88,21 +88,24 @@ class BaseSamplerConfig:
     ):
       msg = "fitness_evaluator must be a FitnessEvaluator instance or None."
       raise TypeError(msg)
-    if not isinstance(self.seed_sequence, (str, Sequence)):
-      msg = "seed_sequence must be a string or a sequence of strings."
+    if not isinstance(self.seed_sequence, (str, Sequence, jax.Array)):
+      msg = "seed_sequence must be a string, a sequence of strings, or a jax.Array."
       raise TypeError(msg)
     # Check num_samples - must be int or Sequence, but not string
-    if not isinstance(self.num_samples, int | Sequence) or isinstance(self.num_samples, str):
-      msg = "num_samples must be an integer or a sequence of integers."
+    if (
+      not isinstance(self.num_samples, int | Sequence | jax.Array)
+      or isinstance(self.num_samples, str)
+    ):
+      msg = "num_samples must be an integer, a sequence of integers, or a jax.Array."
       raise TypeError(msg)
-    if not isinstance(self.n_states, (int, Sequence)):
-      msg = "n_states must be an integer or a sequence of integers."
+    if not isinstance(self.n_states, (int, Sequence, jax.Array)):
+      msg = "n_states must be an integer, a sequence of integers, or a jax.Array."
       raise TypeError(msg)
-    if not isinstance(self.mutation_rate, (float, Sequence)):
-      msg = "mutation_rate must be a float or a sequence of floats."
+    if not isinstance(self.mutation_rate, (float, Sequence, jax.Array)):
+      msg = "mutation_rate must be a float, a sequence of floats, or a jax.Array."
       raise TypeError(msg)
-    if not isinstance(self.diversification_ratio, (float, Sequence)):
-      msg = "diversification_ratio must be a float or a sequence of floats."
+    if not isinstance(self.diversification_ratio, (float, Sequence, jax.Array)):
+      msg = "diversification_ratio must be a float, a sequence of floats, or a jax.Array."
       raise TypeError(msg)
     if not isinstance(
       self.sequence_type,

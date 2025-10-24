@@ -44,6 +44,7 @@ if TYPE_CHECKING:
 
   from proteinsmc.models.sampler_base import BaseSamplerConfig
   from proteinsmc.models.translation import TranslateFuncSignature
+  from proteinsmc.models.types import BatchEvoSequence, EvoSequence
   from proteinsmc.utils.fitness import StackedFitnessFn
 
 from proteinsmc.io import create_metadata_file, create_writer_callback
@@ -198,30 +199,35 @@ def _get_inputs(config: BaseSamplerConfig) -> tuple[dict[str, Any], list[str]]:
       return [item]
     return list(item)
 
-  seed_sequence_inputs = _convert_to_list(config.seed_sequence)
-  sequence_type_inputs = _convert_to_list(config.sequence_type)
-  seed_sequences = jnp.array(
-    [
-      string_to_int_sequence(
-        seq,
-        None,
-        stype,  # type: ignore[arg-type]
-      )
-      for seq, stype in (
-        zip(
-          seed_sequence_inputs,
-          sequence_type_inputs,
-          strict=False,
+  if isinstance(config.seed_sequence, jax.Array):
+    seed_sequences = config.seed_sequence
+  else:
+    seed_sequence_inputs = _convert_to_list(config.seed_sequence)
+    sequence_type_inputs = _convert_to_list(config.sequence_type)
+    seed_sequences = jnp.array(
+      [
+        string_to_int_sequence(
+          seq,
+          None,
+          stype,  # type: ignore[arg-type]
         )
-        if config.combinations_mode == "zip"
-        else product(
-          seed_sequence_inputs,
-          sequence_type_inputs,
+        for seq, stype in (
+          zip(
+            seed_sequence_inputs,
+            sequence_type_inputs,
+            strict=False,
+          )
+          if config.combinations_mode == "zip"
+          else product(
+            seed_sequence_inputs,
+            sequence_type_inputs,
+          )
         )
-      )
-    ],
-  )
+      ],
+    )
+
   jax_inputs["seed_sequences"] = seed_sequences
+  sequence_type_inputs = _convert_to_list(config.sequence_type)
   return jax_inputs, sequence_type_inputs
 
 
