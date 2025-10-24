@@ -18,6 +18,12 @@ from proteinsmc.oed.gp import (
 )
 from proteinsmc.oed.opt import calculate_fim_determinant
 from proteinsmc.oed.structs import OEDDesign, OEDPredictedVariables
+from proteinsmc.oed.tracking import (
+  OEDRecordParams,
+  add_oed_to_metadata,
+  save_oed_checkpoint,
+  save_oed_record,
+)
 
 # --- Constants and Configuration ---
 
@@ -192,10 +198,29 @@ def main() -> None:
   for i, design in enumerate(initial_designs):
     logger.info("Running initial experiment %d/%d", i + 1, args.num_initial_experiments)
     key, subkey = jax.random.split(key)
-    result = run_oed_experiment(design, str(output_dir), seed=int(subkey[0]))
+    result, run_uuid = run_oed_experiment(design, str(output_dir), seed=int(subkey[0]))
     design_history.append((design, result))
     logger.info("Design: %r", design)
     logger.info("Result: %r", result)
+
+    # Enhance SMC run metadata with OED design info
+    metadata_file = output_dir / "metadata.json"
+    add_oed_to_metadata(metadata_file, design, phase="seeding", iteration=i)
+
+    # Save tracking record
+    save_oed_record(
+      OEDRecordParams(
+        output_dir=output_dir,
+        design=design,
+        result=result,
+        run_uuid=run_uuid,
+        iteration=i,
+        phase="seeding",
+      )
+    )
+
+  # Save checkpoint after seeding
+  save_oed_checkpoint(output_dir, design_history, 0, args.seed)
 
   # Phase 2: OED Iterations
   logger.info("--- Starting OED Iteration Phase ---")
@@ -204,14 +229,39 @@ def main() -> None:
     key, subkey = jax.random.split(key)
     next_design = recommend_next_design(subkey, design_history, PARAMETER_BOUNDS, n_candidates=100)
     key, subkey = jax.random.split(key)
-    new_result = run_oed_experiment(next_design, str(output_dir), seed=int(subkey[0]))
+    new_result, run_uuid = run_oed_experiment(next_design, str(output_dir), seed=int(subkey[0]))
     design_history.append((next_design, new_result))
     logger.info("Next Design: %r", next_design)
     logger.info("New Result: %r", new_result)
 
+    # Enhance SMC run metadata with OED design info
+    metadata_file = output_dir / "metadata.json"
+    add_oed_to_metadata(metadata_file, next_design, phase="optimization", iteration=i)
+
+    # Save tracking record
+    save_oed_record(
+      OEDRecordParams(
+        output_dir=output_dir,
+        design=next_design,
+        result=new_result,
+        run_uuid=run_uuid,
+        iteration=i,
+        phase="optimization",
+      )
+    )
+
+    # Save checkpoint every 10 iterations
+    if (i + 1) % 10 == 0:
+      save_oed_checkpoint(output_dir, design_history, i + 1, args.seed)
+
     # Log the best result so far
     best_result = max(design_history, key=lambda x: x[1].information_gain)
     logger.info("Best information gain so far: %r", best_result[1].information_gain)
+
+  # Final checkpoint and summary
+  save_oed_checkpoint(output_dir, design_history, args.num_oed_iterations, args.seed)
+  logger.info("--- OED Loop Completed ---")
+  logger.info("Total experiments: %d", len(design_history))
 
 
 # --- Main Script ---

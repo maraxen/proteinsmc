@@ -20,6 +20,7 @@ src/proteinsmc/models/mutation.py
 src/proteinsmc/models/nk_landscape.py
 src/proteinsmc/models/nuts.py
 src/proteinsmc/models/parallel_replica.py
+src/proteinsmc/models/protocols.py
 src/proteinsmc/models/sampler_base.py
 src/proteinsmc/models/smc.py
 src/proteinsmc/models/translation.py
@@ -30,7 +31,9 @@ src/proteinsmc/oed/gp.py
 src/proteinsmc/oed/nk.py
 src/proteinsmc/oed/opt.py
 src/proteinsmc/oed/phase.py
+src/proteinsmc/oed/run.py
 src/proteinsmc/oed/structs.py
+src/proteinsmc/oed/tracking.py
 src/proteinsmc/sampling/__init__.py
 src/proteinsmc/sampling/gibbs.py
 src/proteinsmc/sampling/hmc.py
@@ -57,6 +60,7 @@ src/proteinsmc/utils/fitness.py
 src/proteinsmc/utils/initiate.py
 src/proteinsmc/utils/jax_utils.py
 src/proteinsmc/utils/jax_uuid.py
+src/proteinsmc/utils/key_management.py
 src/proteinsmc/utils/memory.py
 src/proteinsmc/utils/metrics.py
 src/proteinsmc/utils/mutation.py
@@ -64,3 +68,4 @@ src/proteinsmc/utils/nk_landscape.py
 src/proteinsmc/utils/pmap_utils.py
 src/proteinsmc/utils/translation.py
 tests/test_runner.py
+tests/test_runner_jax_inputs.py
