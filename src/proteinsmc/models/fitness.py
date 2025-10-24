@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import jax.numpy as jnp
-from jaxtyping import Array, Bool, Float, PRNGKeyArray, PyTree
+from jaxtyping import Array, Bool, Float, Int, PRNGKeyArray, PyTree
 
 from proteinsmc.models.types import EvoSequence
 
@@ -82,7 +82,7 @@ class FitnessEvaluator:
     """Get active fitness functions that accept the specified number of states."""
     return [f for f in self.fitness_functions if f.n_states == n_states]
 
-  def needs_translation(self, n_states: int) -> NeedsTranslation:
+  def needs_translation(self, n_states: int | Int) -> NeedsTranslation:
     """Check if any fitness function requires sequence translation."""
     return jnp.where(
       jnp.array([f.n_states != n_states for f in self.fitness_functions]),

@@ -2,19 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, TypedDict, Unpack
-
-
-class AnnealingKwargs(TypedDict):
-  """TypedDict for the parameters of an annealing schedule function."""
-
-  current_step: int
-  _context: Any | None
-
-
-AnnealingFn = Callable[[Unpack[AnnealingKwargs]], float]
+from typing import Any
 
 
 @dataclass(frozen=True)

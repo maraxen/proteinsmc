@@ -32,8 +32,8 @@ def make_cai_score() -> FitnessFn:
 
   @jit
   def _cai_score(
-    sequence: NucleotideSequence,
     _key: PRNGKeyArray,
+    sequence: NucleotideSequence,
     _context: Array | None = None,
   ) -> Float:
     """Calculate CAI for a nucleotide sequence and its corresponding amino acid sequence."""

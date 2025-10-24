@@ -44,15 +44,15 @@ def make_esm_score(
 
   @jax.jit
   def score(
+    _key: PRNGKeyArray | None,
     sequence: ProteinSequence,
-    _key: PRNGKeyArray | None = None,
     _context: Array | None = None,
   ) -> Float:
     """Score a protein sequence using the ESM model.
 
     Args:
-        sequence: Protein sequence as an array.
         _key: JAX PRNG key (not used in this function).
+        sequence: Protein sequence as an array.
         _context: Additional context (not used in this function).
 
     Returns:

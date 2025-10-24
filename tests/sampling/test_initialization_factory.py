@@ -28,11 +28,11 @@ def mock_fitness_fn():
 
   Example:
       >>> fitness_fn = mock_fitness_fn()
-      >>> result = fitness_fn(sequence, key, beta)
+      >>> result = fitness_fn(key, sequence, beta)
 
   """
 
-  def fitness_fn(seq, key, beta):  # noqa: ARG001
+  def fitness_fn(key, seq, beta):  # noqa: ARG001
     """Mock fitness function.
 
     Args:

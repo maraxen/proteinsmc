@@ -44,11 +44,10 @@ if TYPE_CHECKING:
 
   from proteinsmc.models.sampler_base import BaseSamplerConfig
   from proteinsmc.models.translation import TranslateFuncSignature
-  from proteinsmc.models.types import BatchEvoSequence, EvoSequence
   from proteinsmc.utils.fitness import StackedFitnessFn
 
 from proteinsmc.io import create_metadata_file, create_writer_callback
-from proteinsmc.models.sampler_base import config_to_jax
+from proteinsmc.models.sampler_base import SamplerState, config_to_jax
 
 SAMPLER_REGISTRY: dict[str, dict[str, Any]] = {
   "smc": {
@@ -100,7 +99,7 @@ def _setup_fitness_function(
   batch_size = None
   fitness_fn = get_fitness_function(
     evaluator_config=config.fitness_evaluator,
-    n_states=config.n_states,
+    n_states=config.n_states,  # TODO(mar): manage Sequence  # type: ignore[arg-type]  # noqa: E501, FIX002, TD003
     translate_func=translate_func,
     batch_size=batch_size,
   )
@@ -134,7 +133,7 @@ def _setup_fitness_function(
     # Re-create the fitness function with the optimal chunk size
     fitness_fn = get_fitness_function(
       evaluator_config=config.fitness_evaluator,
-      n_states=config.n_states,
+      n_states=config.n_states,  # TODO(mar): manage Sequence  # type: ignore[arg-type]  # noqa: E501, FIX002, TD003
       translate_func=translate_func,
       batch_size=batch_size,
     )
@@ -242,7 +241,7 @@ def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int 
   create_metadata_file(config, output_path)
 
   sampler_def = _validate_config(config)
-  run_fn: Callable[..., tuple[Any, dict[str, Any]]] = sampler_def["run_fn"]
+  run_fn: Callable[..., SamplerState] = sampler_def["run_fn"]
   key, fitness_fn = _setup_fitness_function(key, config)
   mutation_fn = _setup_mutation_function(config)
   annealing_fn = (
@@ -250,6 +249,7 @@ def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int 
     if hasattr(config, "annealing_config") and config.annealing_config is not None
     else None
   )
+  print(f"Annealing fn is None: {annealing_fn is None}")
   writer, io_callback = _setup_writer_callback(output_path / f"data_{run_uuid}.arrayrecord")
   try:
     logger.info(
@@ -296,30 +296,19 @@ def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int 
       resampling_approach = config.resampling_approach  # type: ignore[attr-defined]
       initial_state = initial_states_list[0]
 
-      final_state, _ = run_fn(
+      final_state = run_fn(
         num_samples,
         algorithm,
         resampling_approach,
         initial_state,
         fitness_fn,
         mutation_fn,
-        annealing_fn,
         io_callback,
+        annealing_fn,
       )
-    else:
-      # Fallback: call the run function with commonly used kwargs for other
-      # sampler implementations. This preserves backward compatibility with
-      # the previous invocation style used in tests/mocks.
-      final_state, _ = run_fn(
-        config=config,
-        initial_state=initial_states_list,
-        fitness_fn=fitness_fn,
-        mutation_fn=mutation_fn,
-        annealing_fn=annealing_fn,
-        io_callback=io_callback,
-      )
-    jax.block_until_ready(final_state)
-    logger.info("Sampler loop finished.")
+
+      jax.block_until_ready(final_state)
+      logger.info("Sampler loop finished.")
 
     # 6. Write results to disk
 

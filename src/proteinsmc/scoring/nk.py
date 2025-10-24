@@ -27,8 +27,8 @@ def make_nk_score(landscape: NKLandscape, n: int, k: int) -> Callable:
   fitness_fn = partial(calculate_nk_fitness_single, landscape=landscape, n=n, k=k)
 
   def nk_score(
+    _key: PRNGKeyArray | None,
     sequence: Array,
-    _key: PRNGKeyArray | None = None,
     _context: PyTree | Array | None = None,
   ) -> Array:
     """Calculate fitness for a single sequence using the NK landscape."""

@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-  from jaxtyping import Array, Float, PRNGKeyArray
+  from jaxtyping import Array, Float, Int, PRNGKeyArray
 
 
 class FitnessFn(Protocol):
@@ -110,7 +110,7 @@ class AnnealingFn(Protocol):
 
   def __call__(
     self,
-    step: int,
+    step: Int,
     context: dict[str, Array | float | int] | None = None,
   ) -> Float:
     """Compute annealing parameter for given step."""

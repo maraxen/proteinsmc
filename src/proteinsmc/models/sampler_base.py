@@ -92,9 +92,8 @@ class BaseSamplerConfig:
       msg = "seed_sequence must be a string, a sequence of strings, or a jax.Array."
       raise TypeError(msg)
     # Check num_samples - must be int or Sequence, but not string
-    if (
-      not isinstance(self.num_samples, int | Sequence | jax.Array)
-      or isinstance(self.num_samples, str)
+    if not isinstance(self.num_samples, int | Sequence | jax.Array) or isinstance(
+      self.num_samples, str
     ):
       msg = "num_samples must be an integer, a sequence of integers, or a jax.Array."
       raise TypeError(msg)
@@ -336,13 +335,19 @@ def config_to_jax(config: BaseSamplerConfig) -> dict[str, jax.Array]:
   """Convert configuration fields to JAX arrays for JIT compatibility.
 
   Note: String fields are excluded as JAX does not support string arrays.
+  Integer seeds are converted to uint32 to avoid overflow with large seed values.
   """
   jax_config = {}
   for field_name, field_value in config.__dict__.items():
     if isinstance(field_value, str):
       # Skip string fields - JAX doesn't support string arrays
       continue
-    if isinstance(field_value, (int, float, bool)):
+    if isinstance(field_value, int):
+      # Use uint32 for seed fields to handle large values (JAX PRNGKey uses uint32)
+      # Use int64 for other integer fields to avoid overflow
+      dtype = jax.numpy.uint32 if "seed" in field_name.lower() else jax.numpy.int64
+      jax_config[field_name] = jax.numpy.array(field_value, dtype=dtype)
+    elif isinstance(field_value, (float, bool)):
       jax_config[field_name] = jax.numpy.array(field_value)
     else:
       jax_config[field_name] = field_value
