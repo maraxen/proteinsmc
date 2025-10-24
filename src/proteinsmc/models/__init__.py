@@ -8,7 +8,7 @@ from .mcmc import MCMCConfig
 from .memory import AutoTuningConfig, MemoryConfig
 from .nuts import NUTSConfig
 from .parallel_replica import ParallelReplicaConfig, PRSMCOutput
-from .sampler_base import BaseSamplerConfig, SamplerOutputProtocol, SamplerState
+from .sampler_base import BaseSamplerConfig, SamplerOutput, SamplerOutputProtocol, SamplerState
 from .smc import (
   PopulationBools,
   PopulationMetrics,
@@ -50,6 +50,7 @@ __all__ = [
   "ProteinSequence",
   "SMCConfig",
   "SMCOutput",
+  "SamplerOutput",
   "SamplerOutputProtocol",
   "SamplerState",
   "StackedPopulationMetrics",

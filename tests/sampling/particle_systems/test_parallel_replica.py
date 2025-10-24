@@ -12,10 +12,8 @@ import pytest
 from blackjax.smc.base import SMCState
 from jax import vmap
 
-from proteinsmc.models.sampler_base import SamplerState
+from proteinsmc.models.sampler_base import SamplerOutput, SamplerState
 from proteinsmc.sampling.particle_systems.parallel_replica import (
-    MigrationInfo,
-    PRSMCOutput,
     migrate,
     run_prsmc_loop,
 )
@@ -43,7 +41,7 @@ class TestMigrate:
         )
         weights = jnp.ones((n_islands, population_size)) / population_size
         blackjax_state = vmap(
-            lambda p, w: SMCState(particles=p, weights=w, update_parameters=None)
+            lambda p, w: SMCState(particles=p, weights=w, update_parameters={})
         )(particles, weights)
 
         betas = jnp.array([0.3, 0.6, 1.0])
@@ -75,28 +73,36 @@ class TestMigrate:
         ) -> Array:
             return jnp.ones((sequences.shape[0],))
 
-        updated_state, num_accepted, migration_info = migrate(
+        (
+            updated_state,
+            num_accepted,
+            island_from,
+            island_to,
+            particle_from,
+            particle_to,
+            accepted,
+            log_ratio,
+        ) = migrate(
             mock_island_state,
             meta_beta,
             key,
             n_islands,
             population_size,
             n_exchange_attempts,
-            mock_fitness_fn,
+            mock_fitness_fn, # type:ignore 
         )
 
         # Check output structure
         assert isinstance(updated_state, SamplerState)
         chex.assert_type(num_accepted, jnp.int32)
-        assert isinstance(migration_info, MigrationInfo)
 
-        # Check migration info shapes
-        chex.assert_shape(migration_info.island_from, (n_exchange_attempts,))
-        chex.assert_shape(migration_info.island_to, (n_exchange_attempts,))
-        chex.assert_shape(migration_info.particle_idx_from, (n_exchange_attempts,))
-        chex.assert_shape(migration_info.particle_idx_to, (n_exchange_attempts,))
-        chex.assert_shape(migration_info.accepted, (n_exchange_attempts,))
-        chex.assert_shape(migration_info.log_acceptance_ratio, (n_exchange_attempts,))
+        # Check migration info shapes (now individual arrays instead of MigrationInfo)
+        chex.assert_shape(island_from, (n_exchange_attempts,))
+        chex.assert_shape(island_to, (n_exchange_attempts,))
+        chex.assert_shape(particle_from, (n_exchange_attempts,))
+        chex.assert_shape(particle_to, (n_exchange_attempts,))
+        chex.assert_shape(accepted, (n_exchange_attempts,))
+        chex.assert_shape(log_ratio, (n_exchange_attempts,))
 
 
 class TestRunPRSMCLoop:
@@ -122,7 +128,7 @@ class TestRunPRSMCLoop:
             return SMCState(
                 particles=particles_island,
                 weights=weights_island,
-                update_parameters=None,
+                update_parameters={},
             )
 
         blackjax_state = vmap(create_island_state)(particles, weights)
@@ -168,7 +174,7 @@ class TestRunPRSMCLoop:
         ) -> tuple[Array, UpdateInfo]:
             return sequence, UpdateInfo()
 
-        def mock_annealing_fn(step: int, context: None) -> Array:
+        def mock_annealing_fn(current_step: int, _context: None) -> Array:
             return jnp.array(1.0)
 
         def mock_writer_callback(data: dict) -> None:
@@ -182,9 +188,9 @@ class TestRunPRSMCLoop:
             n_islands=n_islands,
             exchange_frequency=exchange_frequency,
             n_exchange_attempts=n_exchange_attempts,
-            fitness_fn=mock_fitness_fn,
-            mutation_fn=mock_mutation_fn,
-            annealing_fn=mock_annealing_fn,
+            fitness_fn=mock_fitness_fn, # type:ignore
+            mutation_fn=mock_mutation_fn, # type:ignore
+            annealing_fn=mock_annealing_fn, # type:ignore
             writer_callback=mock_writer_callback,
         )
 
@@ -217,12 +223,14 @@ class TestRunPRSMCLoop:
             )[0]
             return sequence.at[..., pos].set(sequence[..., pos] + 1), UpdateInfo()
 
-        def annealing_fn(t: Int, context: None) -> Float:
-            return t / num_steps
+        def annealing_fn(current_step: Int, _context: None) -> Float:
+            return current_step / num_steps
 
-        def writer_callback(output: PRSMCOutput) -> None:
+        def writer_callback(output: SamplerOutput) -> None:
             # Check that the output is of the correct type
-            assert isinstance(output, dict)
+            assert isinstance(output, SamplerOutput)
+            assert hasattr(output, "sequences")
+            assert hasattr(output, "num_attempted_swaps")
 
         final_state = run_prsmc_loop(
             num_steps=num_steps,
@@ -255,85 +263,7 @@ class TestRunPRSMCLoop:
         assert final_fitness > initial_fitness
 
 
-class TestMigrationInfo:
-    """Test the MigrationInfo dataclass."""
-
-    def test_migration_info_creation(self) -> None:
-        """Test MigrationInfo creation."""
-        n_attempts = 5
-        migration_info = MigrationInfo(
-            island_from=jnp.zeros(n_attempts, dtype=jnp.int32),
-            island_to=jnp.ones(n_attempts, dtype=jnp.int32),
-            particle_idx_from=jnp.arange(n_attempts, dtype=jnp.int32),
-            particle_idx_to=jnp.arange(n_attempts, dtype=jnp.int32),
-            accepted=jnp.array([True, False, True, False, True]),
-            log_acceptance_ratio=jnp.zeros(n_attempts, dtype=jnp.float32),
-        )
-
-        chex.assert_shape(migration_info.island_from, (n_attempts,))
-        chex.assert_shape(migration_info.island_to, (n_attempts,))
-        chex.assert_shape(migration_info.particle_idx_from, (n_attempts,))
-        chex.assert_shape(migration_info.particle_idx_to, (n_attempts,))
-        chex.assert_shape(migration_info.accepted, (n_attempts,))
-        chex.assert_shape(migration_info.log_acceptance_ratio, (n_attempts,))
-
-
-class TestPRSMCOutput:
-    """Test the PRSMCOutput dataclass."""
-
-    def test_prsmc_output_creation(self) -> None:
-        """Test PRSMCOutput creation."""
-        n_islands = 2
-        population_size = 4
-        seq_length = 3
-        n_exchange_attempts = 5
-
-        particles = jax.random.randint(
-            jax.random.PRNGKey(0),
-            (n_islands, population_size, seq_length),
-            0,
-            20,
-        )
-        weights = jnp.ones((n_islands, population_size)) / population_size
-        blackjax_state = vmap(
-            lambda p, w: SMCState(particles=p, weights=w, update_parameters=None)
-        )(particles, weights)
-
-        state = SamplerState(
-            sequence=particles,
-            key=jax.random.PRNGKey(42),
-            blackjax_state=blackjax_state,
-            step=jnp.array(1, dtype=jnp.int32),
-            additional_fields={"beta": jnp.array([0.5, 1.0])},
-        )
-
-        from blackjax.smc.base import SMCInfo
-
-        info = SMCInfo(
-            log_likelihood_increment=jnp.zeros((n_islands,)),
-            ancestors=jnp.zeros((n_islands, population_size), dtype=jnp.int32),
-            update_info={},
-        )
-
-        migration_info = MigrationInfo(
-            island_from=jnp.zeros(n_exchange_attempts, dtype=jnp.int32),
-            island_to=jnp.ones(n_exchange_attempts, dtype=jnp.int32),
-            particle_idx_from=jnp.zeros(n_exchange_attempts, dtype=jnp.int32),
-            particle_idx_to=jnp.zeros(n_exchange_attempts, dtype=jnp.int32),
-            accepted=jnp.zeros(n_exchange_attempts, dtype=jnp.bool_),
-            log_acceptance_ratio=jnp.zeros(n_exchange_attempts, dtype=jnp.float32),
-        )
-
-        output = PRSMCOutput(
-            state=state,
-            info=info,
-            num_attempted_swaps=jnp.array(n_exchange_attempts, dtype=jnp.int32),
-            num_accepted_swaps=jnp.array(2, dtype=jnp.int32),
-            migration_info=migration_info,
-        )
-
-        assert isinstance(output.state, SamplerState)
-        assert isinstance(output.info, SMCInfo)
-        assert output.num_attempted_swaps == n_exchange_attempts
-        assert output.num_accepted_swaps == 2
-        assert isinstance(output.migration_info, MigrationInfo)
+# NOTE: TestMigrationInfo and TestPRSMCOutput classes have been removed
+# as MigrationInfo and PRSMCOutput data structures have been replaced
+# with the unified SamplerOutput structure. Migration data is now stored
+# as individual array fields in SamplerOutput rather than a nested structure.

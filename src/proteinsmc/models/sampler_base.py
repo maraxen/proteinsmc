@@ -5,9 +5,10 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Literal, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 from blackjax.smc.base import SMCState as BaseSMCState
 from blackjax.smc.inner_kernel_tuning import StateWithParameterOverride as InnerMCMCState
@@ -184,6 +185,128 @@ class BaseSamplerConfig:
   def additional_config_fields(self) -> dict[str, str]:
     """Return additional fields for the configuration that are not part of the PyTree."""
     return {}
+
+
+@struct.dataclass
+class SamplerOutput:
+  """Unified output structure for all samplers.
+
+  All fields default to empty arrays to ensure msgpack compatibility.
+  Samplers populate only the fields relevant to their algorithm.
+
+  Core fields (always populated):
+      step: Current step number
+      sequences: Sampled sequences
+      fitness: Fitness values
+      key: RNG key state
+
+  Common metrics (populated when available):
+      weights: Particle weights (SMC)
+      log_likelihood_increment: Log likelihood increment (SMC)
+
+  SMC-specific:
+      ancestors: Ancestor indices for resampling
+      ess: Effective sample size
+      update_info: Additional information from BlackJax update step (SMCInfo.update_info)
+
+  Tempered SMC (BlackJax):
+      lmbda: Tempering parameter (lambda) for tempered SMC
+          Note: Not yet implemented in SMC loop, placeholder for future use
+
+  Annealing:
+      beta: Inverse temperature parameter
+
+  PRSMC-specific:
+      num_attempted_swaps: Number of replica exchange attempts
+      num_accepted_swaps: Number of successful swaps
+      migration_island_from: Source island indices
+      migration_island_to: Destination island indices
+      migration_particle_idx_from: Source particle indices
+      migration_particle_idx_to: Destination particle indices
+      migration_accepted: Whether each swap was accepted
+      migration_log_acceptance_ratio: Log acceptance ratio for each swap
+
+  HMC/NUTS-specific:
+      acceptance_probability: Acceptance probability
+      num_integration_steps: Number of leapfrog steps
+
+  Computed metrics:
+      mean_fitness: Mean fitness across population
+      max_fitness: Maximum fitness in population
+      log_z_estimate: Log partition function estimate
+
+  """
+
+  # Core fields (always populated)
+  step: jax.Array
+  sequences: EvoSequence
+  fitness: jax.Array
+  key: jax.Array
+
+  # Common metrics
+  weights: jax.Array = struct.field(default_factory=lambda: jnp.array([]))
+  log_likelihood_increment: jax.Array = struct.field(default_factory=lambda: jnp.array(0.0))
+
+  # SMC-specific
+  ancestors: jax.Array = struct.field(default_factory=lambda: jnp.array([], dtype=jnp.int32))
+  ess: jax.Array = struct.field(default_factory=lambda: jnp.array(0.0))
+  update_info: jax.Array = struct.field(
+    default_factory=lambda: jnp.array([]),
+    metadata={
+      "help": (
+        "BlackJax SMCInfo.update_info - additional info from update step. "
+        "NOTE: BlackJax returns this as a NamedTuple which is NOT msgpack-serializable. "
+        "Samplers should convert relevant fields to arrays before storing. "
+        "Default empty array indicates no update_info was captured."
+      )
+    },
+  )
+
+  # Tempered SMC (BlackJax) - placeholder for future implementation
+  lmbda: jax.Array = struct.field(
+    default_factory=lambda: jnp.array(-1.0),
+    metadata={"help": "Tempering parameter for tempered SMC (not yet implemented)"},
+  )
+
+  # Annealing
+  beta: jax.Array = struct.field(default_factory=lambda: jnp.array(-1.0))
+
+  # PRSMC-specific
+  num_attempted_swaps: jax.Array = struct.field(
+    default_factory=lambda: jnp.array(0, dtype=jnp.int32)
+  )
+  num_accepted_swaps: jax.Array = struct.field(
+    default_factory=lambda: jnp.array(0, dtype=jnp.int32)
+  )
+  migration_island_from: jax.Array = struct.field(
+    default_factory=lambda: jnp.array([], dtype=jnp.int32)
+  )
+  migration_island_to: jax.Array = struct.field(
+    default_factory=lambda: jnp.array([], dtype=jnp.int32)
+  )
+  migration_particle_idx_from: jax.Array = struct.field(
+    default_factory=lambda: jnp.array([], dtype=jnp.int32)
+  )
+  migration_particle_idx_to: jax.Array = struct.field(
+    default_factory=lambda: jnp.array([], dtype=jnp.int32)
+  )
+  migration_accepted: jax.Array = struct.field(
+    default_factory=lambda: jnp.array([], dtype=jnp.bool_)
+  )
+  migration_log_acceptance_ratio: jax.Array = struct.field(
+    default_factory=lambda: jnp.array([], dtype=jnp.float32)
+  )
+
+  # HMC/NUTS-specific
+  acceptance_probability: jax.Array = struct.field(default_factory=lambda: jnp.array(0.0))
+  num_integration_steps: jax.Array = struct.field(
+    default_factory=lambda: jnp.array(0, dtype=jnp.int32)
+  )
+
+  # Computed metrics
+  mean_fitness: jax.Array = struct.field(default_factory=lambda: jnp.array(0.0))
+  max_fitness: jax.Array = struct.field(default_factory=lambda: jnp.array(0.0))
+  log_z_estimate: jax.Array = struct.field(default_factory=lambda: jnp.array(0.0))
 
 
 class SamplerOutputProtocol(Protocol):

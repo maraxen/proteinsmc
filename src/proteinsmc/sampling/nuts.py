@@ -9,7 +9,6 @@ NUTS sampler.
 from __future__ import annotations
 
 import dataclasses
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import blackjax
@@ -18,24 +17,17 @@ import jax.numpy as jnp
 from blackjax.mcmc.hmc import HMCState
 from jax.experimental import io_callback as jax_io_callback
 
-from proteinsmc.models.sampler_base import SamplerState
+from proteinsmc.models.sampler_base import SamplerOutput, SamplerState
 
 if TYPE_CHECKING:
   from collections.abc import Callable
 
-  from blackjax.mcmc.nuts import NUTSInfo
   from jaxtyping import Float, Int
 
   from proteinsmc.models.fitness import StackedFitnessFn
   from proteinsmc.models.mutation import MutationFn
 
 __all__ = ["run_nuts_loop"]
-
-
-@dataclass
-class NUTSOutput:
-  state: SamplerState
-  info: NUTSInfo  # type: ignore[name-defined]
 
 
 def run_nuts_loop(  # noqa: PLR0913
@@ -118,18 +110,24 @@ def run_nuts_loop(  # noqa: PLR0913
 
     new_state = SamplerState(
       sequence=new_blackjax_state.position,
-      fitness=new_fitness,
       key=key,
       blackjax_state=new_blackjax_state,
       step=jnp.array(step_idx + 1),
     )
 
     if io_callback is not None:
-      output = NUTSOutput(state=new_state, info=info)
+      output = SamplerOutput(
+        step=jnp.array(step_idx + 1, dtype=jnp.int32),
+        sequences=new_blackjax_state.position,
+        fitness=new_fitness,
+        key=key,
+        acceptance_probability=jnp.array(info.acceptance_probability),
+        num_integration_steps=jnp.array(info.num_integration_steps, dtype=jnp.int32),
+      )
       jax_io_callback(
         io_callback,
         None,
-        {"state": output.state, "info": output.info},
+        output,
       )
 
     return new_state

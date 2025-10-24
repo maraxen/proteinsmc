@@ -39,7 +39,7 @@ def simple_fitness_fn():
   return fitness_fn
 
 
-@pytest.skip(reason="Tests need to be updated for new HMC loop implementation.")
+@pytest.mark.skip(reason="Tests need to be updated for new HMC loop implementation.")
 class TestRunHMCLoop:
   """Test the run_hmc_loop function."""
 
