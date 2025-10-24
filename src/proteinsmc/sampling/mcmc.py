@@ -11,7 +11,7 @@ import jax.numpy as jnp
 from blackjax.mcmc.random_walk import RWState
 from jax.experimental import io_callback as jax_io_callback
 
-from proteinsmc.models.sampler_base import SamplerState
+from proteinsmc.models.sampler_base import SamplerOutput, SamplerState
 
 if TYPE_CHECKING:
   from collections.abc import Callable
@@ -86,17 +86,22 @@ def run_mcmc_loop(
 
     new_state = SamplerState(
       sequence=new_blackjax_state.position,  # pyright: ignore[reportArgumentType]
-      fitness=new_fitness,
       key=key,
       blackjax_state=new_blackjax_state,
       step=jnp.array(step_idx + 1),
     )
 
     if io_callback is not None:
+      output = SamplerOutput(
+        step=jnp.array(step_idx + 1, dtype=jnp.int32),
+        sequences=new_blackjax_state.position,  # type: ignore[arg-type]
+        fitness=new_fitness,
+        key=key,
+      )
       jax_io_callback(
         io_callback,
         None,
-        {"sequence": new_state.sequence, "fitness": new_state.fitness, "step": new_state.step},
+        output,
       )
 
     return new_state

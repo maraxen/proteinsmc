@@ -11,7 +11,6 @@ from blackjax.smc import resampling
 from blackjax.smc.base import SMCInfo
 from blackjax.smc.base import SMCState as BlackjaxSMCState
 from blackjax.smc.base import step as smc_step
-from flax.struct import dataclass
 from jax.experimental import io_callback
 
 if TYPE_CHECKING:
@@ -21,7 +20,7 @@ if TYPE_CHECKING:
 
   from proteinsmc.models.mutation import MutationFn
 
-from proteinsmc.models.sampler_base import SamplerState
+from proteinsmc.models.sampler_base import SamplerOutput, SamplerState
 
 if TYPE_CHECKING:
   from jaxtyping import Int, PRNGKeyArray
@@ -29,14 +28,6 @@ if TYPE_CHECKING:
   from proteinsmc.models.annealing import AnnealingFn
   from proteinsmc.models.fitness import StackedFitnessFn
   from proteinsmc.models.smc import PopulationSequences, SMCAlgorithmType
-
-
-@dataclass
-class SMCOutput:
-  """Output of a single SMC step."""
-
-  state: SamplerState
-  info: SMCInfo
 
 
 def resample(
@@ -109,7 +100,9 @@ def run_smc_loop(  # noqa: PLR0913
   )
 
   def scan_body(state: SamplerState, i: Int) -> tuple[SamplerState, SMCInfo]:
-    current_beta = None if annealing_fn is None else annealing_fn(i, _context=None)  # type: ignore[call-arg]
+    current_beta = (
+      None if annealing_fn is None else annealing_fn(i, _context=None)  # type: ignore[call-arg]
+    )
     key_for_fitness_fn, key_for_blackjax, next_key = jax.random.split(
       state.key,
       3,
@@ -140,13 +133,29 @@ def run_smc_loop(  # noqa: PLR0913
         "beta": current_beta if current_beta is not None else jnp.array(-1.0),
       },
     )
+
+    # Compute fitness for output
+    # Type narrowing for blackjax SMCState
+    particles = next_state.particles  # type: ignore[attr-defined]
+    weights = next_state.weights  # type: ignore[attr-defined]
+
+    # Create unified SamplerOutput
+    sampler_output = SamplerOutput(
+      step=jnp.array(i + 1, dtype=jnp.int32),
+      sequences=particles,  # type: ignore[arg-type]
+      fitness=weights,
+      key=next_key,
+      weights=weights,
+      log_likelihood_increment=jnp.array(info.log_likelihood_increment),
+      ancestors=info.ancestors,
+      ess=jnp.array(1.0 / jnp.sum(weights**2)),
+      beta=current_beta if current_beta is not None else jnp.array(-1.0),
+    )
+
     io_callback(
       writer_callback,
       None,
-      SMCOutput(
-        state=next_smc_state,
-        info=info,
-      ),
+      sampler_output,
     )
     return next_smc_state, info
 

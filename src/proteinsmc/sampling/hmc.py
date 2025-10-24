@@ -11,24 +11,16 @@ import jax.numpy as jnp
 from blackjax.mcmc.hmc import HMCState
 from jax.experimental import io_callback as jax_io_callback
 
-from proteinsmc.models.sampler_base import SamplerState
+from proteinsmc.models.sampler_base import SamplerOutput, SamplerState
 
 if TYPE_CHECKING:
   from collections.abc import Callable
-
-  from blackjax.mcmc.hmc import HMCInfo
 
   from proteinsmc.models.fitness import StackedFitnessFn
   from proteinsmc.models.mutation import MutationFn
 
 
 __all__ = ["run_hmc_loop"]
-
-
-@dataclasses.dataclass
-class HMCOutput:
-  state: SamplerState
-  info: HMCInfo
 
 
 def run_hmc_loop(  # noqa: PLR0913
@@ -114,18 +106,24 @@ def run_hmc_loop(  # noqa: PLR0913
 
     new_state = SamplerState(
       sequence=new_blackjax_state.position,
-      fitness=new_fitness,
       key=kernel_key,
       blackjax_state=new_blackjax_state,
       step=jnp.array(step_idx + 1),
     )
 
     if io_callback is not None:
-      output = HMCOutput(state=new_state, info=hmc_info)
+      output = SamplerOutput(
+        step=jnp.array(step_idx + 1, dtype=jnp.int32),
+        sequences=new_blackjax_state.position,
+        fitness=new_fitness,
+        key=kernel_key,
+        acceptance_probability=jnp.array(hmc_info.acceptance_probability),
+        num_integration_steps=jnp.array(num_integration_steps, dtype=jnp.int32),
+      )
       jax_io_callback(
         io_callback,
         None,
-        {"state": output.state, "info": output.info},
+        output,
       )
 
     return new_state

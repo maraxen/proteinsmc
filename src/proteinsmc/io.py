@@ -3,18 +3,18 @@
 import json
 import shutil
 import subprocess
-import time
 from collections.abc import Callable, Generator
 from dataclasses import asdict, fields, is_dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import jax
 import msgpack_numpy
 from array_record.python.array_record_module import ArrayRecordReader, ArrayRecordWriter
 from flax.serialization import msgpack_restore, msgpack_serialize
 from jaxtyping import PyTree
+
+from proteinsmc.models.sampler_base import SamplerOutput
 
 msgpack_numpy.patch()
 
@@ -99,22 +99,18 @@ def create_writer_callback(path: str) -> tuple[ArrayRecordWriter, Callable]:
   writer = ArrayRecordWriter(path)
 
   def writer_callback(
-    pytree_payload: PyTree,
+    sampler_output: SamplerOutput,
   ) -> None:
     """Write a payload to the ArrayRecord file.
 
     This function is executed by io_callback.
 
     Args:
-        pytree_payload: The payload data to write (will be serialized with msgpack).
+        sampler_output: The SamplerOutput data to write (will be serialized with msgpack).
 
     """
-    leaves, _tree_def = jax.tree_util.tree_flatten(pytree_payload)
-    processed_dict = {
-      "leaves": leaves,
-    }
-    packed_bytes = msgpack_serialize(processed_dict)
-    writer.write(packed_bytes)
+    serialized = msgpack_serialize(sampler_output)
+    writer.write(serialized)
 
   return writer, writer_callback
 

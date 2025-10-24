@@ -11,9 +11,8 @@ import jax.numpy as jnp
 import pytest
 from blackjax.smc.base import SMCInfo, SMCState
 
-from proteinsmc.models.sampler_base import SamplerState
+from proteinsmc.models.sampler_base import SamplerOutput, SamplerState
 from proteinsmc.sampling.particle_systems.smc import (
-    SMCOutput,
     UpdateInfo,
     create_smc_loop_func,
     resample,
@@ -163,11 +162,11 @@ class TestRunSMCLoop:
         def annealing_fn(t: Int, _context: None) -> Float:
             return t / num_samples
 
-        def writer_callback(output: SMCOutput) -> None:
+        def writer_callback(output: SamplerOutput) -> None:
             # Check that the output is of the correct type
-            assert isinstance(output, SMCOutput)
-            assert isinstance(output.state, SamplerState)
-            assert isinstance(output.info, SMCInfo)
+            assert isinstance(output, SamplerOutput)
+            assert hasattr(output, "sequences")
+            assert hasattr(output, "fitness")
 
         final_state, final_info = run_smc_loop(
             num_samples=num_samples,
