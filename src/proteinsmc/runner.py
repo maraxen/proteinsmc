@@ -230,7 +230,9 @@ def _get_inputs(config: BaseSamplerConfig) -> tuple[dict[str, Any], list[str]]:
   return jax_inputs, sequence_type_inputs
 
 
-def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int = 0) -> str:
+def run_experiment(
+  config: BaseSamplerConfig, output_dir: str | Path, seed: int = 0, *, use_uuid: bool = False
+) -> str:
   """Run a sampling experiment based on the provided configuration.
 
   Returns:
@@ -254,8 +256,11 @@ def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int 
     if hasattr(config, "annealing_config") and config.annealing_config is not None
     else None
   )
-  print(f"Annealing fn is None: {annealing_fn is None}")
-  writer, io_callback = _setup_writer_callback(output_path / f"data_{run_uuid}.arrayrecord")
+  logger.debug("Annealing fn is None: %s", annealing_fn is None)
+  output_path = (
+    output_path / f"data_{run_uuid}.arrayrecord" if use_uuid else output_path / "data.arrayrecord"
+  )
+  writer, io_callback = _setup_writer_callback(output_path)
   try:
     logger.info(
       "Starting run of type '%s'...",
@@ -290,6 +295,7 @@ def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int 
     # rather than a single config object.
     initial_states_list = list(initial_states)
 
+    final_state = None
     if config.sampler_type == "smc":
       # run_smc_loop expects: num_samples, algorithm, resampling_approach,
       # initial_state, fitness_fn, mutation_fn, annealing_fn, writer_callback
@@ -312,7 +318,8 @@ def run_experiment(config: BaseSamplerConfig, output_dir: str | Path, seed: int 
         annealing_fn,
       )
 
-    jax.block_until_ready(final_state)
+    if final_state is not None:
+      jax.block_until_ready(final_state)
     logger.info("Sampler loop finished.")
 
     # 6. Write results to disk

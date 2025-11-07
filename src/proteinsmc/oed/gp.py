@@ -211,9 +211,11 @@ def features_to_predicted_variables(
 
   Example:
     >>> mean_dict = {"dim_0": jnp.array([0.5]), "dim_1": jnp.array([0.6]),
-    ...              "dim_2": jnp.array([0.7]), "dim_3": jnp.array([0.8])}
+    ...              "dim_2": jnp.array([0.7]), "dim_3": jnp.array([0.8]),
+    ...              "dim_4": jnp.array([0.9])}
     >>> var_dict = {"dim_0": jnp.array([0.1]), "dim_1": jnp.array([0.1]),
-    ...             "dim_2": jnp.array([0.1]), "dim_3": jnp.array([0.1])}
+    ...             "dim_2": jnp.array([0.1]), "dim_3": jnp.array([0.1]),
+    ...             "dim_4": jnp.array([0.1])}
     >>> vars = features_to_predicted_variables(mean_dict, var_dict)
     >>> jnp.isclose(vars.information_gain, 0.5)
     True
@@ -224,4 +226,5 @@ def features_to_predicted_variables(
     barrier_crossing_frequency=mean_dict["dim_1"][0],
     final_sequence_entropy=mean_dict["dim_2"][0],
     jsd_from_original_population=mean_dict["dim_3"][0],
+    geometric_fitness_mean=mean_dict["dim_4"][0],
   )

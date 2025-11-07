@@ -245,3 +245,32 @@ def outcome_shannon_entropy(outcomes: Array) -> Float:
 
   # Calculate Shannon entropy
   return -jnp.sum(probabilities * jnp.log2(probabilities + 1e-10))
+
+
+def calculate_geometric_fitness_mean(fitness_history: Array) -> Float:
+  """Calculate geometric mean of fitness values over generations.
+
+  This metric provides a measure of the typical fitness value throughout evolution,
+  giving less weight to extreme outliers compared to arithmetic mean.
+
+  Args:
+      fitness_history: Array of fitness values over generations (shape: n_generations,).
+
+  Returns:
+      Geometric mean of fitness values.
+
+  """
+  if len(fitness_history) == 0:
+    return jnp.array(0.0)
+
+  if len(fitness_history) == 1:
+    return fitness_history[0]
+
+  # Calculate geometric mean: (product of all values)^(1/n)
+  # Using log space for numerical stability: exp(mean(log(x)))
+  # Add small epsilon to avoid log(0)
+  epsilon = 1e-10
+  safe_fitness = jnp.maximum(fitness_history, epsilon)
+  log_mean = jnp.mean(jnp.log(safe_fitness))
+
+  return jnp.exp(log_mean)

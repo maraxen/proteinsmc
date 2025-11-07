@@ -27,6 +27,8 @@ class OEDRecordParams(NamedTuple):
   run_uuid: str
   iteration: int
   phase: str = "seeding"
+  record_start_idx: int = 0  # Starting index in the shared ArrayRecord
+  record_count: int = 0  # Number of records written for this run
 
 
 def _convert_jax_arrays(obj: object) -> object:
@@ -61,6 +63,8 @@ def save_oed_record(params: OEDRecordParams) -> None:
     "run_uuid": params.run_uuid,
     "design": design_dict,
     "result": result_dict,
+    "record_start_idx": params.record_start_idx,
+    "record_count": params.record_count,
   }
 
   # Append to JSONL file (one record per line)
@@ -68,10 +72,12 @@ def save_oed_record(params: OEDRecordParams) -> None:
     f.write(json.dumps(record) + "\n")
 
   logger.info(
-    "Saved OED record: phase=%s, iteration=%d, run_uuid=%s",
+    "Saved OED record: phase=%s, iteration=%d, run_uuid=%s, indices=[%d:%d]",
     params.phase,
     params.iteration,
     params.run_uuid,
+    params.record_start_idx,
+    params.record_start_idx + params.record_count,
   )
 
 
@@ -97,6 +103,32 @@ def load_oed_manifest(output_dir: str | Path) -> list[dict[str, object]]:
 
   logger.info("Loaded %d OED records from %s", len(records), manifest_file)
   return records
+
+
+def get_next_record_index(output_dir: str | Path) -> int:
+  """Get the next available record index in the shared ArrayRecord file.
+
+  Args:
+      output_dir: Directory containing OED outputs
+
+  Returns:
+      The starting index for the next run's records
+
+  """
+  records = load_oed_manifest(output_dir)
+  if not records:
+    return 0
+
+  # Calculate the next available index from the last record
+  last_record = records[-1]
+  last_start_idx = last_record.get("record_start_idx", 0)
+  last_count = last_record.get("record_count", 0)
+
+  if isinstance(last_start_idx, int) and isinstance(last_count, int):
+    return last_start_idx + last_count
+
+  logger.warning("Invalid record indices in manifest, returning 0")
+  return 0
 
 
 def save_oed_checkpoint(
@@ -267,3 +299,40 @@ def add_oed_to_metadata(
     json.dump(metadata, f, indent=2)
 
   logger.info("Enhanced metadata with OED design: phase=%s, iteration=%d", phase, iteration)
+
+
+def get_run_records_range(output_dir: str | Path, run_uuid: str) -> tuple[int, int] | None:
+  """Get the record index range for a specific run.
+
+  Args:
+      output_dir: Directory containing OED outputs
+      run_uuid: UUID of the run to find
+
+  Returns:
+      Tuple of (start_index, end_index) or None if run not found
+
+  """
+  records = load_oed_manifest(output_dir)
+
+  for record in records:
+    if record.get("run_uuid") == run_uuid:
+      start_idx = record.get("record_start_idx", 0)
+      count = record.get("record_count", 0)
+      if isinstance(start_idx, int) and isinstance(count, int):
+        return (start_idx, start_idx + count)
+
+  logger.warning("Run UUID %s not found in manifest", run_uuid)
+  return None
+
+
+def get_shared_arrayrecord_path(output_dir: str | Path) -> Path:
+  """Get the path to the shared ArrayRecord file for all OED runs.
+
+  Args:
+      output_dir: Directory containing OED outputs
+
+  Returns:
+      Path to the shared ArrayRecord file
+
+  """
+  return Path(output_dir) / "oed_data.arrayrecord"
