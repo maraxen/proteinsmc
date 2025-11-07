@@ -28,15 +28,15 @@ from proteinsmc.oed.tracking import (
 # --- Constants and Configuration ---
 
 PARAMETER_BOUNDS = {
-  "N": (10, 50),  # Sequence length - ensure meaningful sequences for metrics
-  "K": (0, 1),
-  "q": (2, 3),
-  "population_size": (50, 100),
-  "mutation_rate": (1e-4, 1e-1),
+  "N": (10, 200),  # Sequence length - ensure meaningful sequences for metrics
+  "K": (0, 5),
+  "q": (2, 20),
+  "population_size": (50, 100000),
+  "mutation_rate": (1e-9, 1e-1),
   "diversification_ratio": (0.0, 1.0),
 }
 
-FIXED_N_GENERATIONS = 10
+FIXED_N_GENERATIONS = 200
 
 # --- OED Core Functions ---
 
@@ -117,6 +117,7 @@ def train_surrogate_model(
         result.barrier_crossing_frequency,
         result.final_sequence_entropy,
         result.jsd_from_original_population,
+        result.geometric_fitness_mean,
       ]
       for _, result in design_history
     ]

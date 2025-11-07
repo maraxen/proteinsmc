@@ -9,27 +9,37 @@ from typing import IO, TYPE_CHECKING, Literal
 import jax
 import jax.numpy as jnp
 import numpy as np
-from prxteinmpnn.scoring.score import make_score_sequence
-from prxteinmpnn.utils.decoding_order import (
-  DecodingOrder,
-  random_decoding_order,
-  single_decoding_order,
-)
 
-if TYPE_CHECKING:
-  from pathlib import Path
+PRXTEINMPNN_AVAILABLE = False
+try:
+  import prxteinmpnn
 
-  from prxteinmpnn.utils.types import (
-    Array,
-    Float,
-    ModelParameters,
-    PRNGKeyArray,
+  PRXTEINMPNN_AVAILABLE = True
+except ImportError:
+  pass
+
+if PRXTEINMPNN_AVAILABLE:
+  from prxteinmpnn.scoring.score import make_score_sequence
+  from prxteinmpnn.utils.decoding_order import (
+    DecodingOrder,
+    random_decoding_order,
+    single_decoding_order,
   )
+
+  if TYPE_CHECKING:
+    from pathlib import Path
+
+    from prxteinmpnn.utils.types import (
+      Array,
+      Float,
+      ModelParameters,
+      PRNGKeyArray,
+    )
+
+  from prxteinmpnn.io.loaders import create_protein_dataset
 
   from proteinsmc.models.fitness import FitnessFn
   from proteinsmc.models.types import ProteinSequence
-
-from prxteinmpnn.io.loaders import create_protein_dataset
 
 DecodingSettings = Literal["random", "same_random", "sequential", "full_ar"]
 
@@ -58,6 +68,11 @@ def make_mpnn_score(
       A function that scores a protein sequence using the MPNN model.
 
   """
+  if not PRXTEINMPNN_AVAILABLE:
+    raise ImportError(
+      "prxteinmpnn is not installed. Please install it to use MPNN scoring.",
+    )
+
   dataset = create_protein_dataset(
     inputs,
     batch_size=len(inputs) if isinstance(inputs, Sequence) else 1,

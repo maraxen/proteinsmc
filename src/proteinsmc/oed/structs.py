@@ -25,3 +25,4 @@ class OEDPredictedVariables:
   barrier_crossing_frequency: Float  # Frequency of barrier crossings
   final_sequence_entropy: Float  # Entropy of the final sequence distribution
   jsd_from_original_population: Float  # Jensen-Shannon divergence from original population
+  geometric_fitness_mean: Float  # Geometric mean of fitness over generations

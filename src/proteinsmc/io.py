@@ -139,3 +139,35 @@ def read_lineage_data(path: str) -> Generator[PyTree, None, None]:
   except IndexError:
     # No more records or empty file
     pass
+
+
+def read_lineage_data_range(
+  path: str, start_idx: int, end_idx: int
+) -> Generator[PyTree, None, None]:
+  """Read and deserialize a range of records from a lineage file.
+
+  Args:
+      path: The path to the ArrayRecord file.
+      start_idx: Starting index (inclusive).
+      end_idx: Ending index (exclusive).
+
+  Returns:
+      A generator yielding deserialized records in the specified range.
+
+  """
+  reader = ArrayRecordReader(path)
+
+  try:
+    num_records = reader.num_records()
+    if start_idx < 0 or end_idx > num_records or start_idx >= end_idx:
+      logger.warning(
+        "Invalid range [%d:%d] for file with %d records", start_idx, end_idx, num_records
+      )
+      return
+
+    for idx in range(start_idx, end_idx):
+      packed_bytes = reader.read(idx)
+      full_record = msgpack_restore(packed_bytes)
+      yield full_record
+  except IndexError:
+    logger.warning("Index error reading records [%d:%d]", start_idx, end_idx)

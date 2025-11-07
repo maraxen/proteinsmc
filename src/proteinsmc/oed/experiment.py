@@ -10,7 +10,7 @@ from pathlib import Path
 import jax
 import jax.numpy as jnp
 
-from proteinsmc.io import read_lineage_data
+from proteinsmc.io import read_lineage_data_range
 from proteinsmc.models import (
   AutoTuningConfig,
   FitnessEvaluator,
@@ -20,6 +20,10 @@ from proteinsmc.models import (
 from proteinsmc.models.fitness import CombineFunction, FitnessFunction
 from proteinsmc.oed.nk import create_landscape_from_design
 from proteinsmc.oed.structs import OEDDesign, OEDPredictedVariables
+from proteinsmc.oed.tracking import (
+  get_run_records_range,
+  get_shared_arrayrecord_path,
+)
 from proteinsmc.runner import run_experiment
 from proteinsmc.utils import metrics
 
@@ -103,14 +107,22 @@ def run_oed_experiment(
   config = convert_design_to_config(design, fitness_evaluator, seed)
   # run_experiment has side effects (I/O). It will create metadata and run the sampler.
   # It now returns the run UUID which we use to locate the output file.
-  run_uuid = run_experiment(config, output_dir, seed)
+  run_uuid = run_experiment(config, output_dir, seed, use_uuid=False)
 
-  # Read the actual SMC output from disk
-  output_file = Path(output_dir) / f"data_{run_uuid}.arrayrecord"
-  records = list(read_lineage_data(str(output_file)))
+  # Use tracking utilities to get the record range for this run from the shared ArrayRecord
+  record_range = get_run_records_range(output_dir, run_uuid)
+  if record_range is None:
+    msg = f"Could not find record range for run UUID {run_uuid}"
+    raise ValueError(msg)
+
+  start_idx, end_idx = record_range
+
+  # Read the actual SMC output from the shared ArrayRecord file
+  shared_arrayrecord_path = get_shared_arrayrecord_path(output_dir)
+  records = list(read_lineage_data_range(str(shared_arrayrecord_path), start_idx, end_idx))
 
   if not records:
-    msg = f"No records found in {output_file}"
+    msg = f"No records found for run {run_uuid} in range [{start_idx}:{end_idx}]"
     raise ValueError(msg)
 
   # Extract first and last generation data
@@ -149,11 +161,15 @@ def run_oed_experiment(
   q = jnp.bincount(final_sequences.ravel(), minlength=design.q).astype(jnp.float32)
   jsd = metrics.jensen_shannon_divergence(p, q)
 
+  # Calculate geometric mean of fitness
+  geometric_fitness_mean = metrics.calculate_geometric_fitness_mean(fitness_history)
+
   predicted_vars = OEDPredictedVariables(
     information_gain=info_gain,
     barrier_crossing_frequency=barrier_freq,
     final_sequence_entropy=final_entropy,
     jsd_from_original_population=jsd,
+    geometric_fitness_mean=geometric_fitness_mean,
   )
 
   return predicted_vars, run_uuid
