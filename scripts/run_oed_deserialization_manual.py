@@ -1,6 +1,7 @@
 """Test deserialization and metrics calculation from actual SMC run data."""
 
 import sys
+import traceback
 from pathlib import Path
 
 import jax.numpy as jnp
@@ -9,7 +10,7 @@ from proteinsmc.io import read_lineage_data
 from proteinsmc.utils import metrics
 
 
-def test_deserialization_and_metrics(output_dir: str = "oed_results") -> None:
+def run_deserialization_check(output_dir: str = "oed_results") -> None:  # noqa: PLR0915
   """Test reading SMC output and calculating metrics from it."""
   output_path = Path(output_dir)
 
@@ -19,7 +20,8 @@ def test_deserialization_and_metrics(output_dir: str = "oed_results") -> None:
   if not arrayrecord_files:
     print(f"❌ No arrayrecord files found in {output_dir}")
     print(
-      "   Run a quick test first: python src/proteinsmc/oed/run.py --num_initial_experiments 1 --num_oed_iterations 0"
+      "   Run a quick test first: python src/proteinsmc/oed/run.py "
+      "--num_initial_experiments 1 --num_oed_iterations 0"
     )
     sys.exit(1)
 
@@ -32,9 +34,8 @@ def test_deserialization_and_metrics(output_dir: str = "oed_results") -> None:
   try:
     records = list(read_lineage_data(str(test_file)))
     print(f"\n✅ Successfully deserialized {len(records)} records")
-  except Exception as e:
+  except Exception as e:  # noqa: BLE001
     print(f"\n❌ Deserialization failed: {e}")
-    import traceback
 
     traceback.print_exc()
     sys.exit(1)
@@ -152,4 +153,4 @@ if __name__ == "__main__":
   )
   args = parser.parse_args()
 
-  test_deserialization_and_metrics(args.output_dir)
+  run_deserialization_check(args.output_dir)

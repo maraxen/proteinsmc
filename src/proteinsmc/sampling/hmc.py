@@ -70,7 +70,7 @@ def run_hmc_loop(  # noqa: PLR0913
       logdensity_grad=logdensity_grad,
     )
     # Create a new state with the blackjax_state set
-    initial_state = dataclasses.replace(initial_state, blackjax_state=hmc_state)
+    initial_state = initial_state.replace(blackjax_state=hmc_state)
 
   kernel = blackjax.hmc.build_kernel()
 

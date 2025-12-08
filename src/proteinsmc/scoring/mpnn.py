@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 from collections.abc import Sequence
 from functools import partial
 from typing import IO, TYPE_CHECKING, Literal
@@ -10,15 +11,10 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-PRXTEINMPNN_AVAILABLE = False
-try:
-  import prxteinmpnn
-
-  PRXTEINMPNN_AVAILABLE = True
-except ImportError:
-  pass
+PRXTEINMPNN_AVAILABLE = importlib.util.find_spec("prxteinmpnn") is not None
 
 if PRXTEINMPNN_AVAILABLE:
+  from prxteinmpnn.io.loaders import create_protein_dataset
   from prxteinmpnn.scoring.score import make_score_sequence
   from prxteinmpnn.utils.decoding_order import (
     DecodingOrder,
@@ -36,10 +32,8 @@ if PRXTEINMPNN_AVAILABLE:
       PRNGKeyArray,
     )
 
-  from prxteinmpnn.io.loaders import create_protein_dataset
-
-  from proteinsmc.models.fitness import FitnessFn
-  from proteinsmc.models.types import ProteinSequence
+    from proteinsmc.models.fitness import FitnessFn
+    from proteinsmc.models.types import ProteinSequence
 
 DecodingSettings = Literal["random", "same_random", "sequential", "full_ar"]
 
@@ -69,9 +63,8 @@ def make_mpnn_score(
 
   """
   if not PRXTEINMPNN_AVAILABLE:
-    raise ImportError(
-      "prxteinmpnn is not installed. Please install it to use MPNN scoring.",
-    )
+    msg = "prxteinmpnn is not installed. Please install it to use MPNN scoring."
+    raise ImportError(msg)
 
   dataset = create_protein_dataset(
     inputs,

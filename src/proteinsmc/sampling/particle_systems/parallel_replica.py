@@ -9,7 +9,6 @@ import jax
 import jax.numpy as jnp
 from blackjax.smc.base import step as blackjax_smc_step
 from jax import lax, vmap
-from jax.experimental import io_callback
 
 if TYPE_CHECKING:
   from collections.abc import Callable
@@ -223,7 +222,7 @@ def migrate(  # noqa: PLR0913
         "annealing_fn",
     ),
 )
-def _run_prsmc_chunk(
+def _run_prsmc_chunk(  # noqa: PLR0913
     chunk_size: int,
     initial_state: SamplerState,
     resampling_approach: str,
@@ -294,7 +293,7 @@ def _run_prsmc_chunk(
             keepdims=False,
         )
 
-        logZ_estimates = (
+        log_z_estimates = (
             carry_state.additional_fields["logZ_estimate"]
             + infos.log_likelihood_increment
         )
@@ -309,7 +308,7 @@ def _run_prsmc_chunk(
                 "mean_fitness": mean_fitness,
                 "max_fitness": max_fitness,
                 "ess": ess,
-                "logZ_estimate": logZ_estimates,
+                "logZ_estimate": log_z_estimates,
             },
         )
 
@@ -385,7 +384,7 @@ def _run_prsmc_chunk(
             migration_log_acceptance_ratio=log_ratio,
             mean_fitness=mean_fitness[0],
             max_fitness=max_fitness[0],
-            log_z_estimate=logZ_estimates[0],
+            log_z_estimate=log_z_estimates[0],
         )
 
         return state_after_migration, step_output

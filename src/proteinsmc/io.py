@@ -123,7 +123,7 @@ def create_writer_callback(path: str) -> tuple[ArrayRecordWriter, Callable]:
         num_steps = step.shape[0]
         for i in range(num_steps):
             # Slice the PyTree
-            single_step = jax.tree_util.tree_map(lambda x: x[i], sampler_output)
+            single_step = jax.tree_util.tree_map(lambda x, i=i: x[i], sampler_output)
 
             buffer = io.BytesIO()
             eqx.tree_serialise_leaves(buffer, single_step)

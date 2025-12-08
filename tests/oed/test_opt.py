@@ -1,6 +1,7 @@
 import jax
 import jax.numpy as jnp
-from proteinsmc.oed.opt import perturb_design, train_surrogate_model, calculate_fim_determinant
+from proteinsmc.oed.opt import perturb_design, calculate_fim_determinant
+from proteinsmc.oed.run import train_surrogate_model
 from proteinsmc.oed.structs import OEDDesign, OEDPredictedVariables
 
 
@@ -11,6 +12,7 @@ def make_dummy_history():
         barrier_crossing_frequency=jnp.array(0.1),
         final_sequence_entropy=jnp.array(0.2),
         jsd_from_original_population=jnp.array(0.3),
+        geometric_fitness_mean=jnp.array(0.4),
     )
     return [(design, pred)]
 

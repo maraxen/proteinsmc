@@ -8,6 +8,13 @@ from jaxtyping import Float, PRNGKeyArray
 from proteinsmc.oed.structs import OEDDesign, OEDPredictedVariables
 
 
+def perturb_design(design: OEDDesign, param_name: str, epsilon: float) -> OEDDesign:
+  """Perturb a parameter in the design."""
+  val = getattr(design, param_name)
+  new_val = val + epsilon
+  return design.replace(**{param_name: new_val})
+
+
 def calculate_fim_determinant(
   design: OEDDesign,
   surrogate_model: Callable[[OEDDesign], OEDPredictedVariables],
@@ -24,6 +31,7 @@ def calculate_fim_determinant(
       Determinant of the Fisher Information Matrix (higher is better).
 
   """
+  del key
   # Compute sensitivities using finite differences
   epsilon = 1e-4
   base_prediction = surrogate_model(design)
