@@ -5,7 +5,49 @@ from __future__ import annotations
 from typing import cast
 
 import jax.numpy as jnp
+
 from proteinsmc.models.sampler_base import BaseSamplerConfig, SamplerOutput
+
+
+def _determine_population_size(config: BaseSamplerConfig) -> int:
+  """Determine population size from config."""
+  num_samples = (
+    config.population_size
+    if hasattr(config, "population_size")
+    else config.num_samples
+  )
+
+  if isinstance(num_samples, int):
+    return num_samples
+
+  try:
+    return int(cast("int", num_samples))
+  except (TypeError, ValueError):
+    # Handle JAX array or sequence
+    if hasattr(num_samples, "item"):
+      return int(num_samples.item())  # type: ignore  # noqa: PGH003
+    if hasattr(num_samples, "__getitem__"):
+      return int(num_samples[0])  # type: ignore  # noqa: PGH003
+
+  return 100  # Fallback
+
+
+def _determine_seq_len(config: BaseSamplerConfig) -> int:
+  """Determine sequence length from config."""
+  seed = config.seed_sequence
+  if isinstance(seed, str):
+    return len(seed)
+  if hasattr(seed, "shape"):
+    shape = cast("tuple[int, ...]", seed.shape)
+    if len(shape) == 2:  # (L, A)  # noqa: PLR2004
+      return shape[0]
+    if len(shape) == 3:  # (Batch, L, A)  # noqa: PLR2004
+      return shape[1]
+  if isinstance(seed, (list, tuple)) and len(seed) > 0 and isinstance(seed[0], str):
+    return len(seed[0])
+
+  return 1  # Fallback
+
 
 def create_sampler_output_skeleton(config: BaseSamplerConfig) -> SamplerOutput:
   """Create a skeleton SamplerOutput for deserialization.
@@ -15,51 +57,15 @@ def create_sampler_output_skeleton(config: BaseSamplerConfig) -> SamplerOutput:
 
   Returns:
     A SamplerOutput instance with correct shapes and dtypes.
-  """
-  # 1. Determine population size
-  # Check for explicit population_size (SMC)
-  if hasattr(config, "population_size"):
-      num_samples = getattr(config, "population_size")
-  else:
-      num_samples = config.num_samples
 
-  if not isinstance(num_samples, int):
-    try:
-      num_samples = int(num_samples)
-    except (TypeError, ValueError):
-      # Handle JAX array or sequence
-      if hasattr(num_samples, "item"):
-        num_samples = int(num_samples.item())  # type: ignore
-      elif hasattr(num_samples, "__getitem__"):
-        num_samples = int(num_samples[0])  # type: ignore
-      else:
-        num_samples = 100  # Fallback
+  """
+  num_samples = _determine_population_size(config)
 
   # 2. Determine sequence dimensions
-  alphabet_size = config.n_states
-  if not isinstance(alphabet_size, int):
-    if hasattr(alphabet_size, "item"):
-      alphabet_size = int(alphabet_size.item())  # type: ignore
-    else:
-      alphabet_size = 20  # Fallback
+  # alphabet_size is unused in skeleton creation but was calculated in original code.
+  # We skip it as it's not used for skeleton arrays.
 
-  # Sequence length from seed_sequence
-  seed = config.seed_sequence
-  seq_len = 0
-  if isinstance(seed, str):
-    seq_len = len(seed)
-  elif hasattr(seed, "shape"):
-    shape = getattr(seed, "shape")
-    if len(shape) == 2:  # (L, A)
-      seq_len = shape[0]
-    elif len(shape) == 3:  # (Batch, L, A)
-      seq_len = shape[1]
-  elif isinstance(seed, (list, tuple)):
-    if len(seed) > 0 and isinstance(seed[0], str):
-      seq_len = len(seed[0])
-
-  if seq_len == 0:
-    seq_len = 1  # Fallback
+  seq_len = _determine_seq_len(config)
 
   # 3. Construct skeleton
   # Core fields

@@ -97,6 +97,9 @@ def _setup_fitness_function(
     nucleotide_to_aa if config.n_states == NUCLEOTIDES_NUM_STATES else aa_to_nucleotide
   )
   batch_size = None
+  if config.fitness_evaluator is None:
+    msg = "fitness_evaluator cannot be None"
+    raise ValueError(msg)
   fitness_fn = get_fitness_function(
     evaluator_config=config.fitness_evaluator,
     n_states=config.n_states,  # TODO(mar): manage Sequence  # type: ignore[arg-type]  # noqa: E501, FIX002, TD003

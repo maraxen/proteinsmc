@@ -49,11 +49,11 @@ class GPModel:
     # Apply RBF kernel formula: k(x, x') = σ² * exp(-||x - x'||² / (2 * l²))
     return self.signal_variance * jnp.exp(-0.5 * sq_norm / (self.length_scale**2))
 
-  def predict(self, X_new: Array) -> tuple[Array, Array]:
+  def predict(self, x_new: Array) -> tuple[Array, Array]:
     """Make predictions at new input points.
 
     Args:
-      X_new: New input points for prediction.
+      x_new: New input points for prediction.
 
     Returns:
       Tuple of (mean, variance) predictions.
@@ -70,28 +70,28 @@ class GPModel:
 
     """
     # Compute kernel matrices
-    K = self.rbf_kernel(self.X_train, self.X_train)
-    K_s = self.rbf_kernel(self.X_train, X_new)
-    K_ss = self.rbf_kernel(X_new, X_new)
+    k = self.rbf_kernel(self.X_train, self.X_train)
+    k_s = self.rbf_kernel(self.X_train, x_new)
+    k_ss = self.rbf_kernel(x_new, x_new)
 
     # Add noise to diagonal
-    K_noise = K + self.noise * jnp.eye(K.shape[0])
+    k_noise = k + self.noise * jnp.eye(k.shape[0])
 
     # Compute mean: K_s^T * K^-1 * y
-    L = jnp.linalg.cholesky(K_noise)
-    alpha = jnp.linalg.solve(L.T, jnp.linalg.solve(L, self.y_train))
-    mu = jnp.matmul(K_s.T, alpha)
+    l_mat = jnp.linalg.cholesky(k_noise)
+    alpha = jnp.linalg.solve(l_mat.T, jnp.linalg.solve(l_mat, self.y_train))
+    mu = jnp.matmul(k_s.T, alpha)
 
     # Compute variance: K_ss - K_s^T * K^-1 * K_s
-    v = jnp.linalg.solve(L, K_s)
-    var = jnp.diag(K_ss - jnp.matmul(v.T, v))
+    v = jnp.linalg.solve(l_mat, k_s)
+    var = jnp.diag(k_ss - jnp.matmul(v.T, v))
 
     return mu, var
 
 
 def fit_gp_model(
-  X: Array,
-  Y: Array,
+  x: Array,
+  y: Array,
   noise: Float = 1e-5,
   length_scale: Float = 1.0,
   signal_variance: Float = 1.0,
@@ -99,8 +99,8 @@ def fit_gp_model(
   """Fit a GP model for each output dimension.
 
   Args:
-    X: Input features, shape (n_samples, n_features).
-    Y: Output values, shape (n_samples, n_outputs).
+    x: Input features, shape (n_samples, n_features).
+    y: Output values, shape (n_samples, n_outputs).
     noise: Observation noise variance.
     length_scale: Length scale for RBF kernel.
     signal_variance: Signal variance for RBF kernel.
@@ -116,14 +116,14 @@ def fit_gp_model(
     True
 
   """
-  output_dims = Y.shape[1]
+  output_dims = y.shape[1]
   models = {}
 
   # Fit a separate GP for each output dimension
   for i in range(output_dims):
     models[f"dim_{i}"] = GPModel(
-      X_train=X,
-      y_train=Y[:, i],
+      X_train=x,
+      y_train=y[:, i],
       noise=noise,
       length_scale=length_scale,
       signal_variance=signal_variance,
@@ -133,13 +133,13 @@ def fit_gp_model(
 
 
 def predict_with_gp_models(
-  models: dict[str, GPModel], X_new: Array
+  models: dict[str, GPModel], x_new: Array
 ) -> tuple[dict[str, Array], dict[str, Array]]:
   """Make predictions using GP models for all output dimensions.
 
   Args:
     models: Dictionary of GP models.
-    X_new: New input points for prediction.
+    x_new: New input points for prediction.
 
   Returns:
     Tuple of dictionaries containing means and variances.
@@ -157,7 +157,7 @@ def predict_with_gp_models(
   variances = {}
 
   for name, model in models.items():
-    mu, var = model.predict(X_new)
+    mu, var = model.predict(x_new)
     means[name] = mu
     variances[name] = var
 
@@ -221,6 +221,7 @@ def features_to_predicted_variables(
     True
 
   """
+  del var_dict
   return OEDPredictedVariables(
     information_gain=mean_dict["dim_0"][0],
     barrier_crossing_frequency=mean_dict["dim_1"][0],

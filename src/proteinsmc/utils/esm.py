@@ -130,7 +130,7 @@ class LayerNorm(AbstractFromTorch):
 class Sequential(AbstractFromTorch):
   """A sequence of modules, matching PyTorch's Sequential."""
 
-  _modules: dict[str, AbstractFromTorch]
+  _modules: dict[str, eqx.Module]
 
   def __call__(self, x: Array) -> Array:
     """Apply each module in sequence."""
@@ -415,7 +415,7 @@ def create_esmc_skeleton(key: PRNGKeyArray, model_name: str) -> ESMC:
       d_head=d_head,
       layernorm_qkv=layernorm_qkv,
       out_proj=out_proj,
-      rotary=RotaryEmbedding(dim=d_head),
+      rotary=RotaryEmbedding(dim=d_head, base=10000),
       q_ln=LayerNorm(weight=jnp.ones(embed_dim), bias=None, eps=eps),
       k_ln=LayerNorm(weight=jnp.ones(embed_dim), bias=None, eps=eps),
     )

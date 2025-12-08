@@ -39,6 +39,7 @@ def sample_result() -> OEDPredictedVariables:
     barrier_crossing_frequency=0.3,
     final_sequence_entropy=2.1,
     jsd_from_original_population=0.4,
+    geometric_fitness_mean=0.5,
   )
 
 
@@ -116,6 +117,7 @@ def test_create_oed_summary(
       barrier_crossing_frequency=0.1 * i,
       final_sequence_entropy=2.0 + i,
       jsd_from_original_population=0.3 + i * 0.1,
+      geometric_fitness_mean=0.5 + i * 0.1,
     )
     params = OEDRecordParams(
       output_dir=tmp_path,
