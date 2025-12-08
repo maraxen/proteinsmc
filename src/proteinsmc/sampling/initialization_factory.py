@@ -288,7 +288,7 @@ def _initialize_smc_state(  # noqa: PLR0913
   )
 
 
-def _initialize_prsmc_state(  # noqa: PLR0913 # TODO: refactor to match the SMC changes
+def _initialize_prsmc_state(  # noqa: PLR0913
   initial_populations: BatchEvoSequence,
   n_islands: Int,
   population_size_per_island: Int,

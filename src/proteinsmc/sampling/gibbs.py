@@ -30,8 +30,8 @@ def initialize_gibbs_state(config: GibbsConfig) -> SamplerState:
   initial_samples = jnp.array(config.seed_sequence, dtype=jnp.int8)
   return SamplerState(
     sequence=initial_samples,
-    fitness=jnp.array(0.0),
     key=key,
+    additional_fields={"fitness": jnp.array(0.0)},
   )
 
 
@@ -120,23 +120,27 @@ def run_gibbs_loop(
       new_state = update_fn(key_comp, new_state, fitness_fn)  # type: ignore[call-arg]
 
     fitness = fitness_fn(
-      _key=state.key,  # type: ignore[arg-type]
-      sequence=new_state,
-      _context=None,
+      state.key,
+      new_state,
+      None,
     )
     _, key_next = random.split(state.key)
     next_state = SamplerState(
       sequence=new_state,
-      fitness=fitness,
       key=key_next,
       step=jnp.array(step_idx + 1),
+      additional_fields={"fitness": fitness},
     )
 
     if io_callback is not None:
       jax_io_callback(
         io_callback,
         None,
-        {"sequence": next_state.sequence, "fitness": next_state.fitness, "step": next_state.step},
+        {
+          "sequence": next_state.sequence,
+          "fitness": next_state.additional_fields["fitness"],
+          "step": next_state.step,
+        },
       )
 
     return next_state

@@ -1,6 +1,7 @@
 """Test script to validate deserialization of OED experiment outputs."""
 
 import logging
+import sys
 from pathlib import Path
 
 from proteinsmc.io import read_lineage_data
@@ -14,7 +15,7 @@ arrayrecord_files = sorted(output_dir.glob("data_*.arrayrecord"), key=lambda p: 
 
 if not arrayrecord_files:
     logger.error("No arrayrecord files found in %s", output_dir)
-    exit(1)
+    sys.exit(1)
 
 # Test the most recent file
 test_file = arrayrecord_files[-1]
@@ -29,7 +30,10 @@ try:
         first_record = records[0]
         logger.info("\nFirst record structure:")
         logger.info("  Type: %s", type(first_record))
-        logger.info("  Keys: %s", list(first_record.keys()) if isinstance(first_record, dict) else "Not a dict")
+        keys_info = (
+            list(first_record.keys()) if isinstance(first_record, dict) else "Not a dict"
+        )
+        logger.info("  Keys: %s", keys_info)
 
         if isinstance(first_record, dict):
             for key, value in first_record.items():
@@ -44,13 +48,19 @@ try:
             if not isinstance(record, dict):
                 logger.error("Record %d is not a dict: %s", i, type(record))
             elif "sequences" in record:
-                seq_shape = record["sequences"].shape if hasattr(record["sequences"], "shape") else None
-                fitness_shape = record["fitness"].shape if "fitness" in record and hasattr(record["fitness"], "shape") else None
+                seq_shape = (
+                    record["sequences"].shape if hasattr(record["sequences"], "shape") else None
+                )
+                fitness_shape = (
+                    record["fitness"].shape
+                    if "fitness" in record and hasattr(record["fitness"], "shape")
+                    else None
+                )
                 logger.info("Record %d: sequences.shape=%s, fitness.shape=%s",
                            i, seq_shape, fitness_shape)
 
         logger.info("\n✅ Deserialization test PASSED")
 
-except Exception as e:
-    logger.exception("❌ Deserialization test FAILED: %s", e)
-    exit(1)
+except Exception:
+    logger.exception("❌ Deserialization test FAILED")
+    sys.exit(1)
