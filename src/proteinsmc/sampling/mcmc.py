@@ -103,7 +103,7 @@ def run_mcmc_loop(
     return new_state, output
 
   # Use scan to accumulate outputs
-  final_state, outputs = jax.lax.scan(body_fn, initial_state)
+  final_state, outputs = jax.lax.scan(body_fn, initial_state, jnp.arange(num_samples))
 
   # If io_callback is provided, write outputs using Python for loop
   if io_callback is not None:

@@ -212,7 +212,6 @@ class TestRunMCMCLoop:
 
     initial_state = SamplerState(
       sequence=sequence,
-      fitness=fitness,
       key=key,
       step=jnp.array(0),
     )
@@ -224,5 +223,5 @@ class TestRunMCMCLoop:
       mutation_fn=simple_mutation_fn,
     )
 
-    assert metrics == {}
     assert isinstance(metrics, dict)
+    assert "sequences" in metrics

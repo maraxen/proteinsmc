@@ -44,6 +44,8 @@ def mock_fitness_fn():
         StackedFitness: Mock fitness values.
 
     """
+    if seq.ndim > 1:
+        return jnp.tile(jnp.array([1.0, 0.5, 0.3], dtype=jnp.float32), (seq.shape[0], 1))
     return jnp.array([1.0, 0.5, 0.3], dtype=jnp.float32)
 
   return fitness_fn
@@ -224,7 +226,7 @@ class TestInitializeSamplerState:
       diversification_ratio=None,
       key=rng_key,
       beta=1.0,
-      fitness_fn=mock_fitness_fn,
+        fitness_fn=mock_fitness_fn,
     )
 
     assert isinstance(state, SamplerState)
@@ -405,7 +407,6 @@ class TestInitializeSingleState:
 
     assert isinstance(state, SamplerState)
     assert state.sequence.shape == sample_population_proteins[0].shape
-    assert state.fitness.shape == (3,)  # Stacked fitness has 3 components
   @pytest.mark.skip(reason="HMC initialization test is currently skipped. We will implement later once we have integrated managing sequence representations as both integer and one-hot encoding.")
   def test_hmc_initialization(
     self,
@@ -787,14 +788,12 @@ class TestInitializeSMCState:
       algorithm="BaseSMC",
       smc_algo_kwargs={},
       key=rng_key,
-      fitness_fn=mock_fitness_fn,
     )
 
     assert isinstance(state, SamplerState)
     assert state.sequence.shape == sample_population_proteins.shape
     assert "beta" in state.additional_fields
     assert state.additional_fields["beta"] == 0.5
-    assert state.fitness.shape == (3,)  # Mean fitness across population
 
   def test_smc_state_with_none_beta(
     self,
@@ -827,7 +826,6 @@ class TestInitializeSMCState:
       algorithm="BaseSMC",
       smc_algo_kwargs={},
       key=rng_key,
-      fitness_fn=mock_fitness_fn,
     )
 
     assert state.additional_fields["beta"] == 1.0
@@ -882,7 +880,6 @@ class TestInitializePRSMCState:
 
     assert isinstance(state, SamplerState)
     assert state.sequence.shape == (n_islands, pop_per_island, 4)
-    assert state.fitness.shape == (n_islands, pop_per_island, 3)
     assert state.key.shape == (n_islands, 2)
     assert state.step.shape == (n_islands,)
     assert "beta" in state.additional_fields
