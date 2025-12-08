@@ -128,7 +128,8 @@ def initialize_sampler_state(  # noqa: PLR0913
       if population_size_per_island is not None
       else jnp.array(50, dtype=jnp.int32)
     )
-    initial_populations = jnp.tile(initial_population, (_n_islands, 1, 1))
+    repeats = _population_size_per_island // initial_population.shape[0]
+    initial_populations = jnp.tile(initial_population, (_n_islands, repeats, 1))
     initial_populations = diversify_initial_sequences(
       key=key_init_islands,
       seed_sequences=initial_populations,
