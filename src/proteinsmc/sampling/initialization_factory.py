@@ -120,7 +120,7 @@ def initialize_sampler_state(  # noqa: PLR0913
       smc_algo_kwargs=smc_algo_kwargs,
       key=key,
     )
-  if sampler_type_upper == "PARALLELREPLICA":
+  if sampler_type_upper in {"PARALLELREPLICA", "PARALLEL_REPLICA"}:
     key_init_islands, key = jax.random.split(key)
     _n_islands = n_islands if n_islands is not None else jnp.array(4, dtype=jnp.int32)
     _population_size_per_island = (
@@ -178,7 +178,7 @@ def _initialize_single_state(
 
   # Create a logdensity function for blackjax (uses combined fitness at index 0)
   def logdensity_fn(seq: EvoSequence) -> Float:
-    return fitness_fn(seq, key_fitness, None)[0]
+    return fitness_fn(key_fitness, seq, None)[0]
 
   blackjax_initial_state = init_fn(
     initial_sequence,
