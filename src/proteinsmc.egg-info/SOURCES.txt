@@ -66,6 +66,9 @@ src/proteinsmc/utils/metrics.py
 src/proteinsmc/utils/mutation.py
 src/proteinsmc/utils/nk_landscape.py
 src/proteinsmc/utils/pmap_utils.py
+src/proteinsmc/utils/serialization.py
 src/proteinsmc/utils/translation.py
+tests/test_deserialization.py
+tests/test_oed_deserialization.py
 tests/test_runner.py
 tests/test_runner_jax_inputs.py
