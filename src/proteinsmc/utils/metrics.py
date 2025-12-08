@@ -139,7 +139,8 @@ def shannon_entropy(seqs: EvoSequence) -> Float:
 def kl_divergence(p: Array, q: Array) -> Array:
   """Calculate Kullback-Leibler Divergence between two distributions.
 
-  This measures how one probability distribution diverges from a second, expected probability distribution.
+  This measures how one probability distribution diverges from a second,
+  expected probability distribution.
 
   Args:
       p: First probability distribution.

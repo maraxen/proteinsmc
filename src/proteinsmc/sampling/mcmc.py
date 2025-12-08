@@ -50,7 +50,7 @@ def run_mcmc_loop(
       position=initial_state.sequence,
       logdensity=float(initial_fitness[0]),
     )
-    initial_state = dataclasses.replace(initial_state, blackjax_state=rw_state)
+    initial_state = initial_state.replace(blackjax_state=rw_state)
 
   # Build the random walk Metropolis-Hastings kernel
   kernel = blackjax.mcmc.random_walk.build_rmh()

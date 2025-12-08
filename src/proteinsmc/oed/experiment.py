@@ -26,6 +26,7 @@ from proteinsmc.oed.tracking import (
 )
 from proteinsmc.runner import run_experiment
 from proteinsmc.utils import metrics
+from proteinsmc.utils.serialization import create_sampler_output_skeleton
 
 # Threshold for deciding whether an alphabet size indicates a protein
 ALPHABET_THRESHOLD = 4
@@ -119,7 +120,10 @@ def run_oed_experiment(
 
   # Read the actual SMC output from the shared ArrayRecord file
   shared_arrayrecord_path = get_shared_arrayrecord_path(output_dir)
-  records = list(read_lineage_data_range(str(shared_arrayrecord_path), start_idx, end_idx))
+  skeleton = create_sampler_output_skeleton(config)
+  records = list(
+    read_lineage_data_range(str(shared_arrayrecord_path), start_idx, end_idx, skeleton)
+  )
 
   if not records:
     msg = f"No records found for run {run_uuid} in range [{start_idx}:{end_idx}]"

@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 import equinox as eqx
 import jax
@@ -310,7 +310,7 @@ class SamplerOutput(eqx.Module):
   max_fitness: jax.Array = field(default_factory=lambda: jnp.array(0.0))
   log_z_estimate: jax.Array = field(default_factory=lambda: jnp.array(0.0))
 
-  def replace(self, **kwargs):
+  def replace(self, **kwargs: Any) -> SamplerOutput:
     """Create a new instance with updated fields."""
     return replace(self, **kwargs)
 
@@ -333,7 +333,7 @@ class SamplerState(eqx.Module):
   update_parameters: dict[str, jax.Array] = field(default_factory=dict)
   additional_fields: dict[str, jax.Array] = field(default_factory=dict)
 
-  def replace(self, **kwargs):
+  def replace(self, **kwargs: Any) -> SamplerState:
     """Create a new instance with updated fields."""
     return replace(self, **kwargs)
 

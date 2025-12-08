@@ -75,7 +75,7 @@ def run_nuts_loop(  # noqa: PLR0913
       logdensity=float(initial_logdensity),
       logdensity_grad=logdensity_grad,
     )
-    initial_state = dataclasses.replace(initial_state, blackjax_state=nuts_state)
+    initial_state = initial_state.replace(blackjax_state=nuts_state)
 
   kernel = blackjax.nuts.build_kernel()
 

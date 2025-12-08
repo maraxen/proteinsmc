@@ -47,11 +47,11 @@ def generate_template_population(
 
   if input_sequence_type == "protein":
     aa_seq = jnp.array(initial_sequence, dtype=jnp.int8)
-    if aa_seq.ndim == 2 and aa_seq.shape[0] == 1:
+    if aa_seq.ndim == 2 and aa_seq.shape[0] == 1:  # noqa: PLR2004
       aa_seq = jnp.squeeze(aa_seq, axis=0)
   elif input_sequence_type == "nucleotide":
     nuc_seq = jnp.array(initial_sequence, dtype=jnp.int8)
-    if nuc_seq.ndim == 2 and nuc_seq.shape[0] == 1:
+    if nuc_seq.ndim == 2 and nuc_seq.shape[0] == 1:  # noqa: PLR2004
       nuc_seq = jnp.squeeze(nuc_seq, axis=0)
     aa_seq, _ = nucleotide_to_aa(nuc_seq)
 
