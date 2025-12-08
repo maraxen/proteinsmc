@@ -941,3 +941,82 @@ class TestInitializePRSMCState:
     # Check mean and max fitness have correct shapes
     assert state.additional_fields["mean_fitness"].shape == (n_islands,)
     assert state.additional_fields["max_fitness"].shape == (n_islands,)
+
+class TestBugFixes:
+  """Tests for specific bug fixes."""
+
+  def test_initialize_single_state_fitness_fn_arguments(
+    self,
+    rng_key,
+    sample_protein_sequence,
+  ) -> None:
+    """Test that fitness_fn is called with correct argument order in _initialize_single_state."""
+
+    # We define a strict fitness function that checks argument types
+    def strict_fitness_fn(key, seq, context):
+      # key should be a PRNGKey (shape (2,), uint32)
+      # seq should be the sequence (shape (L,), int8/int32)
+
+      # Check if key looks like a PRNG key
+      # If swapped, key will be sequence array
+      if key.shape != (2,) or key.dtype != jnp.uint32:
+         # If argument order is swapped, 'key' variable will hold 'seq'
+         # 'seq' variable will hold 'key'
+         msg = f"Expected PRNG key as first argument, got shape {key.shape}, dtype {key.dtype}"
+         raise TypeError(msg)
+
+      return jnp.array([1.0], dtype=jnp.float32)
+
+    # Trigger _initialize_single_state via "MCMC" sampler type
+    # This should call fitness_fn inside logdensity_fn
+    initialize_sampler_state(
+      sampler_type="MCMC",
+      sequence_type="protein",
+      seed_sequence=sample_protein_sequence,
+      mutation_rate=0.1,
+      population_size=1,
+      algorithm=None,
+      smc_algo_kwargs=None,
+      n_islands=None,
+      population_size_per_island=None,
+      island_betas=None,
+      diversification_ratio=None,
+      key=rng_key,
+      beta=None,
+      fitness_fn=strict_fitness_fn,
+    )
+
+  def test_initialize_parallel_replica_string_format(
+    self,
+    rng_key,
+    sample_protein_sequence,
+  ) -> None:
+    """Test that 'PARALLEL_REPLICA' string is accepted."""
+
+    # Mock fitness fn that handles batching
+    def mock_fitness_fn(key, seq, context):
+      if seq.ndim == 1:
+        return jnp.array([1.0], dtype=jnp.float32)
+      else:
+        # Batch case
+        pop_size = seq.shape[0]
+        # Return (pop_size, 1) so it has 'n_fitness' dimension
+        return jnp.ones((pop_size, 1), dtype=jnp.float32)
+
+    n_islands = 2
+    initialize_sampler_state(
+      sampler_type="PARALLEL_REPLICA",
+      sequence_type="protein",
+      seed_sequence=sample_protein_sequence,
+      mutation_rate=0.1,
+      population_size=10,
+      algorithm=None,
+      smc_algo_kwargs=None,
+      n_islands=n_islands,
+      population_size_per_island=5,
+      island_betas=jnp.array([1.0, 1.0]),
+      diversification_ratio=0.1,
+      key=rng_key,
+      beta=None,
+      fitness_fn=mock_fitness_fn,
+    )
