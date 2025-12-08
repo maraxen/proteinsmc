@@ -1,5 +1,6 @@
-"""I/O utilities for simulation tracking using ArrayRecord and msgpack serialization."""
+"""I/O utilities for simulation tracking using ArrayRecord and equinox serialization."""
 
+import io
 import json
 import logging
 import shutil
@@ -10,8 +11,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import equinox as eqx
+import jax
 from array_record.python.array_record_module import ArrayRecordReader, ArrayRecordWriter
-from flax.serialization import msgpack_restore, msgpack_serialize, to_state_dict
 from jaxtyping import PyTree
 
 from proteinsmc.models.sampler_base import SamplerOutput
@@ -88,7 +90,7 @@ def create_metadata_file(config: object, output_path: Path) -> None:
 
 
 def create_writer_callback(path: str) -> tuple[ArrayRecordWriter, Callable]:
-  """Create an ArrayRecordWriter and a msgpack callback.
+  """Create an ArrayRecordWriter and an equinox callback.
 
   Returns:
     A tuple containing:
@@ -106,23 +108,42 @@ def create_writer_callback(path: str) -> tuple[ArrayRecordWriter, Callable]:
     This function is executed by io_callback.
 
     Args:
-        sampler_output: The SamplerOutput data to write (will be serialized with msgpack).
+        sampler_output: The SamplerOutput data to write.
+        If it represents a chunk (leading dimension on 'step' field), it is unrolled.
 
     """
-    # Convert the JAX PyTree (flax.struct.dataclass) to a plain dict,
-    # then serialize using msgpack_serialize which handles JAX arrays properly
-    state_dict = to_state_dict(sampler_output)
-    serialized = msgpack_serialize(state_dict)
-    writer.write(serialized)
+    # Check if we have a chunk (leading dimension on 'step' field)
+    step = sampler_output.step
+
+    # Check for chunked output (batched over time)
+    # If step is 0D (scalar), it's a single step.
+    # If step is 1D, it's a chunk.
+    if step.ndim > 0 and step.shape[0] > 0:
+        # It is a chunk. Unroll and write each step.
+        num_steps = step.shape[0]
+        for i in range(num_steps):
+            # Slice the PyTree
+            single_step = jax.tree_util.tree_map(lambda x: x[i], sampler_output)
+
+            buffer = io.BytesIO()
+            eqx.tree_serialise_leaves(buffer, single_step)
+            writer.write(buffer.getvalue())
+    else:
+        # Single step (or empty chunk?)
+        # If step is scalar (0D)
+        buffer = io.BytesIO()
+        eqx.tree_serialise_leaves(buffer, sampler_output)
+        writer.write(buffer.getvalue())
 
   return writer, writer_callback
 
 
-def read_lineage_data(path: str) -> Generator[PyTree, None, None]:
+def read_lineage_data(path: str, skeleton: PyTree) -> Generator[PyTree, None, None]:
   """Read and deserialize all records from a lineage file.
 
   Args:
       path: The path to the ArrayRecord file.
+      skeleton: A template PyTree (e.g. SamplerOutput) with correct shapes/dtypes.
 
   Returns:
       A generator yielding deserialized records.
@@ -133,8 +154,9 @@ def read_lineage_data(path: str) -> Generator[PyTree, None, None]:
   try:
     num_records = reader.num_records()
     for _ in range(num_records):
-      packed_bytes = reader.read()  # read() with no args returns next record
-      full_record = msgpack_restore(packed_bytes)
+      packed_bytes = reader.read()
+      buffer = io.BytesIO(packed_bytes)
+      full_record = eqx.tree_deserialise_leaves(buffer, skeleton)
       yield full_record
   except IndexError:
     # No more records or empty file
@@ -142,7 +164,7 @@ def read_lineage_data(path: str) -> Generator[PyTree, None, None]:
 
 
 def read_lineage_data_range(
-  path: str, start_idx: int, end_idx: int
+  path: str, start_idx: int, end_idx: int, skeleton: PyTree
 ) -> Generator[PyTree, None, None]:
   """Read and deserialize a range of records from a lineage file.
 
@@ -150,6 +172,7 @@ def read_lineage_data_range(
       path: The path to the ArrayRecord file.
       start_idx: Starting index (inclusive).
       end_idx: Ending index (exclusive).
+      skeleton: A template PyTree with correct shapes/dtypes.
 
   Returns:
       A generator yielding deserialized records in the specified range.
@@ -167,7 +190,8 @@ def read_lineage_data_range(
 
     for idx in range(start_idx, end_idx):
       packed_bytes = reader.read(idx)
-      full_record = msgpack_restore(packed_bytes)
+      buffer = io.BytesIO(packed_bytes)
+      full_record = eqx.tree_deserialise_leaves(buffer, skeleton)
       yield full_record
   except IndexError:
     logger.warning("Index error reading records [%d:%d]", start_idx, end_idx)
