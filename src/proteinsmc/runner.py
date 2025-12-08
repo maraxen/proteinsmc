@@ -40,7 +40,9 @@ from proteinsmc.utils.translation import aa_to_nucleotide, nucleotide_to_aa, str
 if TYPE_CHECKING:
   from collections.abc import Callable, Sequence
 
-  from array_record.python.array_record_module import ArrayRecordWriter
+  from array_record.python.array_record_module import (  # type: ignore # noqa: PGH003
+    ArrayRecordWriter,
+  )
 
   from proteinsmc.models.sampler_base import BaseSamplerConfig
   from proteinsmc.models.translation import TranslateFuncSignature

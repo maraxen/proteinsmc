@@ -1,6 +1,7 @@
 """OED design optimization module."""
 
 from collections.abc import Callable
+from dataclasses import replace
 
 import jax.numpy as jnp
 from jaxtyping import Float, PRNGKeyArray
@@ -12,7 +13,7 @@ def perturb_design(design: OEDDesign, param_name: str, epsilon: float) -> OEDDes
   """Perturb a parameter in the design."""
   val = getattr(design, param_name)
   new_val = val + epsilon
-  return design.replace(**{param_name: new_val})
+  return replace(design, **{param_name: new_val})
 
 
 def calculate_fim_determinant(

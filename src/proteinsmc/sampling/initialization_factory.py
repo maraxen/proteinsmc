@@ -220,14 +220,16 @@ def _initialize_blackjax_smc_state(
   smc_algo_kwargs = smc_algo_kwargs or {}
   match algorithm:
     case "BaseSMC" | "AnnealedSMC" | "ParallelReplicaSMC" | "FromMCMC":
-      return smc.base.init(particles=initial_population, init_update_params=update_params or {})
+      return smc.base.init(  # type: ignore # noqa: PGH003
+          particles=initial_population, init_update_params=update_params or {}
+      )
     case "AdaptiveTemperedSMC":
-      return smc.adaptive_tempered.init(particles=initial_population)
+      return smc.adaptive_tempered.init(particles=initial_population)  # type: ignore # noqa: PGH003
     case "InnerMCMC":
       msg = "Inner MCMC SMC algorithm is not implemented yet."
       raise NotImplementedError(msg)
     case "PartialPosteriors":
-      return smc.partial_posteriors_path.init(
+      return smc.partial_posteriors_path.init(  # type: ignore # noqa: PGH003
         particles=initial_population,
         num_datapoints=smc_algo_kwargs.get("num_datapoints", 1),
       )

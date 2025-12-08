@@ -13,7 +13,10 @@ from typing import Any
 
 import equinox as eqx
 import jax
-from array_record.python.array_record_module import ArrayRecordReader, ArrayRecordWriter
+from array_record.python.array_record_module import (  # type: ignore # noqa: PGH003
+  ArrayRecordReader,
+  ArrayRecordWriter,
+)
 from jaxtyping import PyTree
 
 from proteinsmc.models.sampler_base import SamplerOutput
