@@ -114,7 +114,7 @@ class TestRunSMCLoop:
         def mock_fitness_fn(
             key: PRNGKeyArray, sequence: Array, beta: Float | None
         ) -> Array:
-            return jnp.array(1.0, dtype=jnp.float32)
+            return jnp.array([1.0], dtype=jnp.float32)
 
         def mock_mutation_fn(
             key: PRNGKeyArray, sequence: Array, context: None
@@ -151,7 +151,8 @@ class TestRunSMCLoop:
 
         def fitness_fn(key: PRNGKeyArray, sequence: Array, beta: Float) -> Array:
             # A simple fitness function that prefers sequences with higher sums
-            return jnp.sum(sequence) * beta
+            val = jnp.sum(sequence) * beta
+            return jnp.array([val], dtype=jnp.float32)
 
         def mutation_fn(
             key: PRNGKeyArray, sequence: Array, context: None
@@ -160,7 +161,7 @@ class TestRunSMCLoop:
             pos = jax.random.randint(key, (), 0, sequence.shape[0])
             return sequence.at[pos].set(sequence[pos] + 1), UpdateInfo()
 
-        def annealing_fn(t: Int, _context: None) -> Float:
+        def annealing_fn(t: Int) -> Float:
             return t / num_samples
 
         def writer_callback(output: SamplerOutput) -> None:
