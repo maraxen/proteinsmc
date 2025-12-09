@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 from typing import TYPE_CHECKING
 
 import blackjax
@@ -53,9 +52,11 @@ def run_mcmc_loop(
     initial_state = initial_state.replace(blackjax_state=rw_state)
 
   # Build the random walk Metropolis-Hastings kernel
-  kernel = blackjax.mcmc.random_walk.build_rmh()
+  kernel = blackjax.mcmc.random_walk.build_rmh()  # type: ignore # noqa: PGH003
 
-  def body_fn(carry: SamplerState, _inputs: None = None) -> tuple[SamplerState, SamplerOutput]:
+  def body_fn(
+      carry: SamplerState, _inputs: jax.Array | None = None
+  ) -> tuple[SamplerState, SamplerOutput]:
     """Perform one step of the MCMC sampler.
 
     Args:

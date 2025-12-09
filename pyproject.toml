@@ -75,3 +75,7 @@ docs = [
     "sphinx-book-theme",
     "myst-nb",
 ]
+
+[tool.ty.rules]
+invalid-type-form = "ignore"
+no-matching-overload = "ignore"

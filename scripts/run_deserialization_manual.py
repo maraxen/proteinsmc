@@ -4,7 +4,11 @@ import logging
 import sys
 from pathlib import Path
 
+import jax
+import jax.numpy as jnp
+
 from proteinsmc.io import read_lineage_data
+from proteinsmc.models.sampler_base import SamplerOutput
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -23,39 +27,48 @@ logger.info("Testing deserialization of: %s", test_file)
 logger.info("File size: %d bytes", test_file.stat().st_size)
 
 try:
-    records = list(read_lineage_data(str(test_file)))
+    # Create a skeleton for deserialization
+    skeleton = SamplerOutput(
+        step=jnp.array(0, dtype=jnp.int32),
+        sequences=jnp.array([], dtype=jnp.int8),
+        fitness=jnp.array([], dtype=jnp.float32),
+        key=jax.random.PRNGKey(0),
+    )
+    records = list(read_lineage_data(str(test_file), skeleton))
     logger.info("Successfully read %d records", len(records))
 
     if records:
         first_record = records[0]
         logger.info("\nFirst record structure:")
         logger.info("  Type: %s", type(first_record))
-        keys_info = (
-            list(first_record.keys()) if isinstance(first_record, dict) else "Not a dict"
-        )
-        logger.info("  Keys: %s", keys_info)
 
-        if isinstance(first_record, dict):
-            for key, value in first_record.items():
+        if hasattr(first_record, "__dataclass_fields__"):
+            import dataclasses
+            fields = (
+                dataclasses.fields(first_record)
+                if dataclasses.is_dataclass(first_record)
+                else []
+            )
+            keys_info = [f.name for f in fields]
+            logger.info("  Keys (fields): %s", keys_info)
+
+            for field in fields:
+                value = getattr(first_record, field.name)
                 logger.info("  %s: type=%s, shape=%s",
-                           key,
+                           field.name,
                            type(value).__name__,
                            getattr(value, "shape", "N/A"))
+        else:
+            logger.info("  Not a dataclass")
 
         # Check a few more records
         logger.info("\nChecking all %d records...", len(records))
         for i, record in enumerate(records):
-            if not isinstance(record, dict):
-                logger.error("Record %d is not a dict: %s", i, type(record))
-            elif "sequences" in record:
-                seq_shape = (
-                    record["sequences"].shape if hasattr(record["sequences"], "shape") else None
-                )
-                fitness_shape = (
-                    record["fitness"].shape
-                    if "fitness" in record and hasattr(record["fitness"], "shape")
-                    else None
-                )
+            if not isinstance(record, SamplerOutput):
+                logger.error("Record %d is not a SamplerOutput: %s", i, type(record))
+            else:
+                seq_shape = getattr(record.sequences, "shape", None)
+                fitness_shape = getattr(record.fitness, "shape", None)
                 logger.info("Record %d: sequences.shape=%s, fitness.shape=%s",
                            i, seq_shape, fitness_shape)
 

@@ -4,9 +4,11 @@ import sys
 import traceback
 from pathlib import Path
 
+import jax
 import jax.numpy as jnp
 
 from proteinsmc.io import read_lineage_data
+from proteinsmc.models.sampler_base import SamplerOutput
 from proteinsmc.utils import metrics
 
 
@@ -32,7 +34,14 @@ def run_deserialization_check(output_dir: str = "oed_results") -> None:  # noqa:
 
   # Read the lineage data
   try:
-    records = list(read_lineage_data(str(test_file)))
+    # Create a skeleton for deserialization
+    skeleton = SamplerOutput(
+        step=jnp.array(0, dtype=jnp.int32),
+        sequences=jnp.array([], dtype=jnp.int8),
+        fitness=jnp.array([], dtype=jnp.float32),
+        key=jax.random.PRNGKey(0),
+    )
+    records = list(read_lineage_data(str(test_file), skeleton))
     print(f"\n✅ Successfully deserialized {len(records)} records")
   except Exception as e:  # noqa: BLE001
     print(f"\n❌ Deserialization failed: {e}")
@@ -49,21 +58,21 @@ def run_deserialization_check(output_dir: str = "oed_results") -> None:  # noqa:
   last_record = records[-1]
 
   print("\n📊 First record:")
-  print(f"   Keys: {list(first_record.keys())}")
-  print(f"   sequences shape: {first_record['sequences'].shape}")
-  print(f"   fitness shape: {first_record['fitness'].shape}")
-  print(f"   step: {first_record['step']}")
+  print(f"   Type: {type(first_record)}")
+  print(f"   sequences shape: {first_record.sequences.shape}")
+  print(f"   fitness shape: {first_record.fitness.shape}")
+  print(f"   step: {first_record.step}")
 
   print("\n📊 Last record:")
-  print(f"   sequences shape: {last_record['sequences'].shape}")
-  print(f"   fitness shape: {last_record['fitness'].shape}")
-  print(f"   step: {last_record['step']}")
+  print(f"   sequences shape: {last_record.sequences.shape}")
+  print(f"   fitness shape: {last_record.fitness.shape}")
+  print(f"   step: {last_record.step}")
 
   # Extract sequences and fitness from first and last steps
-  initial_sequences = first_record["sequences"]
-  initial_fitness = first_record["fitness"]
-  final_sequences = last_record["sequences"]
-  final_fitness = last_record["fitness"]
+  initial_sequences = first_record.sequences
+  initial_fitness = first_record.fitness
+  final_sequences = last_record.sequences
+  final_fitness = last_record.fitness
 
   print("\n📈 Data shapes:")
   print(f"   Initial sequences: {initial_sequences.shape} (dtype={initial_sequences.dtype})")
@@ -98,7 +107,7 @@ def run_deserialization_check(output_dir: str = "oed_results") -> None:  # noqa:
   print(f"   Information gain (histogram-based): {info_gain_hist:.6f}")
 
   # 2. Barrier crossing frequency
-  fitness_history = jnp.array([rec["fitness"] for rec in records])
+  fitness_history = jnp.array([rec.fitness for rec in records])
   print(f"   Fitness history shape: {fitness_history.shape}")
   barrier_freq = metrics.calculate_barrier_crossing_frequency(fitness_history)
   print(f"   Barrier crossing frequency: {barrier_freq:.2f}")
