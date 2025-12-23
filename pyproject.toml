@@ -17,7 +17,7 @@ dependencies = [
   "equinox",
   "uuid-utils",
   "safetensors",
-  "prxteinmpnn @ git+https://github.com/maraxen/prxteinmpnn.git",
+  "prxteinmpnn",
   "einops>=0.8.1",
   "huggingface-hub>=0.35.3",
   "array-record>=0.8.1",
@@ -75,3 +75,10 @@ docs = [
     "sphinx-book-theme",
     "myst-nb",
 ]
+
+[tool.ty.environment]
+root = ["src/proteinsmc"]
+
+[tool.ty.rules]
+invalid-type-form = "ignore"
+
