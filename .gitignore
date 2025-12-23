@@ -5,4 +5,5 @@ __pycache__/
 
 
 # Hypothesis database
-.hypothesis/*.egg-info/
+.hypothesis/
+*.egg-info/
