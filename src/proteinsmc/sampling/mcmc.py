@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 from typing import TYPE_CHECKING
 
 import blackjax
@@ -15,19 +14,19 @@ from proteinsmc.models.sampler_base import SamplerOutput, SamplerState
 if TYPE_CHECKING:
   from collections.abc import Callable
 
-  from jaxtyping import PRNGKeyArray
+  from jaxtyping import Array
 
   from proteinsmc.models.fitness import StackedFitnessFn
-  from proteinsmc.models.types import EvoSequence
+  from proteinsmc.types import ArrayLike, EvoSequence, PRNGKey, ScalarFloat
 
 
 def run_mcmc_loop(
   num_samples: int,
   initial_state: SamplerState,
   fitness_fn: StackedFitnessFn,
-  mutation_fn: Callable[[PRNGKeyArray, EvoSequence], EvoSequence],
+  mutation_fn: Callable[[PRNGKey, EvoSequence], EvoSequence],
   io_callback: Callable | None = None,
-) -> tuple[SamplerState, dict[str, jax.Array]]:
+) -> tuple[SamplerState, dict[str, ArrayLike]]:
   """Run the MCMC sampling loop using Blackjax.
 
   Args:
@@ -67,12 +66,12 @@ def run_mcmc_loop(
     """
     key, subkey = jax.random.split(carry.key)
 
-    def logdensity_fn_step(position: jax.Array) -> jax.Array:
+    def logdensity_fn_step(position: ArrayLike) -> ScalarFloat:
       """Logdensity function for this MCMC step."""
       fitness = fitness_fn(key, position, None)
       return fitness[0]
 
-    def transition_generator_wrapped(key_mutation: jax.Array, position: jax.Array) -> jax.Array:
+    def transition_generator_wrapped(key_mutation: PRNGKey, position: ArrayLike) -> Array:
       """Mutation function that preserves the dtype of the input."""
       mutated = mutation_fn(key_mutation, position)
       return mutated.astype(position.dtype)

@@ -8,7 +8,6 @@ NUTS sampler.
 
 from __future__ import annotations
 
-import dataclasses
 from typing import TYPE_CHECKING
 
 import blackjax
@@ -26,6 +25,7 @@ if TYPE_CHECKING:
 
   from proteinsmc.models.fitness import StackedFitnessFn
   from proteinsmc.models.mutation import MutationFn
+  from proteinsmc.types import ArrayLike, ScalarFloat
 
 __all__ = ["run_nuts_loop"]
 
@@ -36,10 +36,10 @@ def run_nuts_loop(  # noqa: PLR0913
   num_doublings: Int,
   initial_state: SamplerState,
   fitness_fn: StackedFitnessFn,
-  inverse_mass_matrix: jax.Array | None = None,
+  inverse_mass_matrix: ArrayLike | None = None,
   _mutation_fn: MutationFn | None = None,
   io_callback: Callable | None = None,
-) -> tuple[SamplerState, dict[str, jax.Array]]:
+) -> tuple[SamplerState, dict[str, ArrayLike]]:
   """Run a NUTS sampling loop.
 
   This function demonstrates the basic idea of NUTS but lacks the full
@@ -62,7 +62,7 @@ def run_nuts_loop(  # noqa: PLR0913
   # Initialize blackjax NUTS state if not already present (uses HMCState)
   if initial_state.blackjax_state is None:
     # Compute initial logdensity and gradient
-    def logdensity_fn_wrapped(position: jax.Array) -> jax.Array:
+    def logdensity_fn_wrapped(position: ArrayLike) -> ScalarFloat:
       """Convert fitness_fn to blackjax's expected signature."""
       fitness = fitness_fn(initial_state.key, position, None)
       return fitness[0]
@@ -91,7 +91,7 @@ def run_nuts_loop(  # noqa: PLR0913
       mass_matrix = jnp.eye(dim)
 
     # Wrap fitness function for this step
-    def logdensity_fn_step(position: jax.Array) -> jax.Array:
+    def logdensity_fn_step(position: ArrayLike) -> ScalarFloat:
       """Logdensity function for this NUTS step."""
       fitness = fitness_fn(key, position, None)
       return fitness[0]  # Return combined fitness

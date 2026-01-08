@@ -15,10 +15,10 @@ from proteinsmc.models.sampler_base import SamplerState
 if TYPE_CHECKING:
   from collections.abc import Callable
 
-  from jaxtyping import Float, Int, PRNGKeyArray
+  from jaxtyping import Int
 
   from proteinsmc.models.gibbs import GibbsConfig, GibbsUpdateFn
-  from proteinsmc.models.types import EvoSequence
+  from proteinsmc.types import ArrayLike, EvoSequence, PRNGKey, ScalarFloat
   from proteinsmc.utils.fitness import FitnessFn
 
 __all__ = ["initialize_gibbs_state", "make_gibbs_update_fns", "run_gibbs_loop"]
@@ -65,9 +65,9 @@ def make_gibbs_update_fns(
     pos: int,
   ) -> GibbsUpdateFn:
     def update_fn(
-      key: PRNGKeyArray,
+      key: PRNGKey,
       seq: EvoSequence,
-      log_prob_fn: Callable[[PRNGKeyArray, EvoSequence], Float],
+      log_prob_fn: Callable[[PRNGKey, EvoSequence], ScalarFloat],
     ) -> EvoSequence:
       proposal_key, new_val_key = random.split(key)
       proposal_keys = random.split(random.fold_in(proposal_key, pos), n_states)
@@ -96,7 +96,7 @@ def run_gibbs_loop(
     ...,
   ],
   io_callback: Callable | None = None,
-) -> tuple[SamplerState, dict[str, jax.Array]]:
+) -> tuple[SamplerState, dict[str, ArrayLike]]:
   """Run the Gibbs sampler loop.
 
   Args:
