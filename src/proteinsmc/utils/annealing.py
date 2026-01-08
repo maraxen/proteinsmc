@@ -5,10 +5,8 @@ from __future__ import annotations
 from functools import partial
 from typing import TYPE_CHECKING
 
-import jax
 import jax.numpy as jnp
 from jax import jit
-from jaxtyping import Float
 
 if TYPE_CHECKING:
   from collections.abc import Callable
@@ -19,8 +17,7 @@ if TYPE_CHECKING:
     AnnealingConfig,
     AnnealingFn,
   )
-
-CurrentBetaFloat = Float[jax.Array, ""]
+  from proteinsmc.types import ScalarFloat
 
 ANNEALING_REGISTRY = {}
 
@@ -69,7 +66,7 @@ def linear_schedule(
   beta_min: float,
   beta_max: float,
   _context: Array | None = None,
-) -> CurrentBetaFloat:
+) -> ScalarFloat:
   """Linear annealing schedule for beta that is JAX-compatible.
 
   Args:
@@ -104,7 +101,7 @@ def exponential_schedule(
   beta_max: float,
   _context: Array | None = None,
   rate: float = 5.0,
-) -> CurrentBetaFloat:
+) -> ScalarFloat:
   """Exponential annealing schedule for beta that starts at beta_min and ends at beta_max.
 
   Args:
@@ -150,7 +147,7 @@ def cosine_schedule(
   beta_min: float,
   beta_max: float,
   _context: Array | None = None,
-) -> CurrentBetaFloat:
+) -> ScalarFloat:
   """Cosine annealing schedule for beta that starts at beta_min and ends at beta_max.
 
   Args:
@@ -188,7 +185,7 @@ def static_schedule(
   beta_min: float,
   beta_max: float,
   _context: Array | None = None,
-) -> CurrentBetaFloat:
+) -> ScalarFloat:
   """Implement static annealing schedule, constant at beta max.
 
   Args:

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import dataclasses
 from typing import TYPE_CHECKING
 
 import blackjax
@@ -18,6 +17,7 @@ if TYPE_CHECKING:
 
   from proteinsmc.models.fitness import StackedFitnessFn
   from proteinsmc.models.mutation import MutationFn
+  from proteinsmc.types import ArrayLike, ScalarFloat
 
 
 __all__ = ["run_hmc_loop"]
@@ -29,10 +29,10 @@ def run_hmc_loop(  # noqa: PLR0913
   fitness_fn: StackedFitnessFn,
   step_size: float = 0.1,
   num_integration_steps: int = 10,
-  inverse_mass_matrix: jax.Array | None = None,
+  inverse_mass_matrix: ArrayLike | None = None,
   _mutation_fn: MutationFn | None = None,
   io_callback: Callable | None = None,
-) -> tuple[SamplerState, dict[str, jax.Array]]:
+) -> tuple[SamplerState, dict[str, ArrayLike]]:
   """Run the Hamiltonian Monte Carlo (HMC) sampler loop.
 
   Args:
@@ -52,7 +52,7 @@ def run_hmc_loop(  # noqa: PLR0913
 
   # Create a wrapper that converts fitness_fn to blackjax's expected signature
   # Blackjax expects a function that takes only position and returns (logdensity, logdensity_grad)
-  def logdensity_fn_wrapped(position: jax.Array) -> tuple[jax.Array, jax.Array]:
+  def logdensity_fn_wrapped(position: ArrayLike) -> tuple[ScalarFloat, ArrayLike]:
     """Convert fitness_fn to blackjax's expected signature."""
     # fitness_fn returns (combined_fitness, components_fitness)
     fitness = fitness_fn(initial_state.key, position, None)
@@ -87,7 +87,7 @@ def run_hmc_loop(  # noqa: PLR0913
 
     # Call kernel with required parameters
     # Note: we need to wrap fitness_fn for each step with the current key
-    def logdensity_fn_step(position: jax.Array) -> jax.Array:
+    def logdensity_fn_step(position: ArrayLike) -> ScalarFloat:
       """Logdensity function for this HMC step."""
       fitness = fitness_fn(kernel_key, position, None)
       return fitness[0]  # Return combined fitness as JAX array

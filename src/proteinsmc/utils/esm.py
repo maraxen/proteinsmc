@@ -23,9 +23,8 @@ from jaxtyping import Array, Float, Int
 if TYPE_CHECKING:
   from collections.abc import Callable
 
-  from jaxtyping import PRNGKeyArray
-
-  from proteinsmc.models.types import ProteinSequence
+  from proteinsmc.types import PRNGKey as PRNGKeyArray
+  from proteinsmc.types import ProteinSequence
 
 
 from .constants import (

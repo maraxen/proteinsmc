@@ -274,43 +274,31 @@ class SamplerOutput(eqx.Module):
   beta: jax.Array = field(default_factory=lambda: jnp.array(-1.0))
 
   # PRSMC-specific
-  num_attempted_swaps: jax.Array = field(
-    default_factory=lambda: jnp.array(0, dtype=jnp.int32)
-  )
-  num_accepted_swaps: jax.Array = field(
-    default_factory=lambda: jnp.array(0, dtype=jnp.int32)
-  )
-  migration_island_from: jax.Array = field(
-    default_factory=lambda: jnp.array([], dtype=jnp.int32)
-  )
-  migration_island_to: jax.Array = field(
-    default_factory=lambda: jnp.array([], dtype=jnp.int32)
-  )
+  num_attempted_swaps: jax.Array = field(default_factory=lambda: jnp.array(0, dtype=jnp.int32))
+  num_accepted_swaps: jax.Array = field(default_factory=lambda: jnp.array(0, dtype=jnp.int32))
+  migration_island_from: jax.Array = field(default_factory=lambda: jnp.array([], dtype=jnp.int32))
+  migration_island_to: jax.Array = field(default_factory=lambda: jnp.array([], dtype=jnp.int32))
   migration_particle_idx_from: jax.Array = field(
     default_factory=lambda: jnp.array([], dtype=jnp.int32)
   )
   migration_particle_idx_to: jax.Array = field(
     default_factory=lambda: jnp.array([], dtype=jnp.int32)
   )
-  migration_accepted: jax.Array = field(
-    default_factory=lambda: jnp.array([], dtype=jnp.bool_)
-  )
+  migration_accepted: jax.Array = field(default_factory=lambda: jnp.array([], dtype=jnp.bool_))
   migration_log_acceptance_ratio: jax.Array = field(
     default_factory=lambda: jnp.array([], dtype=jnp.float32)
   )
 
   # HMC/NUTS-specific
   acceptance_probability: jax.Array = field(default_factory=lambda: jnp.array(0.0))
-  num_integration_steps: jax.Array = field(
-    default_factory=lambda: jnp.array(0, dtype=jnp.int32)
-  )
+  num_integration_steps: jax.Array = field(default_factory=lambda: jnp.array(0, dtype=jnp.int32))
 
   # Computed metrics
   mean_fitness: jax.Array = field(default_factory=lambda: jnp.array(0.0))
   max_fitness: jax.Array = field(default_factory=lambda: jnp.array(0.0))
   log_z_estimate: jax.Array = field(default_factory=lambda: jnp.array(0.0))
 
-  def replace(self, **kwargs: Any) -> SamplerOutput:
+  def replace(self, **kwargs: Any) -> SamplerOutput:  # noqa: ANN401
     """Create a new instance with updated fields."""
     return replace(self, **kwargs)
 
@@ -333,7 +321,7 @@ class SamplerState(eqx.Module):
   update_parameters: dict[str, jax.Array] = field(default_factory=dict)
   additional_fields: dict[str, jax.Array] = field(default_factory=dict)
 
-  def replace(self, **kwargs: Any) -> SamplerState:
+  def replace(self, **kwargs: Any) -> SamplerState:  # noqa: ANN401
     """Create a new instance with updated fields."""
     return replace(self, **kwargs)
 

@@ -15,16 +15,16 @@ from .constants import (
 )
 
 if TYPE_CHECKING:
-  from jaxtyping import Array, Bool, PRNGKeyArray
+  from jaxtyping import Array, Bool
 
-  from proteinsmc.models.types import NucleotideSequence, ProteinSequence
+  from proteinsmc.types import ArrayLike, NucleotideSequence, PRNGKey, ProteinSequence
 
 
 def string_to_int_sequence(
   sequence: str,
   conversion_map: dict[str, int] | None = None,
   sequence_type: Literal["protein", "nucleotide"] | None = None,
-) -> jnp.ndarray:
+) -> ArrayLike:
   """Convert a string sequence to a JAX integer array using ColabDesign's AA mapping.
 
   Args:
@@ -46,7 +46,7 @@ def string_to_int_sequence(
 @jit
 def nucleotide_to_aa(
   sequence: NucleotideSequence,
-  _key: PRNGKeyArray | None = None,
+  _key: PRNGKey | None = None,
   _context: Array | None = None,
 ) -> tuple[ProteinSequence, Bool]:
   """Translate a nucleotide sequence to an amino acid sequence.
@@ -77,14 +77,14 @@ def nucleotide_to_aa(
 @jit
 def aa_to_nucleotide(
   sequence: ProteinSequence,
-  _key: PRNGKeyArray | None = None,
+  _key: PRNGKey | None = None,
   _context: Array | None = None,
 ) -> tuple[NucleotideSequence, Bool]:
   """Reverses the translation of an amino acid sequence to a nucleotide sequence."""
   if sequence.shape[0] == 0:
     return jnp.array([], dtype=jnp.int8), jnp.array(1, dtype=jnp.bool_)
 
-  def find_first_codon(aa: jnp.ndarray) -> jnp.ndarray:
+  def find_first_codon(aa: ArrayLike) -> ArrayLike:
     """Find the first codon that translates to the given amino acid."""
     match_indices = jnp.argwhere(aa == CODON_INT_TO_RES_INT_JAX, size=6, fill_value=-1)
     return match_indices[0]
