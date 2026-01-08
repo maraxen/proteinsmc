@@ -13,7 +13,10 @@ from typing import Any
 
 import equinox as eqx
 import jax
-from array_record.python.array_record_module import ArrayRecordReader, ArrayRecordWriter
+from array_record.python.array_record_module import (  # type: ignore[import-unresolved]
+  ArrayRecordReader,
+  ArrayRecordWriter,
+)
 from jaxtyping import PyTree
 
 from proteinsmc.models.sampler_base import SamplerOutput
@@ -119,21 +122,21 @@ def create_writer_callback(path: str) -> tuple[ArrayRecordWriter, Callable]:
     # If step is 0D (scalar), it's a single step.
     # If step is 1D, it's a chunk.
     if step.ndim > 0 and step.shape[0] > 0:
-        # It is a chunk. Unroll and write each step.
-        num_steps = step.shape[0]
-        for i in range(num_steps):
-            # Slice the PyTree
-            single_step = jax.tree_util.tree_map(lambda x, i=i: x[i], sampler_output)
+      # It is a chunk. Unroll and write each step.
+      num_steps = step.shape[0]
+      for i in range(num_steps):
+        # Slice the PyTree
+        single_step = jax.tree_util.tree_map(lambda x, i=i: x[i], sampler_output)
 
-            buffer = io.BytesIO()
-            eqx.tree_serialise_leaves(buffer, single_step)
-            writer.write(buffer.getvalue())
-    else:
-        # Single step (or empty chunk?)
-        # If step is scalar (0D)
         buffer = io.BytesIO()
-        eqx.tree_serialise_leaves(buffer, sampler_output)
+        eqx.tree_serialise_leaves(buffer, single_step)
         writer.write(buffer.getvalue())
+    else:
+      # Single step (or empty chunk?)
+      # If step is scalar (0D)
+      buffer = io.BytesIO()
+      eqx.tree_serialise_leaves(buffer, sampler_output)
+      writer.write(buffer.getvalue())
 
   return writer, writer_callback
 

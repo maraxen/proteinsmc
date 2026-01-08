@@ -14,10 +14,10 @@ from proteinsmc.models.types import EvoSequence
 StackedFitness = Float[Array, "1+n_fitness_functions"]
 """Type alias for stacked fitness scores, including combined score on the 0 batch dimension."""
 NeedsTranslation = Bool[Array, "n_fitness_functions"]
-FitnessFn = Callable[[EvoSequence, PRNGKeyArray | None, PyTree | Array | None], Float]
+FitnessFn = Callable[[PRNGKeyArray | None, EvoSequence, PyTree | Array | None], Float]
 CombineFn = Callable[[Array, PRNGKeyArray | None, PyTree | Array | None], Float]
 StackedFitnessFn = Callable[
-  [EvoSequence, PRNGKeyArray | None, PyTree | Array | None],
+  [PRNGKeyArray | None, EvoSequence, PyTree | Array | None],
   StackedFitness,
 ]
 

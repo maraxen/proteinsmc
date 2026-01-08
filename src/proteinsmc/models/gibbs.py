@@ -11,7 +11,7 @@ from proteinsmc.models.sampler_base import BaseSamplerConfig
 from proteinsmc.models.types import EvoSequence
 
 GibbsUpdateFn = Callable[
-  [EvoSequence, PRNGKeyArray | None, FitnessFn, int, Array | None],
+  [PRNGKeyArray | None, EvoSequence, FitnessFn, int, Array | None],
   EvoSequence,
 ]
 

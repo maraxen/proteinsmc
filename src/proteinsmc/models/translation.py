@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from jaxtyping import Array, PRNGKeyArray, PyTree
+from jaxtyping import Array, Bool, PRNGKeyArray, PyTree
 
 from proteinsmc.models.types import EvoSequence
 
 TranslateFuncSignature = Callable[
-  [EvoSequence, PRNGKeyArray | None, PyTree | Array | None], EvoSequence
+  [EvoSequence, PRNGKeyArray | None, PyTree | Array | None], tuple[EvoSequence, Bool]
 ]

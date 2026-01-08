@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib.util
 from collections.abc import Sequence
 from functools import partial
-from typing import IO, TYPE_CHECKING, Literal
+from typing import IO, TYPE_CHECKING, Any, Literal
 
 import jax
 import jax.numpy as jnp
@@ -14,7 +14,7 @@ import numpy as np
 PRXTEINMPNN_AVAILABLE = importlib.util.find_spec("prxteinmpnn") is not None
 
 if PRXTEINMPNN_AVAILABLE:
-  from prxteinmpnn.io.loaders import create_protein_dataset
+  from proxide.ops.dataset import create_protein_dataset
   from prxteinmpnn.scoring.score import make_score_sequence
   from prxteinmpnn.utils.decoding_order import (
     DecodingOrder,
@@ -38,12 +38,25 @@ if PRXTEINMPNN_AVAILABLE:
 DecodingSettings = Literal["random", "same_random", "sequential", "full_ar"]
 
 
-def sequential_decode_order(
-  _key: PRNGKeyArray,
-  num_residues: int,
-) -> tuple[DecodingOrder, PRNGKeyArray]:
-  """Generate a sequential decoding order."""
-  return jnp.arange(num_residues, dtype=jnp.int32), _key
+if TYPE_CHECKING:
+
+  def sequential_decode_order(
+    _key: PRNGKeyArray,
+    num_residues: int,
+    tie_group_map: jnp.ndarray | None = None,
+    num_groups: int | None = None,
+  ) -> tuple[DecodingOrder, PRNGKeyArray]: ...
+else:
+
+  def sequential_decode_order(
+    _key: PRNGKeyArray,
+    num_residues: int,
+    tie_group_map: jnp.ndarray | None = None,
+    num_groups: int | None = None,
+  ) -> tuple[DecodingOrder, PRNGKeyArray]:
+    """Generate a sequential decoding order."""
+    del tie_group_map, num_groups
+    return jnp.arange(num_residues, dtype=jnp.int32), _key
 
 
 def make_mpnn_score(
@@ -93,31 +106,39 @@ def make_mpnn_score(
   )
 
   score_sequence = make_score_sequence(
-    model_parameters=mpnn_model_params,
-    decoding_order_fn=decoding_order_fn,
+    model=mpnn_model_params,  # type: ignore[arg-type]
+    decoding_order_fn=decoding_order_fn,  # type: ignore[arg-type]
   )
 
-  score_fn = partial(score_sequence)(
-    structure_coordinates=processed_inputs.coordinates,  # pyright: ignore[reportCallIssue]
+  score_fn = partial(
+    score_sequence,
+    structure_coordinates=processed_inputs.coordinates,
     mask=processed_inputs.mask,
     residue_index=processed_inputs.residue_index,
     chain_index=processed_inputs.chain_index,
     ar_mask=ar_mask,
   )
 
-  @jax.jit
-  def mpnn_score(
-    key: PRNGKeyArray,
-    protein_sequence: ProteinSequence,
-    _context: Array | None = None,
-  ) -> Float:
-    """Scores a protein sequence using the MPNN model."""
-    return jnp.mean(
-      score_fn(
+  if TYPE_CHECKING:
+
+    def mpnn_score(
+      key: PRNGKeyArray | None,
+      protein_sequence: ProteinSequence,
+      _context: Any | Array | None = None,
+    ) -> Float: ...
+  else:
+
+    @jax.jit
+    def mpnn_score(
+      key: PRNGKeyArray | None,
+      protein_sequence: ProteinSequence,
+      _context: Any | Array | None = None,
+    ) -> Float:
+      """Scores a protein sequence using the MPNN model."""
+      score, _logits, _order = score_fn(
         key,
         protein_sequence,
-      )[:, 0],
-      axis=0,
-    )
+      )
+      return score
 
   return mpnn_score

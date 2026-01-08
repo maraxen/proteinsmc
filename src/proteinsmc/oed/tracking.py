@@ -11,7 +11,7 @@ import logging
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import NamedTuple
+from typing import Any, NamedTuple, cast
 
 from proteinsmc.oed.structs import OEDDesign, OEDPredictedVariables
 
@@ -226,7 +226,8 @@ def create_oed_summary(output_dir: str | Path) -> dict[str, object]:
     """Extract nested result value for comparison."""
     result = rec["result"]
     if isinstance(result, dict):
-      value = result.get(key)
+      result_dict = cast("dict[str, Any]", result)
+      value = result_dict.get(key)
       if isinstance(value, (int, float)):
         return float(value)
     return float("-inf")

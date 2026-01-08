@@ -74,7 +74,7 @@ def run_mcmc_loop(
     def transition_generator_wrapped(key_mutation: PRNGKey, position: ArrayLike) -> Array:
       """Mutation function that preserves the dtype of the input."""
       mutated = mutation_fn(key_mutation, position)
-      return mutated.astype(position.dtype)
+      return jnp.asarray(mutated).astype(position.dtype)
 
     new_blackjax_state, _ = kernel(
       rng_key=key,
