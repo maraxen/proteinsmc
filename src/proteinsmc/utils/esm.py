@@ -353,7 +353,6 @@ def load_model(model_name: str, key: PRNGKeyArray) -> ESMC:
       repo_id="maraxen/esmc_models",
       filename=f"{model_name}.eqx",
       local_dir="esm_models",
-      local_dir_use_symlinks=False,
     )
   with Path(f"esm_models/{model_name}.eqx").open("rb") as f:
     hyperparams = json.loads(f.readline().decode())

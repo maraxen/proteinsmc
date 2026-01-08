@@ -36,6 +36,7 @@ def get_seq_bucket(n_residues: int) -> int:
 
   Raises:
       ValueError: If length exceeds all buckets.
+
   """
   for bucket in SEQ_BUCKETS:
     if n_residues <= bucket:
@@ -55,6 +56,7 @@ def pad_population(
 
   Returns:
       Padded population of shape (target_population, seq_len).
+
   """
   real_pop = sequences.shape[0]
   n_pad = target_population - real_pop
@@ -72,6 +74,7 @@ def pad_sequence(sequence: Array, target_len: int) -> Array:
 
   Returns:
       Padded sequence.
+
   """
   if sequence.ndim == 1:
     n_pad = target_len - sequence.shape[0]
@@ -92,6 +95,7 @@ def create_particle_mask(
 
   Returns:
       Boolean mask of shape (max_population,), True for valid particles.
+
   """
   return jnp.arange(max_population) < real_population
 
@@ -105,6 +109,7 @@ def create_sequence_mask(real_len: int, padded_len: int) -> Bool[Array, " padded
 
   Returns:
       Boolean mask of shape (padded_len,), True for valid positions.
+
   """
   return jnp.arange(padded_len) < real_len
 
@@ -118,6 +123,7 @@ def masked_mean(values: Array, mask: Array) -> Float[Array, ""]:
 
   Returns:
       Mean over valid elements.
+
   """
   return jnp.sum(values * mask) / jnp.sum(mask)
 
@@ -131,5 +137,6 @@ def masked_sum(values: Array, mask: Array) -> Float[Array, ""]:
 
   Returns:
       Sum over valid elements.
+
   """
   return jnp.sum(values * mask)

@@ -38,8 +38,8 @@ def make_blackjax_log_prob_fn(
 
   def blackjax_log_prob_fn(sequence: EvoSequence) -> StackedFitness:
     return fitness_fn(
-      sequence,
       key,
+      sequence,
       None,
     )
 

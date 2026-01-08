@@ -16,6 +16,11 @@ class OEDDesign:
   mutation_rate: Float  # Mutation rate per site
   diversification_ratio: Float  # Ratio of diversification in the population
 
+  def replace(self, **kwargs):
+    from dataclasses import replace
+
+    return replace(self, **kwargs)
+
 
 @dataclass
 class OEDPredictedVariables:

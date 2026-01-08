@@ -69,9 +69,12 @@ def get_fitness_function(
     def branch_fn(args: tuple[PRNGKeyArray, EvoSequence, Array | None]) -> Array:
       """Branch function for computing scores."""
       key_i, sequence, _context = args
-      seq = translate_func(sequence, key_i, _context) if needs_trans else sequence
+      if needs_trans:
+        seq, _ = translate_func(sequence, key_i, _context)
+      else:
+        seq = sequence
       # Call score_fn directly on the single sequence (outer vmap handles population)
-      return score_fn(key_i, seq, _context)
+      return score_fn(key_i, jnp.asarray(seq), _context)
 
     return branch_fn
 

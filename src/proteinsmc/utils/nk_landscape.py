@@ -45,35 +45,44 @@ class InteractionCarry:
   interactions: InteractionTable
 
 
-@partial(jax.jit, static_argnames=("n", "k"))
-def generate_nk_interactions(
-  key: PRNGKeyArray,
-  n: int,
-  k: int,
-) -> InteractionTable:
-  """Generate the interaction map for an NK model in JAX (Optimized).
+if TYPE_CHECKING:
 
-  Args:
-      key: JAX PRNG key.
-      n: Number of sites (N).
-      k: Number of neighbors (K).
+  def generate_nk_interactions(
+    key: PRNGKeyArray,
+    n: int,
+    k: int,
+  ) -> InteractionTable: ...
+else:
 
-  Returns:
-      An (N, K) array of neighbor indices.
+  @partial(jax.jit, static_argnames=("n", "k"))
+  def generate_nk_interactions(
+    key: PRNGKeyArray,
+    n: int,
+    k: int,
+  ) -> InteractionTable:
+    """Generate the interaction map for an NK model in JAX (Optimized).
 
-  """
-  if k == 0:
-    return jnp.full((n, k), -1, dtype=jnp.int32)
+    Args:
+        key: JAX PRNG key.
+        n: Number of sites (N).
+        k: Number of neighbors (K).
 
-  sites = jnp.arange(n)
-  possible_neighbors = jnp.array([jnp.roll(sites, -i - 1)[:-1] for i in range(n)])
+    Returns:
+        An (N, K) array of neighbor indices.
 
-  def _select_k_neighbors(key_site: PRNGKeyArray, site_neighbors: Int) -> Int:
-    """Select k random neighbors for a single site."""
-    return jax.random.choice(key_site, site_neighbors, shape=(k,), replace=False)
+    """
+    if k == 0:
+      return jnp.full((n, k), -1, dtype=jnp.int32)
 
-  keys = jax.random.split(key, n)
-  return vmap(_select_k_neighbors)(keys, possible_neighbors)
+    sites = jnp.arange(n)
+    possible_neighbors = jnp.array([jnp.roll(sites, -i - 1)[:-1] for i in range(n)])
+
+    def _select_k_neighbors(key_site: PRNGKeyArray, site_neighbors: Int) -> Int:
+      """Select k random neighbors for a single site."""
+      return jax.random.choice(key_site, site_neighbors, shape=(k,), replace=False)
+
+    keys = jax.random.split(key, n)
+    return vmap(_select_k_neighbors)(keys, possible_neighbors)
 
 
 @partial(jax.jit, static_argnames=("n", "max_k", "p_connect"))
@@ -158,47 +167,67 @@ def generate_nk_model(
   return NKLandscape(interactions=interactions, fitness_tables=fitness_tables)
 
 
-@partial(jax.jit, static_argnames=("n", "k"))
-def calculate_nk_fitness_single(
-  single_sequence: NKInput,
-  landscape: NKLandscape,
-  n: int,
-  k: int,
-) -> Float:
-  """Calculate fitness for one configuration (Refined).
+if TYPE_CHECKING:
 
-  Args:
-      single_sequence: A single sequence of shape (N,).
-      landscape: NKLandscape containing interactions and fitness tables.
-      n: Number of sites (N).
-      k: Number of neighbors (K).
+  def calculate_nk_fitness_single(
+    single_sequence: NKInput,
+    landscape: NKLandscape,
+    n: int,
+    k: int,
+  ) -> Float: ...
+else:
 
-  Returns:
-      Mean fitness contribution across all sites.
+  @partial(jax.jit, static_argnames=("n", "k"))
+  def calculate_nk_fitness_single(
+    single_sequence: NKInput,
+    landscape: NKLandscape,
+    n: int,
+    k: int,
+  ) -> Float:
+    """Calculate fitness for one configuration (Refined).
 
-  """
-  site_indices = jnp.arange(n)
-  focal_states = single_sequence
-  neighbor_site_indices = landscape.interactions
-  neighbor_states = single_sequence[neighbor_site_indices]
-  lookup_indices = jnp.stack(
-    [site_indices, focal_states, *[neighbor_states[:, i] for i in range(k)]]
-  )
-  all_contributions = landscape.fitness_tables[tuple(lookup_indices)]
-  return jnp.mean(all_contributions)
+    Args:
+        single_sequence: A single sequence of shape (N,).
+        landscape: NKLandscape containing interactions and fitness tables.
+        n: Number of sites (N).
+        k: Number of neighbors (K).
+
+    Returns:
+        Mean fitness contribution across all sites.
+
+    """
+    site_indices = jnp.arange(n)
+    focal_states = single_sequence
+    neighbor_site_indices = landscape.interactions
+    neighbor_states = single_sequence[neighbor_site_indices]
+    lookup_indices = jnp.stack(
+      [site_indices, focal_states, *[neighbor_states[:, i] for i in range(k)]]
+    )
+    all_contributions = landscape.fitness_tables[tuple(lookup_indices)]
+    return jnp.mean(all_contributions)
 
 
-@partial(jax.jit, static_argnames=("n", "k"))
-def calculate_nk_fitness_population(
-  population: NKPopulation,
-  landscape: NKLandscape,
-  n: int,
-  k: int,
-) -> Float:
-  """Calculate fitness for a population via vmap."""
-  return vmap(calculate_nk_fitness_single, in_axes=(0, None, None, None))(
-    population,
-    landscape,
-    n,
-    k,
-  )
+if TYPE_CHECKING:
+
+  def calculate_nk_fitness_population(
+    population: NKPopulation,
+    landscape: NKLandscape,
+    n: int,
+    k: int,
+  ) -> Float: ...
+else:
+
+  @partial(jax.jit, static_argnames=("n", "k"))
+  def calculate_nk_fitness_population(
+    population: NKPopulation,
+    landscape: NKLandscape,
+    n: int,
+    k: int,
+  ) -> Float:
+    """Calculate fitness for a population via vmap."""
+    return vmap(calculate_nk_fitness_single, in_axes=(0, None, None, None))(
+      population,
+      landscape,
+      n,
+      k,
+    )

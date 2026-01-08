@@ -76,7 +76,7 @@ def make_gibbs_update_fns(
       log_probs = jax.vmap(log_prob_fn)(proposal_keys, proposals)
       probs = jax.nn.softmax(log_probs)
       new_val = jax.random.choice(new_val_key, n_states, p=probs)
-      return seq.at[pos].set(new_val)
+      return jnp.asarray(seq).at[pos].set(new_val)
 
     return update_fn  # type: ignore[return-value]
 
@@ -86,64 +86,78 @@ def make_gibbs_update_fns(
   return update_fns  # type: ignore[return-value]
 
 
-@partial(jit, static_argnames=("config", "fitness_fn", "update_fns"))
-def run_gibbs_loop(
-  config: GibbsConfig,
-  initial_state: SamplerState,
-  fitness_fn: FitnessFn,
-  update_fns: tuple[
-    GibbsUpdateFn,
-    ...,
-  ],
-  io_callback: Callable | None = None,
-) -> tuple[SamplerState, dict[str, ArrayLike]]:
-  """Run the Gibbs sampler loop.
+if TYPE_CHECKING:
 
-  Args:
-      config: Configuration for the Gibbs sampler.
-      initial_state: Initial state of the sampler.
-      fitness_fn: Fitness function to evaluate sequences.
-      update_fns: Tuple of update functions, each updating one component of the state.
-      io_callback: Optional callback function for writing outputs.
+  def run_gibbs_loop(
+    config: GibbsConfig,
+    initial_state: SamplerState,
+    fitness_fn: FitnessFn,
+    update_fns: tuple[
+      GibbsUpdateFn,
+      ...,
+    ],
+    io_callback: Callable | None = None,
+  ) -> tuple[SamplerState, dict[str, ArrayLike]]: ...
+else:
 
-  Returns:
-      A tuple containing the final state and empty metrics dictionary.
+  @partial(jit, static_argnames=("config", "fitness_fn", "update_fns"))
+  def run_gibbs_loop(
+    config: GibbsConfig,
+    initial_state: SamplerState,
+    fitness_fn: FitnessFn,
+    update_fns: tuple[
+      GibbsUpdateFn,
+      ...,
+    ],
+    io_callback: Callable | None = None,
+  ) -> tuple[SamplerState, dict[str, ArrayLike]]:
+    """Run the Gibbs sampler loop.
 
-  """
+    Args:
+        config: Configuration for the Gibbs sampler.
+        initial_state: Initial state of the sampler.
+        fitness_fn: Fitness function to evaluate sequences.
+        update_fns: Tuple of update functions, each updating one component of the state.
+        io_callback: Optional callback function for writing outputs.
 
-  def body_fn(step_idx: Int, state: SamplerState) -> SamplerState:
-    current_state = state.sequence
+    Returns:
+        A tuple containing the final state and empty metrics dictionary.
 
-    new_state = current_state
-    for j, update_fn in enumerate(update_fns):
-      key_comp, _ = random.split(random.fold_in(state.key, j))
-      new_state = update_fn(key_comp, new_state, fitness_fn)  # type: ignore[call-arg]
+    """
 
-    fitness = fitness_fn(
-      state.key,
-      new_state,
-      None,
-    )
-    _, key_next = random.split(state.key)
-    next_state = SamplerState(
-      sequence=new_state,
-      key=key_next,
-      step=jnp.array(step_idx + 1),
-      additional_fields={"fitness": fitness},
-    )
+    def body_fn(step_idx: Int, state: SamplerState) -> SamplerState:
+      current_state = state.sequence
 
-    if io_callback is not None:
-      jax_io_callback(
-        io_callback,
+      new_state = current_state
+      for j, update_fn in enumerate(update_fns):
+        key_comp, _ = random.split(random.fold_in(state.key, j))
+        new_state = update_fn(key_comp, new_state, fitness_fn)  # type: ignore[call-arg]
+
+      fitness = fitness_fn(
+        state.key,
+        new_state,
         None,
-        {
-          "sequence": next_state.sequence,
-          "fitness": next_state.additional_fields["fitness"],
-          "step": next_state.step,
-        },
+      )
+      _, key_next = random.split(state.key)
+      next_state = SamplerState(
+        sequence=new_state,
+        key=key_next,
+        step=jnp.array(step_idx + 1),
+        additional_fields={"fitness": fitness},
       )
 
-    return next_state
+      if io_callback is not None:
+        jax_io_callback(
+          io_callback,
+          None,
+          {
+            "sequence": next_state.sequence,
+            "fitness": next_state.additional_fields["fitness"],
+            "step": next_state.step,
+          },
+        )
 
-  final_state = jax.lax.fori_loop(0, config.num_samples, body_fn, initial_state)
-  return final_state, {}
+      return next_state
+
+    final_state = jax.lax.fori_loop(0, config.num_samples, body_fn, initial_state)
+    return final_state, {}

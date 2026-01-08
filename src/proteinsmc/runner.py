@@ -40,7 +40,9 @@ from proteinsmc.utils.translation import aa_to_nucleotide, nucleotide_to_aa, str
 if TYPE_CHECKING:
   from collections.abc import Callable, Sequence
 
-  from array_record.python.array_record_module import ArrayRecordWriter
+  from array_record.python.array_record_module import (
+    ArrayRecordWriter,  # type: ignore[import-unresolved]
+  )
 
   from proteinsmc.models.sampler_base import BaseSamplerConfig
   from proteinsmc.models.translation import TranslateFuncSignature
@@ -151,7 +153,7 @@ def _setup_mutation_function(config: BaseSamplerConfig) -> Callable:
     key: jax.Array,
     particles: jax.Array,
     update_parameters: dict,
-  ) -> tuple[jax.Array, dict]:
+  ) -> tuple[jax.Array, dict[str, Any]]:
     """Apply mutation rates from the state's update_parameters.
 
     Blackjax's `smc_step` automatically handles mapping this function over the
@@ -164,7 +166,7 @@ def _setup_mutation_function(config: BaseSamplerConfig) -> Callable:
       mutation_rate=update_parameters["mutation_rate"],
       q_states=config.n_states,
     )
-    return mutated_particles, {}
+    return jnp.asarray(mutated_particles), {}
 
   return mutation_fn
 
@@ -204,7 +206,7 @@ def _get_inputs(config: BaseSamplerConfig) -> tuple[dict[str, Any], list[str]]:
   if isinstance(config.seed_sequence, jax.Array):
     seed_sequences = config.seed_sequence
   else:
-    seed_sequence_inputs = _convert_to_list(config.seed_sequence)
+    seed_sequence_inputs = _convert_to_list(config.seed_sequence)  # type: ignore[arg-type]
     sequence_type_inputs = _convert_to_list(config.sequence_type)
     seed_sequences = jnp.array(
       [
