@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib.util
 from collections.abc import Sequence
 from functools import partial
-from typing import IO, TYPE_CHECKING, Any, Literal
+from typing import IO, TYPE_CHECKING, Literal
 
 import jax
 import jax.numpy as jnp
@@ -45,7 +45,9 @@ if TYPE_CHECKING:
     num_residues: int,
     tie_group_map: jnp.ndarray | None = None,
     num_groups: int | None = None,
-  ) -> tuple[DecodingOrder, PRNGKeyArray]: ...
+  ) -> tuple[DecodingOrder, PRNGKeyArray]:
+    """Generate a sequential decoding order."""
+    ...
 else:
 
   def sequential_decode_order(
@@ -124,15 +126,17 @@ def make_mpnn_score(
     def mpnn_score(
       key: PRNGKeyArray | None,
       protein_sequence: ProteinSequence,
-      _context: Any | Array | None = None,
-    ) -> Float: ...
+      _context: Array | None = None,
+    ) -> Float:
+      """Scores a protein sequence using the MPNN model."""
+      ...
   else:
 
     @jax.jit
     def mpnn_score(
       key: PRNGKeyArray | None,
       protein_sequence: ProteinSequence,
-      _context: Any | Array | None = None,
+      _context: Array | None = None,
     ) -> Float:
       """Scores a protein sequence using the MPNN model."""
       score, _logits, _order = score_fn(

@@ -51,7 +51,9 @@ if TYPE_CHECKING:
     key: PRNGKeyArray,
     n: int,
     k: int,
-  ) -> InteractionTable: ...
+  ) -> InteractionTable:
+    """Generate the interaction map for an NK model."""
+    ...
 else:
 
   @partial(jax.jit, static_argnames=("n", "k"))
@@ -174,7 +176,9 @@ if TYPE_CHECKING:
     landscape: NKLandscape,
     n: int,
     k: int,
-  ) -> Float: ...
+  ) -> Float:
+    """Calculate fitness for one configuration."""
+    ...
 else:
 
   @partial(jax.jit, static_argnames=("n", "k"))
@@ -214,7 +218,9 @@ if TYPE_CHECKING:
     landscape: NKLandscape,
     n: int,
     k: int,
-  ) -> Float: ...
+  ) -> Float:
+    """Calculate fitness for a population via vmap."""
+    ...
 else:
 
   @partial(jax.jit, static_argnames=("n", "k"))

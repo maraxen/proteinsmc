@@ -97,7 +97,9 @@ if TYPE_CHECKING:
       ...,
     ],
     io_callback: Callable | None = None,
-  ) -> tuple[SamplerState, dict[str, ArrayLike]]: ...
+  ) -> tuple[SamplerState, dict[str, ArrayLike]]:
+    """Run the Gibbs sampler loop."""
+    ...
 else:
 
   @partial(jit, static_argnames=("config", "fitness_fn", "update_fns"))

@@ -1,5 +1,10 @@
 """Dataclasses for OED."""
 
+from __future__ import annotations
+
+from dataclasses import replace
+from typing import Any
+
 from flax.struct import dataclass
 from jaxtyping import Float, Int
 
@@ -16,9 +21,8 @@ class OEDDesign:
   mutation_rate: Float  # Mutation rate per site
   diversification_ratio: Float  # Ratio of diversification in the population
 
-  def replace(self, **kwargs):
-    from dataclasses import replace
-
+  def replace(self, **kwargs: Any) -> OEDDesign:  # noqa: ANN401
+    """Create a new instance with updated fields."""
     return replace(self, **kwargs)
 
 
