@@ -11,11 +11,7 @@ from proteinsmc.models.sampler_base import BaseSamplerConfig, SamplerOutput
 
 def _determine_population_size(config: BaseSamplerConfig) -> int:
   """Determine population size from config."""
-  num_samples = (
-    config.population_size
-    if hasattr(config, "population_size")
-    else config.num_samples
-  )
+  num_samples = config.population_size if hasattr(config, "population_size") else config.num_samples
 
   if isinstance(num_samples, int):
     return num_samples

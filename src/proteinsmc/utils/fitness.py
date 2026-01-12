@@ -38,6 +38,33 @@ COMBINE_FUNCTIONS: dict[str, Callable[..., CombineFn]] = {
 }
 
 
+def _create_score_branches(
+  score_fns: list[FitnessFn],
+  needs_translation_tuple: tuple[bool, ...],
+  translate_func: TranslateFuncSignature,
+) -> list[Callable]:
+  """Create branch functions for score evaluation."""
+
+  def make_score_branch(score_fn: FitnessFn, *, needs_trans: bool) -> Callable:
+    """Create a branch function for a specific score function index."""
+
+    def branch_fn(args: tuple[PRNGKeyArray, EvoSequence, Array | None]) -> Array:
+      """Branch function for computing scores."""
+      key_i, sequence, _context = args
+      if needs_trans:
+        seq, _ = translate_func(sequence, key_i, _context)
+      else:
+        seq = sequence
+      return score_fn(key_i, jnp.asarray(seq), _context)
+
+    return branch_fn
+
+  return [
+    make_score_branch(score_fn, needs_trans)
+    for score_fn, needs_trans in zip(score_fns, needs_translation_tuple, strict=True)
+  ]
+
+
 def get_fitness_function(
   evaluator_config: FitnessEvaluator,
   n_states: int | Int,
@@ -52,8 +79,8 @@ def get_fitness_function(
       raise ValueError(error_msg)
     make_fn = FITNESS_FUNCTIONS[func_config.name]
     score_fns.append(make_fn(**func_config.kwargs))
-  needs_translation = evaluator_config.needs_translation(n_states)
 
+  needs_translation = evaluator_config.needs_translation(n_states)
   needs_translation_tuple = tuple(bool(x) for x in needs_translation)
 
   combine_config = evaluator_config.combine_fn
@@ -63,25 +90,7 @@ def get_fitness_function(
   make_combine_fn = COMBINE_FUNCTIONS[combine_config.name]
   combine_fn: CombineFn = make_combine_fn(**combine_config.kwargs)
 
-  def make_score_branch(score_fn: FitnessFn, needs_trans: bool) -> Callable:  # noqa: FBT001
-    """Create a branch function for a specific score function index."""
-
-    def branch_fn(args: tuple[PRNGKeyArray, EvoSequence, Array | None]) -> Array:
-      """Branch function for computing scores."""
-      key_i, sequence, _context = args
-      if needs_trans:
-        seq, _ = translate_func(sequence, key_i, _context)
-      else:
-        seq = sequence
-      # Call score_fn directly on the single sequence (outer vmap handles population)
-      return score_fn(key_i, jnp.asarray(seq), _context)
-
-    return branch_fn
-
-  score_branches = [
-    make_score_branch(score_fn, needs_trans)
-    for score_fn, needs_trans in zip(score_fns, needs_translation_tuple, strict=True)
-  ]
+  score_branches = _create_score_branches(score_fns, needs_translation_tuple, translate_func)
 
   @jit
   def final_fitness_fn(
@@ -91,26 +100,19 @@ def get_fitness_function(
   ) -> Array:
     keys = jax.random.split(key, len(score_fns) + 1)
 
-    # Optimize for single fitness function case (no switch needed)
     if len(score_fns) == 1:
       all_scores = score_branches[0]((keys[0], sequence, _context))[jnp.newaxis]
     else:
 
       def compute_score(i: Array | int) -> Array:
-        """Compute scores for the i-th fitness function."""
         return jax.lax.switch(i, score_branches, (keys[i], sequence, _context))
 
-      # If batch_size is None, use vmap instead of lax.map to avoid dynamic shape issues
       if batch_size is None:
         all_scores = jax.vmap(compute_score)(jnp.arange(len(score_fns)))
       else:
         all_scores = jax.lax.map(compute_score, jnp.arange(len(score_fns)), batch_size=batch_size)
 
-    # Combine the scores from different fitness functions
-    # all_scores has shape (n_fitness_functions,) for a single sequence
     combined_fitness = combine_fn(all_scores, keys[-1], _context)
-
-    # Return stacked: [combined, score1, score2, ...]
     return jnp.concatenate([jnp.array([combined_fitness]), all_scores])
 
   return final_fitness_fn

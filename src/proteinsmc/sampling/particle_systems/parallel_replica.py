@@ -42,7 +42,9 @@ if TYPE_CHECKING:
     Array,
     Array,
     Array,
-  ]: ...
+  ]:
+    """Perform replica exchange attempts between islands."""
+    ...
 else:
 
   def migrate(  # noqa: PLR0913
@@ -242,7 +244,9 @@ if TYPE_CHECKING:
     fitness_fn: StackedFitnessFn,
     mutation_fn: MutationFn,
     annealing_fn: AnnealingFn,
-  ) -> tuple[SamplerState, SamplerOutput]: ...
+  ) -> tuple[SamplerState, SamplerOutput]:
+    """JIT-compiled Parallel Replica SMC loop for a single chunk."""
+    ...
 else:
 
   @partial(

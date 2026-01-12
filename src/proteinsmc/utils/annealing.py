@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -10,6 +9,8 @@ import jax.numpy as jnp
 from jax import jit
 
 if TYPE_CHECKING:
+  from collections.abc import Callable
+
   from jaxtyping import Array
 
   from proteinsmc.models.annealing import (
@@ -65,7 +66,9 @@ if TYPE_CHECKING:
     beta_min: float,
     beta_max: float,
     _context: Array | None = None,
-  ) -> ScalarFloat: ...
+  ) -> ScalarFloat:
+    """Linear annealing schedule for beta."""
+    ...
 else:
 
   @register_schedule("linear")
@@ -111,7 +114,9 @@ if TYPE_CHECKING:
     beta_max: float,
     _context: Array | None = None,
     rate: float = 5.0,
-  ) -> ScalarFloat: ...
+  ) -> ScalarFloat:
+    """Exponential annealing schedule for beta."""
+    ...
 else:
 
   @register_schedule("exponential")
@@ -169,7 +174,9 @@ if TYPE_CHECKING:
     beta_min: float,
     beta_max: float,
     _context: Array | None = None,
-  ) -> ScalarFloat: ...
+  ) -> ScalarFloat:
+    """Cosine annealing schedule for beta."""
+    ...
 else:
 
   @register_schedule("cosine")
@@ -218,7 +225,9 @@ if TYPE_CHECKING:
     beta_min: float,
     beta_max: float,
     _context: Array | None = None,
-  ) -> ScalarFloat: ...
+  ) -> ScalarFloat:
+    """Implement static annealing schedule for beta."""
+    ...
 else:
 
   @register_schedule("static")
