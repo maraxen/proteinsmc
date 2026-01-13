@@ -4,7 +4,7 @@ import jax.numpy as jnp
 from flax import struct
 from jaxtyping import Array, Float
 
-from proteinsmc.oed.structs import OEDDesign, OEDPredictedVariables
+from proteinsmc.oed.structs import OEDDesign, OEDFeatureMode, OEDPredictedVariables
 
 
 @struct.dataclass
@@ -23,6 +23,8 @@ class GPModel:
 
   X_train: Array
   y_train: Array
+  X_mean: Array
+  X_std: Array
   noise: Float = 1e-5
   length_scale: Float = 1.0
   signal_variance: Float = 1.0
@@ -69,22 +71,33 @@ class GPModel:
       True
 
     """
+    # Normalize new input
+    x_new_norm = (x_new - self.X_mean) / (self.X_std + 1e-8)
+    # X_train is already normalized
+
     # Compute kernel matrices
     k = self.rbf_kernel(self.X_train, self.X_train)
-    k_s = self.rbf_kernel(self.X_train, x_new)
-    k_ss = self.rbf_kernel(x_new, x_new)
+    k_s = self.rbf_kernel(self.X_train, x_new_norm)
+    k_ss = self.rbf_kernel(x_new_norm, x_new_norm)
 
     # Add noise to diagonal
     k_noise = k + self.noise * jnp.eye(k.shape[0])
 
     # Compute mean: K_s^T * K^-1 * y
-    l_mat = jnp.linalg.cholesky(k_noise)
+    # Use a small jitter for stability if Cholesky fails
+    jitter = 1e-6
+    k_noise_stable = k_noise + jitter * jnp.eye(k_noise.shape[0])
+
+    l_mat = jnp.linalg.cholesky(k_noise_stable)
     alpha = jnp.linalg.solve(l_mat.T, jnp.linalg.solve(l_mat, self.y_train))
     mu = jnp.matmul(k_s.T, alpha)
 
     # Compute variance: K_ss - K_s^T * K^-1 * K_s
     v = jnp.linalg.solve(l_mat, k_s)
     var = jnp.diag(k_ss - jnp.matmul(v.T, v))
+
+    # Ensure variance is non-negative
+    var = jnp.clip(var, a_min=1e-9)
 
     return mu, var
 
@@ -119,11 +132,18 @@ def fit_gp_model(
   output_dims = y.shape[1]
   models = {}
 
+  # Calculate normalization parameters
+  x_mean = jnp.mean(x, axis=0)
+  x_std = jnp.std(x, axis=0) + 1e-8
+  x_norm = (x - x_mean) / x_std
+
   # Fit a separate GP for each output dimension
   for i in range(output_dims):
     models[f"dim_{i}"] = GPModel(
-      X_train=x,
+      X_train=x_norm,
       y_train=y[:, i],
+      X_mean=x_mean,
+      X_std=x_std,
       noise=noise,
       length_scale=length_scale,
       signal_variance=signal_variance,
@@ -164,37 +184,50 @@ def predict_with_gp_models(
   return means, variances
 
 
-def design_to_features(design: OEDDesign) -> Array:
+def design_to_features(design: OEDDesign, mode: OEDFeatureMode = OEDFeatureMode.ALL) -> Array:
   """Convert OEDDesign to feature array for GP input.
 
   Args:
     design: OED design parameters.
+    mode: Feature selection mode.
 
   Returns:
     Feature array for GP input.
 
   Example:
-    >>> from proteinsmc.oed.structs import OEDDesign
+    >>> from proteinsmc.oed.structs import OEDDesign, OEDFeatureMode
     >>> design = OEDDesign(N=20, K=3, q=4, population_size=100,
     ...                    n_generations=50, mutation_rate=0.01,
     ...                    diversification_ratio=0.1)
-    >>> features = design_to_features(design)
-    >>> features.shape == (1, 6)
+    >>> features = design_to_features(design, mode=OEDFeatureMode.ALL)
+    >>> features.shape == (1, 8)
+    True
+    >>> features_eff = design_to_features(design, mode=OEDFeatureMode.EFFECTIVE_ONLY)
+    >>> features_eff.shape == (1, 5)
     True
 
   """
-  return jnp.array(
-    [
-      [
-        design.N,
-        design.K,
-        design.q,
-        design.population_size,
-        design.mutation_rate,
-        design.diversification_ratio,
-      ]
-    ]
-  )
+  features = [
+    design.N,
+    design.K,
+    design.q,
+    design.population_size,
+    design.mutation_rate,
+    design.diversification_ratio,
+    design.branch_length,
+  ]
+  # Effective mutation rate (population_size * branch_length * mutation_rate)
+  eff_mut_rate = design.population_size * design.branch_length * design.mutation_rate
+  features.append(eff_mut_rate)
+
+  if mode == OEDFeatureMode.EFFECTIVE_ONLY:
+    # Exclude subcomponents: population_size, mutation_rate, branch_length
+    # Indices: N(0), K(1), q(2), pop(3), mut(4), div(5), branch(6), eff(7)
+    # Remaining: N, K, q, div, eff
+    indices = [0, 1, 2, 5, 7]
+    features = [features[i] for i in indices]
+
+  return jnp.array([features])
 
 
 def features_to_predicted_variables(

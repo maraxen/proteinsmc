@@ -60,7 +60,7 @@ def _create_score_branches(
     return branch_fn
 
   return [
-    make_score_branch(score_fn, needs_trans)
+    make_score_branch(score_fn, needs_trans=needs_trans)
     for score_fn, needs_trans in zip(score_fns, needs_translation_tuple, strict=True)
   ]
 

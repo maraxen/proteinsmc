@@ -17,7 +17,7 @@ from proteinsmc.oed.gp import (
   predict_with_gp_models,
 )
 from proteinsmc.oed.opt import calculate_fim_determinant
-from proteinsmc.oed.structs import OEDDesign, OEDPredictedVariables
+from proteinsmc.oed.structs import OEDDesign, OEDFeatureMode, OEDPredictedVariables
 from proteinsmc.oed.tracking import (
   OEDRecordParams,
   add_oed_to_metadata,
@@ -107,9 +107,12 @@ def generate_candidate_designs(
 
 def train_surrogate_model(
   design_history: list[tuple[OEDDesign, OEDPredictedVariables]],
+  feature_mode: OEDFeatureMode = OEDFeatureMode.ALL,
 ) -> Callable[[OEDDesign], OEDPredictedVariables]:
   """Train a surrogate model on the design history."""
-  x_train = jnp.concatenate([design_to_features(design) for design, _ in design_history], axis=0)
+  x_train = jnp.concatenate(
+    [design_to_features(design, mode=feature_mode) for design, _ in design_history], axis=0
+  )
   y_train = jnp.array(
     [
       [
@@ -127,7 +130,7 @@ def train_surrogate_model(
 
   def predict_surrogate(design: OEDDesign) -> OEDPredictedVariables:
     """Wrap function to make predictions with the trained surrogate model."""
-    x_new = design_to_features(design)
+    x_new = design_to_features(design, mode=feature_mode)
     means, variances = predict_with_gp_models(models_dict, x_new)
     return features_to_predicted_variables(means, variances)
 
@@ -139,9 +142,10 @@ def recommend_next_design(
   design_history: list[tuple[OEDDesign, OEDPredictedVariables]],
   parameter_bounds: dict[str, tuple[float, float]],
   n_candidates: int = 100,
+  feature_mode: OEDFeatureMode = OEDFeatureMode.ALL,
 ) -> OEDDesign:
   """Recommend the next experimental design to maximize information gain."""
-  surrogate_model = train_surrogate_model(design_history)
+  surrogate_model = train_surrogate_model(design_history, feature_mode=feature_mode)
 
   key, subkey = jax.random.split(key)
   candidate_designs = generate_candidate_designs(subkey, parameter_bounds, n_candidates)
@@ -176,7 +180,16 @@ def main() -> None:
     default=100,
     help="Number of OED-driven experiments.",
   )
+  parser.add_argument(
+    "--feature_mode",
+    type=str,
+    default="ALL",
+    choices=["ALL", "EFFECTIVE_ONLY"],
+    help="Feature selection mode for GP.",
+  )
   args = parser.parse_args()
+
+  feature_mode = OEDFeatureMode[args.feature_mode]
 
   key = jax.random.PRNGKey(args.seed)
   design_history = []
@@ -228,7 +241,9 @@ def main() -> None:
   for i in range(args.num_oed_iterations):
     logger.info("Running OED iteration %d/%d", i + 1, args.num_oed_iterations)
     key, subkey = jax.random.split(key)
-    next_design = recommend_next_design(subkey, design_history, PARAMETER_BOUNDS, n_candidates=100)
+    next_design = recommend_next_design(
+      subkey, design_history, PARAMETER_BOUNDS, n_candidates=100, feature_mode=feature_mode
+    )
     key, subkey = jax.random.split(key)
     new_result, run_uuid = run_oed_experiment(next_design, str(output_dir), seed=int(subkey[0]))
     design_history.append((next_design, new_result))

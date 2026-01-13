@@ -5,25 +5,25 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Int, PRNGKeyArray, PyTree
-
-from proteinsmc.utils import mutation
-from proteinsmc.utils.jax_utils import chunked_map
 from trex import nk_model
 from trex.types import Adjacency
 from trex.utils.types import EvoSequence
+
+from proteinsmc.utils import mutation
+from proteinsmc.utils.jax_utils import chunked_map
 
 
 def evolve_path_smc(
   _key: PRNGKeyArray,
   initial_population: Int[Array, "pop_size seq_len"],
-  path_indices: Int[Array, "total_steps"],
+  path_indices: Int[Array, total_steps],
   parent_key_array: PRNGKeyArray,
   landscape: PyTree,
   mutation_rate: float,
   n_states: int,
   selection_intensity: float = 1.0,
   inference_batch_size: int = 64,
-) -> Int[Array, "total_steps pop_size seq_len"]:
+) -> tuple[Int[Array, "total_steps pop_size seq_len"], Int[Array, "total_steps pop_size"]]:
   """Evolve a population along a specified path of edges using SMC.
 
   Crucially, this function ensures that shared branches in a tree use identical
@@ -46,7 +46,9 @@ def evolve_path_smc(
       inference_batch_size: Batch size for fitness calculation.
 
   Returns:
-      The final population after evolving through the path.
+      A tuple containing:
+        - populations: History of resampled populations (total_steps, pop_size, seq_len).
+        - ancestry: Resampling indices for each step (total_steps, pop_size).
 
   """
   # Ensure population is int8 to match mutation output
@@ -99,12 +101,71 @@ def evolve_path_smc(
     )
     resampled_population = mutated_population[chosen_indices]
 
-    return resampled_population, resampled_population
+    return resampled_population, (resampled_population, chosen_indices)
 
   # Run scan
-  _, history = jax.lax.scan(scan_body, population_carry, (path_indices, time_steps))
+  _, (history, ancestry) = jax.lax.scan(scan_body, population_carry, (path_indices, time_steps))
 
-  return history
+  return history, ancestry
+
+
+def _run_smc_path_with_traceback(
+  path: Int[Array, " T"],
+  initial_pop: Int[Array, "pop_size seq_len"],
+  node_keys: PRNGKeyArray,
+  landscape: PyTree,
+  mutation_rate: float,
+  n_states: int,
+  selection_intensity: float,
+  inference_batch_size: int,
+  key: PRNGKeyArray,
+) -> Int[Array, "T seq_len"]:
+  """Evolve a single path and trace back the best lineage."""
+  # The padding -1 should index into node_keys[-1] which is fine if we add a dummy key.
+  safe_node_keys = jnp.concatenate([node_keys, node_keys[0:1]], axis=0)  # Add dummy at -1
+  history, ancestry = evolve_path_smc(
+    _key=key,  # Not used for evolution steps
+    initial_population=initial_pop,
+    path_indices=path,
+    parent_key_array=safe_node_keys,
+    landscape=landscape,
+    mutation_rate=mutation_rate,
+    n_states=n_states,
+    selection_intensity=selection_intensity,
+    inference_batch_size=inference_batch_size,
+  )
+
+  # Traceback logic to extract a single representative lineage
+  total_steps = history.shape[0]
+
+  # Calculate fitness of final population at the leaf
+  final_pop = history[-1]
+  final_fitness = chunked_map(
+    lambda seq, ls: nk_model.get_fitness(seq, ls),
+    final_pop,
+    batch_size=inference_batch_size,
+    static_args={"ls": landscape},
+  )
+  winner_idx = jnp.argmax(final_fitness)
+
+  # Scan backwards to reconstruct the lineage indices
+  def traceback_step(curr_idx: int, t: int) -> tuple[int, int]:
+    # ancestry[t, curr_idx] is the parent index in history[t-1]
+    parent_idx = ancestry[t, curr_idx]
+    return parent_idx, curr_idx
+
+  # We want indices for steps [total_steps-1, ..., 0]
+  # We use a scan on reversed time
+  _, lineage_indices = jax.lax.scan(traceback_step, winner_idx, jnp.arange(total_steps - 1, -1, -1))
+  # lineage_indices is now [winner_idx, p_final-1, p_final-2, ..., p_1]
+  # Reverse it back
+  lineage_indices = jnp.flip(lineage_indices)
+
+  # Extract sequences using reconstructed indices
+  def extract_seq(t: int) -> Int[Array, " seq_len"]:
+    return history[t, lineage_indices[t]]
+
+  return jax.vmap(extract_seq)(jnp.arange(total_steps))
 
 
 def generate_tree_data_smc(
@@ -166,10 +227,8 @@ def generate_tree_data_smc(
   # Identify Leaves
   # A node is a leaf if it is not a parent to any other node
   is_parent = jnp.any(
-    adjacency == 1, axis=1
-  )  # adjacency[i, j]=1 means j is parent of i. So j is parent.
-  # Correct: adjacency[child, parent] = 1. So j is a parent if any adjacency[:, j] == 1.
-  is_parent = jnp.any(adjacency == 1, axis=0)  # This checks if node j is parent of anyone.
+    adjacency == 1, axis=0
+  )  # Correct: adjacency[child, parent] = 1. So j is a parent if any adjacency[:, j] == 1.
   leaves = jnp.where(~is_parent, size=n_nodes, fill_value=-1)[0]
   num_leaves = jnp.sum(leaves != -1)
 
@@ -213,27 +272,19 @@ def generate_tree_data_smc(
   initial_pop = jnp.repeat(root_sequence[None, :], pop_size, axis=0)
 
   # Map evolve_path_smc over leaf paths
-  # We need to handle the fact that evolve_path_smc is designed for a single path
-  # vmap over rows of expanded_paths
-  def run_one_path(path: Array) -> Array:
-    # Filter out -1? Scan can handle it if we are careful,
-    # but evolve_path_smc expects a fixed length.
-    # The padding -1 should index into node_keys[-1] which is fine if we add a dummy key.
-    safe_node_keys = jnp.concatenate([node_keys, node_keys[0:1]], axis=0)  # Add dummy at -1
-    return evolve_path_smc(
-      _key=key,  # Not used for evolution steps
-      initial_population=initial_pop,
-      path_indices=path,
-      parent_key_array=safe_node_keys,
+  all_lineages = jax.vmap(
+    lambda p: _run_smc_path_with_traceback(
+      path=p,
+      initial_pop=initial_pop,
+      node_keys=node_keys,
       landscape=landscape,
       mutation_rate=mutation_rate,
       n_states=n_states,
       selection_intensity=selection_intensity,
       inference_batch_size=inference_batch_size,
+      key=key,
     )
-
-  # history: (num_leaves, total_steps, pop_size, seq_len)
-  all_histories = jax.vmap(run_one_path)(expanded_paths)
+  )(expanded_paths)
 
   # 5. Aggregation
   # Initialize all_sequences with root
@@ -244,11 +295,7 @@ def generate_tree_data_smc(
   # Sequence for node 'n' is at the 'last' step of its edge in the path.
   def extract_node_sequence(node_idx: int) -> Array:
     # Find which leaf path contains node_idx.
-    # The path_pos has shape (num_leaves, max_depth).
-    # Use argmax to find the first match
     matches = all_leaf_paths == node_idx
-    # Find indices where matches is true. We just need ONE match.
-    # jnp.where with size=1 is good.
     path_pos = jnp.where(matches, size=1)
     leaf_idx_in_vmap = path_pos[0][0]
     node_idx_in_path = path_pos[1][0]
@@ -257,17 +304,14 @@ def generate_tree_data_smc(
     # node_idx_in_path * branch_length to (node_idx_in_path + 1) * branch_length - 1
     last_step_idx = (node_idx_in_path + 1) * branch_length - 1
 
-    # Extract population history part
-    node_pop = all_histories[leaf_idx_in_vmap, last_step_idx]
-    # Use first particle as representative
-    return node_pop[0]
+    # Extract lineage sequence
+    return all_lineages[leaf_idx_in_vmap, last_step_idx]
 
   # Nodes other than root
   other_nodes = jnp.where(jnp.arange(n_nodes) != root_node, size=n_nodes - 1)[0]
 
   def fill_sequences(i: int, seqs: Array) -> Array:
     node_idx = other_nodes[i]
-    # We can use jax.lax.cond to handle root_node but we already filtered it
     return seqs.at[node_idx].set(extract_node_sequence(node_idx))
 
   all_sequences = jax.lax.fori_loop(0, n_nodes - 1, fill_sequences, all_sequences)

@@ -3,10 +3,18 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from enum import Enum, auto
 from typing import Any
 
 from flax.struct import dataclass
 from jaxtyping import Float, Int
+
+
+class OEDFeatureMode(Enum):
+  """Feature selection mode for OED GP analysis."""
+
+  ALL = auto()  # Include all raw and derived features
+  EFFECTIVE_ONLY = auto()  # Include effective mutation rate, exclude raw subcomponents
 
 
 @dataclass
@@ -20,6 +28,7 @@ class OEDDesign:
   n_generations: Int  # Number of generations to simulate
   mutation_rate: Float  # Mutation rate per site
   diversification_ratio: Float  # Ratio of diversification in the population
+  branch_length: Float = 1.0  # Effective time/length of the branch
 
   def replace(self, **kwargs: Any) -> OEDDesign:  # noqa: ANN401
     """Create a new instance with updated fields."""
