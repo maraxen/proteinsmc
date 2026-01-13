@@ -7,6 +7,7 @@ import jax.numpy as jnp
 from jaxtyping import Array, Int, PRNGKeyArray, PyTree
 from trex import nk_model
 from trex.types import Adjacency
+from trex.utils.memory import safe_map
 from trex.utils.types import EvoSequence
 
 from proteinsmc.utils import mutation
@@ -271,20 +272,25 @@ def generate_tree_data_smc(
   # 4. Parallel Simulation
   initial_pop = jnp.repeat(root_sequence[None, :], pop_size, axis=0)
 
-  # Map evolve_path_smc over leaf paths
-  all_lineages = jax.vmap(
-    lambda p: _run_smc_path_with_traceback(
-      path=p,
+  # Use safe_map to process leaf paths in batches to conserve memory
+  # Pass mutation_rate as dynamic argument to avoid recompilation
+  mut_rates = jnp.full((expanded_paths.shape[0],), mutation_rate)
+
+  all_lineages = safe_map(
+    lambda inputs: _run_smc_path_with_traceback(
+      path=inputs[0],
       initial_pop=initial_pop,
       node_keys=node_keys,
       landscape=landscape,
-      mutation_rate=mutation_rate,
+      mutation_rate=inputs[1],
       n_states=n_states,
       selection_intensity=selection_intensity,
       inference_batch_size=inference_batch_size,
       key=key,
-    )
-  )(expanded_paths)
+    ),
+    (expanded_paths, mut_rates),
+    batch_size=inference_batch_size,
+  )
 
   # 5. Aggregation
   # Initialize all_sequences with root
