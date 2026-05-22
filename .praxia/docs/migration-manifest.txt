@@ -1,0 +1,4 @@
+Migration applied: 2026-05-22T12:16:17.389900
+Project: /home/marielle/projects/proteinsmc
+
+.praxia/mission.md → .praxia/docs/misc/260522_mission.md [git]
