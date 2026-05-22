@@ -1,0 +1,84 @@
+{
+  "workspace_id": "ws_05648efd-c952-4130-8229-f1bd8da6f12e",
+  "schema_version": 1,
+  "preset": "research",
+  "worldview": {
+    "value": "JAX-accelerated Sequential Monte Carlo framework for protein sequence design and evolutionary studies — benchmarking samplers and mapping fitness landscapes.",
+    "confidence": 0.9,
+    "deferred": false,
+    "sources": ["readme_parsed", "claude_md"]
+  },
+  "owner": {
+    "value": "Marielle Russo <mariellexr@gmail.com>",
+    "confidence": 0.95,
+    "deferred": false,
+    "sources": ["git_history"]
+  },
+  "eidos": {
+    "value": "Not a protein structure predictor; not a general ML training framework; not a sequence database tool.",
+    "confidence": 0.85,
+    "deferred": false,
+    "sources": ["claude_md"]
+  },
+  "s5_policy": [
+    "All sampler state must be a JAX PyTree (flax.struct.dataclass)",
+    "All scoring functions must be vmapped over population_size",
+    "All I/O goes through io.py — no direct file writes in sampler loops",
+    "Use uv run for all Python execution"
+  ],
+  "primary_function": {
+    "value": "SMC-based protein sequence sampler with OED outer loop for hyperparameter optimization",
+    "confidence": 0.95,
+    "deferred": false,
+    "sources": ["claude_md"]
+  },
+  "operators": ["developer", "researcher"],
+  "build_target": {
+    "value": "Python library + experiment scripts",
+    "confidence": 0.9,
+    "deferred": false,
+    "sources": ["pyproject_toml"]
+  },
+  "always_do": [
+    "uv run ruff check src/ --fix before commit",
+    "uv run pytest before merge",
+    "split JAX PRNG keys before use"
+  ],
+  "ask_first": [
+    "delete experiment outputs",
+    "push to remote",
+    "change sampler registry API"
+  ],
+  "never_do": [
+    "commit secrets or API keys",
+    "use Python-level mutable state inside jit/vmap/scan",
+    "bypass ruff lint"
+  ],
+  "consumers": {
+    "value": ["researcher (Marielle)", "SLURM cluster jobs"],
+    "confidence": 0.85,
+    "deferred": false,
+    "sources": ["claude_md", "agents_md"]
+  },
+  "scan_scope": [
+    "src/",
+    "tests/",
+    "scripts/",
+    ".praxia/",
+    "!.venv",
+    "!__pycache__",
+    "!.git",
+    "!outputs/"
+  ],
+  "horizon": "project",
+  "coordination_mechanisms": [
+    "Git commits for versioning",
+    "TRANSDUCTION loop for orchestrated development"
+  ],
+  "quirks": [
+    "HMC/NUTS have 4 failing tests (int8→float32 type mismatch in initialization_factory)",
+    "Parallel Replica SMC: single-island edge case not yet fixed",
+    "NPT ensemble diverges beyond ~10ps — use NVT for production runs"
+  ],
+  "quirks_initialized": true
+}
