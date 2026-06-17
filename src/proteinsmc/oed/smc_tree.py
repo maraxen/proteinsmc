@@ -205,7 +205,12 @@ def generate_tree_data_smc(
   # 1. Topology Analysis
   # BFS to find parent indices and sorted nodes (from trex.nk_model)
   parent_indices = jnp.argmax(adjacency, axis=1)
-  root_node = jnp.where(parent_indices == jnp.arange(n_nodes), size=1)[0][0]
+  # Root = the unique node with no parent (all-zero row under the adjacency[child, parent]=1
+  # convention). The previous `parent_indices == arange` test only matches a root at index 0
+  # or one carrying a self-loop; create_balanced_binary_tree roots at the last index with
+  # neither, which silently mis-rooted the tree at node 0. See asr
+  # tests/test_smc_generator_invariants.py.
+  root_node = jnp.where(~jnp.any(adjacency == 1, axis=1), size=1)[0][0]
 
   # Identify nodes and their depths
   def get_node_depths(adj: Array, root: int) -> Array:
