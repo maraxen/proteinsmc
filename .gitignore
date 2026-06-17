@@ -7,3 +7,5 @@ __pycache__/
 # Hypothesis database
 .hypothesis/
 *.egg-info/
+.fastembed_cache/
+.praxia/cache/
