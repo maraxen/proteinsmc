@@ -17,7 +17,12 @@ dependencies = [
   "equinox",
   "uuid-utils",
   "safetensors",
-  "prxteinmpnn",
+  # NOTE: `prxteinmpnn` was removed 2026-08-13. The package was renamed `aminx` and no
+  # longer resolves, which made this project's requirements unsatisfiable — nothing could
+  # be installed or imported at all. It is deliberately NOT replaced with `aminx`: that
+  # would create a proteinsmc -> aminx dependency edge, which the ecosystem partition
+  # exists to flip. `scoring/mpnn.py` already guards on `find_spec("prxteinmpnn")` and
+  # degrades to unavailable, exactly as it did before this line was dropped.
   "einops>=0.8.1",
   "huggingface-hub>=0.35.3",
   "array-record>=0.8.1",
