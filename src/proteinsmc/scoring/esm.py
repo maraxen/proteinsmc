@@ -8,7 +8,7 @@ import equinox as eqx
 import jax
 import jax.numpy as jnp
 
-from proteinsmc.utils.esm import load_model, remap_sequences
+from proteinsmc.utils.esm import load_model, remap_alphafold_sequences
 
 if TYPE_CHECKING:
   from jaxtyping import Array, Float, PRNGKeyArray
@@ -59,7 +59,9 @@ def make_esm_score(
         The PLL score of the sequence.
 
     """
-    sequence = remap_sequences(sequence)
+    # This package's encoders emit AlphaFold-ordered integers, so the AlphaFold entry
+    # point is the correct one here. `remap_sequences` expects ProteinMPNN ordering.
+    sequence = remap_alphafold_sequences(sequence)
     sequence = sequence[None, :]  # Add batch dimension: (1, seq_len)
     output = eqx_model(sequence)
     log_probs = jax.nn.log_softmax(output.logits, axis=-1)  # (1, seq_len, vocab_size)

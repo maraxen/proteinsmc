@@ -269,30 +269,58 @@ ESM_PAD_ID = ESM_AA_CHAR_TO_INT_MAP["<pad>"]
 ESM_EOS_ID = ESM_AA_CHAR_TO_INT_MAP["<eos>"]
 ESM_UNK_ID = ESM_AA_CHAR_TO_INT_MAP["<unk>"]
 ESM_MASK_ID = ESM_AA_CHAR_TO_INT_MAP["<mask>"]
-PROTEINMPNN_TO_ESM_AA_MAP_JAX = jnp.full(
-  AMINO_ACIDS_NUM_STATES,  # Size is based on ColabDesign's max AA int
-  ESM_UNK_ID,
-  dtype=jnp.int32,
-)
+# --- Amino-acid integer -> ESM token maps ------------------------------------------
+#
+# TWO distinct source alphabets reach ESM through this module, and conflating them
+# silently permutes every residue that is not a fixed point of the permutation. They are
+# therefore built and named separately. See
+# `.praxia/docs/research/260813_alphabet-provenance-trace.md`.
+#
+#   AlphaFold  — this package's own encoding (`restypes`, above):  ARNDCQEGHILKMFPSTWYV
+#                Produced by `string_to_int_sequence` and fed to `scoring/esm.py`.
+#   ProteinMPNN — asr's declared canonical (`asr/src/asr/alphabet.py:8`):
+#                                                                  ACDEFGHIKLMNPQRSTVWY
+#                Supplied by external callers of `utils.esm.remap_sequences`, whose
+#                docstring has always promised the ProteinMPNN scheme.
+#
+# Before 2026-08-13 a single table was built from the AlphaFold ordering while carrying
+# the ProteinMPNN name, so external callers honouring the documented contract had their
+# sequences permuted. Only A, S and T are fixed points of that permutation.
+#
+# Both tables are sized to cover every legal sequence value — including the gap/X index
+# 20 used by asr and the stop/unknown sentinel `PROTEINMPNN_X_INT` (21). The previous
+# table was length 20, so a JAX gather clamped indices 20 and 21 to Valine.
 
-# Populate the mapping
-for cd_char, cd_int in AA_CHAR_TO_INT_MAP.items():
-  if cd_char in ESM_AA_CHAR_TO_INT_MAP:
-    esm_int = ESM_AA_CHAR_TO_INT_MAP[cd_char]
-    PROTEINMPNN_TO_ESM_AA_MAP_JAX = PROTEINMPNN_TO_ESM_AA_MAP_JAX.at[cd_int].set(esm_int)
-  else:
-    msg = (
-      f"ColabDesign character '{cd_char}' (int {cd_int}) not found in "
-      f"ESM vocabulary. Mapping to UNK."
-    )
-    logger.warning(msg)
+PROTEINMPNN_RESTYPES = "ACDEFGHIKLMNPQRSTVWY"
+"""ProteinMPNN's 20-letter ordering. Distinct from `restypes`, which is AlphaFold's."""
 
-if "X" in AA_CHAR_TO_INT_MAP and "X" in ESM_AA_CHAR_TO_INT_MAP:
-  PROTEINMPNN_TO_ESM_AA_MAP_JAX = PROTEINMPNN_TO_ESM_AA_MAP_JAX.at[AA_CHAR_TO_INT_MAP["X"]].set(
-    ESM_AA_CHAR_TO_INT_MAP["X"],
-  )
-elif "X" in AA_CHAR_TO_INT_MAP:
-  # If ESM doesn't have 'X' as a regular token, map to UNK
-  PROTEINMPNN_TO_ESM_AA_MAP_JAX = PROTEINMPNN_TO_ESM_AA_MAP_JAX.at[AA_CHAR_TO_INT_MAP["X"]].set(
-    ESM_UNK_ID,
-  )
+_ESM_MAP_LEN = PROTEINMPNN_X_INT + 1
+"""Covers indices 0..21 inclusive, so no legal sequence value can clamp."""
+
+
+def _build_esm_token_map(source_alphabet: str, alphabet_name: str) -> jnp.ndarray:
+  """Build a source-alphabet-index -> ESM-token lookup table.
+
+  Every index outside `source_alphabet` — notably the gap/X index 20 and the stop
+  sentinel 21 — resolves to `<unk>` explicitly rather than by out-of-bounds clamping.
+  """
+  table = jnp.full(_ESM_MAP_LEN, ESM_UNK_ID, dtype=jnp.int32)
+  for idx, char in enumerate(source_alphabet):
+    if char in ESM_AA_CHAR_TO_INT_MAP:
+      table = table.at[idx].set(ESM_AA_CHAR_TO_INT_MAP[char])
+    else:
+      msg = (
+        f"{alphabet_name} character '{char}' (int {idx}) not found in "
+        f"ESM vocabulary. Mapping to UNK."
+      )
+      logger.warning(msg)
+  return table
+
+
+PROTEINMPNN_TO_ESM_AA_MAP_JAX = _build_esm_token_map(PROTEINMPNN_RESTYPES, "ProteinMPNN")
+"""ProteinMPNN-ordered integer -> ESM token. Matches this constant's name and the
+documented contract of `utils.esm.remap_sequences`."""
+
+ALPHAFOLD_TO_ESM_AA_MAP_JAX = _build_esm_token_map("".join(restypes), "AlphaFold")
+"""AlphaFold-ordered integer -> ESM token. This is what `scoring/esm.py` needs, because
+this package's own encoders emit AlphaFold-ordered integers."""
