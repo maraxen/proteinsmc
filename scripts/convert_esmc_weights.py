@@ -69,7 +69,13 @@ MATRIX_NDIM = 2
 
 MIN_RECOVERY = 0.30
 """Fraction of positions where argmax must equal the input. A trained ESM-C comfortably
-exceeds this; the untrained checkpoint scored 0.000."""
+exceeds this -- on a correct port it scores 1.000 on ubiquitin, since the input is unmasked
+-- while the untrained checkpoint scored 0.000. The threshold stays loose at 0.30 because it
+is meant to catch wholesale randomness, and because a *port* defect (not a weight defect)
+can depress it substantially without zeroing it: with the residual-scaling and attention
+bugs still present, correctly converted weights measured 0.737 here and still passed. That
+is the intended behaviour -- this gate certifies the weights, not the forward pass. Numeric
+parity against the reference implementation is what certifies the port."""
 
 MAX_MEDIAN_WEIGHT_STD = 0.75
 """Upper bound on the MEDIAN standard deviation across the model's >=2D leaves.
@@ -134,8 +140,15 @@ def acceptance_test(model) -> tuple[float, float]:  # noqa: ANN001
   """Score ubiquitin and return (argmax recovery, median weight-matrix std).
 
   Both are cheap invariants that the untrained checkpoint fails unambiguously: it scored
-  0.000 recovery against 0.737 for correctly converted weights, and its median matrix std
-  was 1.000 against 0.070.
+  0.000 recovery against 1.000 for correctly converted weights on a correct port, and its
+  median matrix std was 1.000 against 0.070.
+
+  Note on the recovery figure: this is *unmasked* argmax agreement -- the model sees the
+  residue it is scoring -- so a working model should sit very near 1.0, and ubiquitin in
+  particular is in every training set. The 0.737 recorded during the original conversion was
+  measured while the port still carried the residual-scaling and attention-layout defects
+  (fixed in 01c1b08); it is a degraded number, not the reference. Do not read 0.737 as the
+  expected value.
   """
   ids = jnp.array([C.PROTEINMPNN_RESTYPES.index(c) for c in UBIQUITIN], dtype=jnp.int32)
   tokens = jnp.concatenate(
