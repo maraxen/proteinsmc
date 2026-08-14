@@ -7,6 +7,7 @@ https://github.com/escalante-bio/esmj
 from __future__ import annotations
 
 import json
+import math
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, BinaryIO
@@ -274,11 +275,18 @@ class MultiHeadAttention(AbstractFromTorch):
     query, key, value = jnp.split(qkv, 3, axis=-1)
     query, key = self.q_ln(query), self.k_ln(key)
     query, key = self._apply_rotary(query, key)
+    # `jax.nn.dot_product_attention` takes (B, T, N, H) -- batch, SEQUENCE, heads, head_dim --
+    # whereas torch's `F.scaled_dot_product_attention` takes (B, N, T, H) with heads second.
+    # This previously used the torch layout ("b h s d"), which is shape-valid for the JAX
+    # call and therefore silent: with 15 heads and 78 residues it attended over the 15 heads
+    # as if they were positions, and treated the 78 positions as heads. A divergence bisect
+    # against the reference (asr run 49c10669) showed a bit-exact embedding followed by
+    # max|d| = 13.37 at block 0 -- the signature of a defect inside every block.
     query, key, value = (
-      einops.rearrange(t, "b s (h d) -> b h s d", h=self.n_heads) for t in (query, key, value)
+      einops.rearrange(t, "b s (h d) -> b s h d", h=self.n_heads) for t in (query, key, value)
     )
     context = jax.nn.dot_product_attention(query, key, value)
-    return self.out_proj(einops.rearrange(context, "b h s d -> b s (h d)"))
+    return self.out_proj(einops.rearrange(context, "b s h d -> b s (h d)"))
 
 
 class UnifiedTransformerBlock(AbstractFromTorch):
@@ -465,7 +473,18 @@ def create_esmc_skeleton(key: PRNGKeyArray, model_name: str) -> ESMC:
       },
     )
 
-    return UnifiedTransformerBlock(ffn, attn, scaling_factor=np.sqrt(n_layers))
+    # ESM-C scales each residual branch by sqrt(n_layers / 36), NOT sqrt(n_layers):
+    # `esm.layers.transformer_stack.TransformerStack.__init__` passes
+    # `residue_scaling_factor=math.sqrt(n_layers / 36)`, and the branch is divided by it
+    # (`esm.layers.blocks.UnifiedTransformerBlock.forward`: `x = x + r1 / self.scaling_factor`),
+    # matching `:293-294` here. For the 30-layer 300M model that is 0.9129, not 5.4772 --
+    # so the previous constant attenuated every attention and FFN contribution by exactly
+    # 6x (sqrt(36)) in all 30 blocks. The model still looked plausible because the embedding
+    # path survives, which is why argmax recovery of 0.737 did not reveal it; the numeric
+    # parity test against the reference did. See asr run 7c9b69af.
+    # `math.sqrt` (not `np.sqrt`) keeps this a Python float, so the static field does not
+    # trip equinox's "JAX array is being set as static" warning.
+    return UnifiedTransformerBlock(ffn, attn, scaling_factor=math.sqrt(n_layers / 36))
 
   embed = SparseEmbedding(eqx.nn.Embedding(vocab_size, embed_dim, key=keys[0]))
 
