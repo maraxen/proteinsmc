@@ -74,6 +74,10 @@ dev = [
     "pytest-cov>=7.0.0",
     "ruff>=0.14.1",
     "ty>=0.0.1a21",
+    # Phase 0 alphabet conformance (decision D4). DEV GROUP ONLY -- nothing under src/
+    # imports this, so no runtime dependency edge is created and the ecosystem
+    # partition is unaffected. See tests/test_alphabet_conformance.py.
+    "abcdefghijk",
 ]
 docs = [
     "sphinx",
@@ -94,3 +98,7 @@ root = ["src/proteinsmc"]
 [tool.ty.rules]
 invalid-type-form = "ignore"
 
+
+[tool.uv.sources]
+# Local path until the package is renamed and published.
+abcdefghijk = { path = "/home/marielle/projects/abcdefghijk", editable = true }

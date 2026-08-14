@@ -8,6 +8,29 @@ resolution-markers = [
 ]
 
 [[package]]
+name = "abcdefghijk"
+version = "0.1.0"
+source = { editable = "/home/marielle/projects/abcdefghijk" }
+dependencies = [
+    { name = "numpy" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "jax", marker = "extra == 'jax'" },
+    { name = "numpy" },
+]
+provides-extras = ["jax"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "hypothesis", specifier = ">=6" },
+    { name = "pytest", specifier = ">=8" },
+    { name = "ruff", specifier = ">=0.14" },
+    { name = "ty", specifier = ">=0.0.1a21" },
+]
+
+[[package]]
 name = "absl-py"
 version = "2.3.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1682,6 +1705,7 @@ cuda = [
     { name = "jax", extra = ["cuda12"] },
 ]
 dev = [
+    { name = "abcdefghijk" },
     { name = "hypothesis" },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -1706,6 +1730,7 @@ tpu = [
 
 [package.metadata]
 requires-dist = [
+    { name = "abcdefghijk", marker = "extra == 'dev'", editable = "/home/marielle/projects/abcdefghijk" },
     { name = "array-record", specifier = ">=0.8.1" },
     { name = "blackjax" },
     { name = "chex" },
