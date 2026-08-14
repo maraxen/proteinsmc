@@ -8,7 +8,7 @@ the documented contract had its residues permuted (only A, S and T are fixed poi
 permutation). It was shape-valid, so nothing raised.
 
 An ecosystem census found the same two base orderings declared under five different names across
-four repos. The library `abcdefghijk` holds one declaration of each. This test asserts that
+four repos. The library `alphex` holds one declaration of each. This test asserts that
 *this repo's* constants still agree with those declarations, so that if either side drifts, a
 test fails instead of a number quietly changing.
 
@@ -26,12 +26,12 @@ import pytest
 
 from proteinsmc.utils import constants as C  # noqa: N812
 
-abcdefghijk = pytest.importorskip(
-  "abcdefghijk",
+alphex = pytest.importorskip(
+  "alphex",
   reason="alphabet conformance library not installed; add it to the dev group",
 )
-known = abcdefghijk.known
-SpecialKind = abcdefghijk.SpecialKind
+known = alphex.known
+SpecialKind = alphex.SpecialKind
 
 
 def test_restypes_is_the_alphafold_ordering() -> None:
