@@ -3,6 +3,11 @@
 **Task:** `260813_proteinsmc_ecosystem_partition`
 **Status:** complete for the ESM/MPNN validation path. Read-only; no code changed.
 **Supersedes:** the mechanism stated in Addendum B §B.1 and in Addendum C §C1/N2.
+**Scope pinned 2026-08-14:** the headline below is correct, but it applies to
+`asr/analysis/biophysics.py` **only** — the single caller of `remap_sequences` in asr. asr's
+production training pipeline builds its own correct table and was never affected; the `.npz`
+artifacts the analysis path reads are uniform-random smoke output. See the discharged
+artifact-producer caveat at the end of this document before citing any impact claim.
 
 ---
 
@@ -125,10 +130,24 @@ G2 this trace cannot close.
   the unresolvable `prxteinmpnn`), so this is a static trace, exactly as with all 82 rows of
   Addendum D. The permutation is read off the alphabet declarations and the absence of any
   conversion at `biophysics.py:31,68-70`; it has not been demonstrated by running the code.
-- **The artifact-producing pipeline was not traced to its origin.** The conclusion rests on
-  asr's *declared* canonical (`alphabet.py:8`) governing the `ancestors` arrays that
-  `interpret.py:12` and `compare_distributions.py:11` load from `.npz`. A producer writing
-  in LG or Potts order instead would change which path is wrong — but not the finding that
-  one of them is, since `biophysics.py` converts for neither.
+- ~~**The artifact-producing pipeline was not traced to its origin.**~~ **DISCHARGED
+  2026-08-14** — traced; see `asr/.praxia/docs/research/260813_g2-esm-metric-delta.md`
+  § "RESOLVED — the artifact producer". Two results, one confirming and one deflating:
+  - The declared canonical **is** the ordering asr's production path uses.
+    `mtt_training_pipeline.py:35-38` builds its own `CANONICAL_TO_ESM` from
+    `"ACDEFGHIKLMNPQRSTVWY-"` and never calls `remap_sequences`, which has exactly one
+    caller in asr (`biophysics.py:31`). That table agrees with this repo's **post-fix**
+    `PROTEINMPNN_TO_ESM_AA_MAP_JAX` on all 20 amino acids. So the bug's blast radius in asr
+    is the analysis path only — no trained model or reconstruction was affected.
+  - The `.npz` artifacts, however, carry **no ordering at all**: `validate_priors.py:20`
+    draws `leaf_seqs` from `jax.random.categorical` over zero logits — uniform over 21
+    states, argmax entropy 4.36–4.39 bits against a 4.392-bit ceiling. They are smoke-test
+    output from 2026-04-23, untracked by git. Any G2-style delta measured on them is a
+    difference between two permutations of noise, which is why the re-run on the repaired
+    model returned mixed signs.
+
+  The caveat's own hedge held up exactly as written: a different producer ordering "would
+  change which path is wrong — but not the finding that one of them is." What it did not
+  anticipate was a producer with no ordering to speak of.
 - The four-convention census covers `src/` and `scripts/`; notebooks and `vendor/` were not
   enumerated.
