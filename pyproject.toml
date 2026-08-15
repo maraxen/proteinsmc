@@ -77,7 +77,7 @@ dev = [
     # Phase 0 alphabet conformance (decision D4). DEV GROUP ONLY -- nothing under src/
     # imports this, so no runtime dependency edge is created and the ecosystem
     # partition is unaffected. See tests/test_alphabet_conformance.py.
-    "alphex",
+    "alphex>=0.1.0a1",
 ]
 docs = [
     "sphinx",
@@ -101,4 +101,4 @@ invalid-type-form = "ignore"
 
 [tool.uv.sources]
 # Local path until the package is renamed and published.
-alphex = { path = "/home/marielle/projects/alphex", editable = true }
+# alphex: PyPI (https://pypi.org/project/alphex/) -- no source override needed.
