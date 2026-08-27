@@ -28,10 +28,25 @@ if TYPE_CHECKING:
 
 
 from .constants import (
+  ALPHAFOLD_TO_ESM_AA_MAP_JAX,
   ESM_BOS_ID,
   ESM_EOS_ID,
   PROTEINMPNN_TO_ESM_AA_MAP_JAX,
 )
+
+
+def _remap_with(
+  sequence: ProteinSequence,
+  token_map: jnp.ndarray,
+) -> ProteinSequence:
+  """Gather `sequence` through `token_map` and wrap the result in BOS/EOS."""
+  return jnp.concatenate(
+    [
+      jnp.array([ESM_BOS_ID], dtype=jnp.int32),
+      token_map[sequence],
+      jnp.array([ESM_EOS_ID], dtype=jnp.int32),
+    ],
+  )
 
 
 @jax.jit
@@ -40,24 +55,45 @@ def remap_sequences(
 ) -> ProteinSequence:
   """Remap amino acid integer IDs from ProteinMPNN's scheme to ESM's token scheme.
 
-  Also add BOS/EOS tokens and pad the sequence.
+  Also adds BOS/EOS tokens.
+
+  The ProteinMPNN ordering is `ACDEFGHIKLMNPQRSTVWY`, which is **not** the ordering this
+  package's own encoders produce — those emit AlphaFold-ordered integers, for which
+  `remap_alphafold_sequences` is the correct entry point. Passing the wrong one silently
+  permutes every residue except A, S and T. Until 2026-08-13 this function's lookup table
+  was built from the AlphaFold ordering despite the contract documented here, so external
+  callers honouring the contract were mis-scored; see
+  `.praxia/docs/research/260813_alphabet-provenance-trace.md`.
 
   Args:
-      sequence: A ProteinSequence containing amino acid integer IDs.
+      sequence: A ProteinSequence of ProteinMPNN-ordered amino acid integer IDs. Indices
+        outside 0..19 (e.g. gap/X at 20, stop at 21) map explicitly to ESM's `<unk>`.
 
   Returns:
-      A tuple of (esm_amino_acid_ids, attention_mask) as JAX arrays.
+      The ESM token IDs, prefixed with BOS and suffixed with EOS.
 
   """
-  esm_aa_ints_raw = PROTEINMPNN_TO_ESM_AA_MAP_JAX[sequence]
+  return _remap_with(sequence, PROTEINMPNN_TO_ESM_AA_MAP_JAX)
 
-  return jnp.concatenate(
-    [
-      jnp.array([ESM_BOS_ID], dtype=jnp.int32),
-      esm_aa_ints_raw,
-      jnp.array([ESM_EOS_ID], dtype=jnp.int32),
-    ],
-  )
+
+@jax.jit
+def remap_alphafold_sequences(
+  sequence: ProteinSequence,
+) -> ProteinSequence:
+  """Remap AlphaFold-ordered amino acid integer IDs to ESM's token scheme.
+
+  This is the correct entry point for sequences produced inside this package, whose
+  encoders are AlphaFold-ordered (`utils.constants.restypes`).
+
+  Args:
+      sequence: A ProteinSequence of AlphaFold-ordered amino acid integer IDs. Indices
+        outside 0..19 map explicitly to ESM's `<unk>`.
+
+  Returns:
+      The ESM token IDs, prefixed with BOS and suffixed with EOS.
+
+  """
+  return _remap_with(sequence, ALPHAFOLD_TO_ESM_AA_MAP_JAX)
 
 
 class AbstractFromTorch(eqx.Module):

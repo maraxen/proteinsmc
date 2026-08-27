@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import collections
-from venv import logger
 
 import jax.numpy as jnp
+from alphex import Alphabet, Policy, known, perm
 
 restypes = [
   "A",
@@ -116,7 +116,6 @@ PROTEINMPNN_X_INT = 21
 STOP_INT = PROTEINMPNN_X_INT
 UNKNOWN_AA_INT = PROTEINMPNN_X_INT
 MAX_NUC_INT = len(NUCLEOTIDES_CHAR) - 1
-AMINO_ACIDS_NUM_STATES = 20
 
 CODON_INT_TO_RES_INT_JAX = jnp.full(
   (MAX_NUC_INT + 1, MAX_NUC_INT + 1, MAX_NUC_INT + 1),
@@ -269,30 +268,63 @@ ESM_PAD_ID = ESM_AA_CHAR_TO_INT_MAP["<pad>"]
 ESM_EOS_ID = ESM_AA_CHAR_TO_INT_MAP["<eos>"]
 ESM_UNK_ID = ESM_AA_CHAR_TO_INT_MAP["<unk>"]
 ESM_MASK_ID = ESM_AA_CHAR_TO_INT_MAP["<mask>"]
-PROTEINMPNN_TO_ESM_AA_MAP_JAX = jnp.full(
-  AMINO_ACIDS_NUM_STATES,  # Size is based on ColabDesign's max AA int
-  ESM_UNK_ID,
-  dtype=jnp.int32,
-)
+# --- Amino-acid integer -> ESM token maps ------------------------------------------
+#
+# TWO distinct source alphabets reach ESM through this module, and conflating them
+# silently permutes every residue that is not a fixed point of the permutation. They are
+# therefore built and named separately. See
+# `.praxia/docs/research/260813_alphabet-provenance-trace.md`.
+#
+#   AlphaFold  — this package's own encoding (`restypes`, above):  ARNDCQEGHILKMFPSTWYV
+#                Produced by `string_to_int_sequence` and fed to `scoring/esm.py`.
+#   ProteinMPNN — asr's declared canonical (`asr/src/asr/alphabet.py:8`):
+#                                                                  ACDEFGHIKLMNPQRSTVWY
+#                Supplied by external callers of `utils.esm.remap_sequences`, whose
+#                docstring has always promised the ProteinMPNN scheme.
+#
+# Before 2026-08-13 a single table was built from the AlphaFold ordering while carrying
+# the ProteinMPNN name, so external callers honouring the documented contract had their
+# sequences permuted. Only A, S and T are fixed points of that permutation.
+#
+# Both tables are sized to cover every legal sequence value — including the gap/X index
+# 20 used by asr and the stop/unknown sentinel `PROTEINMPNN_X_INT` (21). The previous
+# table was length 20, so a JAX gather clamped indices 20 and 21 to Valine.
 
-# Populate the mapping
-for cd_char, cd_int in AA_CHAR_TO_INT_MAP.items():
-  if cd_char in ESM_AA_CHAR_TO_INT_MAP:
-    esm_int = ESM_AA_CHAR_TO_INT_MAP[cd_char]
-    PROTEINMPNN_TO_ESM_AA_MAP_JAX = PROTEINMPNN_TO_ESM_AA_MAP_JAX.at[cd_int].set(esm_int)
-  else:
-    msg = (
-      f"ColabDesign character '{cd_char}' (int {cd_int}) not found in "
-      f"ESM vocabulary. Mapping to UNK."
-    )
-    logger.warning(msg)
+PROTEINMPNN_RESTYPES = known.MPNN_20.symbols
+"""ProteinMPNN's 20-letter ordering. Distinct from `restypes`, which is AlphaFold's.
 
-if "X" in AA_CHAR_TO_INT_MAP and "X" in ESM_AA_CHAR_TO_INT_MAP:
-  PROTEINMPNN_TO_ESM_AA_MAP_JAX = PROTEINMPNN_TO_ESM_AA_MAP_JAX.at[AA_CHAR_TO_INT_MAP["X"]].set(
-    ESM_AA_CHAR_TO_INT_MAP["X"],
-  )
-elif "X" in AA_CHAR_TO_INT_MAP:
-  # If ESM doesn't have 'X' as a regular token, map to UNK
-  PROTEINMPNN_TO_ESM_AA_MAP_JAX = PROTEINMPNN_TO_ESM_AA_MAP_JAX.at[AA_CHAR_TO_INT_MAP["X"]].set(
-    ESM_UNK_ID,
-  )
+Derived from `known.MPNN_20.symbols` (already imported above as the declared source of
+this exact ordering) rather than hand-typed, so it cannot silently drift from alphex's
+declaration. `known.MPNN_20.symbols` is a plain `str`, so this remains a plain string."""
+
+_ESM_MAP_LEN = PROTEINMPNN_X_INT + 1
+"""Covers indices 0..21 inclusive, so no legal sequence value can clamp."""
+
+
+def _build_esm_token_map(source: Alphabet) -> jnp.ndarray:
+  """Build a source-alphabet-index -> ESM-token lookup table via alphex.
+
+  `alphex.perm` covers only the unambiguous 20-residue core (`source.size == 20`, no
+  specials declared on either `known.MPNN_20` or `known.AF_20`) -- it is NOT used for the
+  full 22-wide space. A full `perm(known.MPNN_GAP_X_STOP_22, known.ESM_C, ...)` delegation
+  was tried and verified to unconditionally raise `UnmappableSymbolError`: this repo's
+  index 21 conflates `SpecialKind.UNKNOWN` and `SpecialKind.STOP` at one position, while
+  `known.ESM_C` declares them at different indices (24 vs 29), and alphex's
+  destination-coincidence resolution runs before any `Policy` is consulted -- no policy
+  avoids this. See `.praxia/docs/research/260813_alphabet-provenance-trace.md`.
+
+  Indices 20 (gap/X) and 21 (stop/unknown, conflated) are therefore still hand-filled here,
+  explicitly to `<unk>`, exactly as the pre-alphex per-character implementation did.
+  """
+  core = perm(source, known.ESM_C, policy=Policy.RAISE)  # shape (20,); source.size == 20
+  table = jnp.full(_ESM_MAP_LEN, ESM_UNK_ID, dtype=jnp.int32)
+  return table.at[: source.n_symbols].set(jnp.asarray(core))
+
+
+PROTEINMPNN_TO_ESM_AA_MAP_JAX = _build_esm_token_map(known.MPNN_20)
+"""ProteinMPNN-ordered integer -> ESM token. Matches this constant's name and the
+documented contract of `utils.esm.remap_sequences`."""
+
+ALPHAFOLD_TO_ESM_AA_MAP_JAX = _build_esm_token_map(known.AF_20)
+"""AlphaFold-ordered integer -> ESM token. This is what `scoring/esm.py` needs, because
+this package's own encoders emit AlphaFold-ordered integers."""
