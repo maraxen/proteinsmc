@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
 import equinox as eqx
 import jax
 import jax.numpy as jnp
 import pytest
 
 from proteinsmc.scoring.esm import make_esm_score
-from proteinsmc.utils.esm import remap_sequences
 
 
 # Define a mock model that simulates the behavior of the real ESM model

@@ -116,7 +116,6 @@ PROTEINMPNN_X_INT = 21
 STOP_INT = PROTEINMPNN_X_INT
 UNKNOWN_AA_INT = PROTEINMPNN_X_INT
 MAX_NUC_INT = len(NUCLEOTIDES_CHAR) - 1
-AMINO_ACIDS_NUM_STATES = 20
 
 CODON_INT_TO_RES_INT_JAX = jnp.full(
   (MAX_NUC_INT + 1, MAX_NUC_INT + 1, MAX_NUC_INT + 1),
@@ -291,8 +290,12 @@ ESM_MASK_ID = ESM_AA_CHAR_TO_INT_MAP["<mask>"]
 # 20 used by asr and the stop/unknown sentinel `PROTEINMPNN_X_INT` (21). The previous
 # table was length 20, so a JAX gather clamped indices 20 and 21 to Valine.
 
-PROTEINMPNN_RESTYPES = "ACDEFGHIKLMNPQRSTVWY"
-"""ProteinMPNN's 20-letter ordering. Distinct from `restypes`, which is AlphaFold's."""
+PROTEINMPNN_RESTYPES = known.MPNN_20.symbols
+"""ProteinMPNN's 20-letter ordering. Distinct from `restypes`, which is AlphaFold's.
+
+Derived from `known.MPNN_20.symbols` (already imported above as the declared source of
+this exact ordering) rather than hand-typed, so it cannot silently drift from alphex's
+declaration. `known.MPNN_20.symbols` is a plain `str`, so this remains a plain string."""
 
 _ESM_MAP_LEN = PROTEINMPNN_X_INT + 1
 """Covers indices 0..21 inclusive, so no legal sequence value can clamp."""

@@ -40,7 +40,7 @@ def test_restypes_is_the_alphafold_ordering() -> None:
 
 
 def test_proteinmpnn_restypes_is_the_proteinmpnn_ordering() -> None:
-  assert C.PROTEINMPNN_RESTYPES == known.MPNN_20.symbols
+  assert known.MPNN_20.symbols == C.PROTEINMPNN_RESTYPES
 
 
 def test_the_two_orderings_in_this_module_are_actually_different() -> None:
@@ -48,7 +48,7 @@ def test_the_two_orderings_in_this_module_are_actually_different() -> None:
 
   Only A, S and T survive the permutation between them.
   """
-  assert C.PROTEINMPNN_RESTYPES != "".join(C.restypes)
+  assert "".join(C.restypes) != C.PROTEINMPNN_RESTYPES
   fixed = [a for a, b in zip(C.PROTEINMPNN_RESTYPES, C.restypes, strict=True) if a == b]
   assert fixed == ["A", "S", "T"]
 
@@ -89,14 +89,15 @@ def test_stop_and_unknown_are_conflated_here_and_the_declaration_says_so() -> No
 
 def test_esm_vocabulary_ordering_matches_the_declaration() -> None:
   """ESM's 20 canonical residues are contiguous at offset 4, in a third distinct ordering."""
-  residues = [c for c in C.ESM_SEQUENCE_VOCAB if len(c) == 1 and c.isalpha() and c.isupper()]
-  esm_20 = "".join(residues[: known.ESM_C.n_symbols])
+  esm_20 = "".join(
+    C.ESM_SEQUENCE_VOCAB[known.ESM_C.offset : known.ESM_C.offset + known.ESM_C.n_symbols],
+  )
   assert esm_20 == known.ESM_C.symbols
   assert C.ESM_SEQUENCE_VOCAB.index("L") == known.ESM_C.offset
   assert C.ESM_AA_CHAR_TO_INT_MAP["-"] == known.ESM_C.specials[SpecialKind.GAP]
-  assert C.ESM_MASK_ID == known.ESM_C.specials[SpecialKind.MASK]
-  assert C.ESM_BOS_ID == known.ESM_C.specials[SpecialKind.BOS]
-  assert C.ESM_EOS_ID == known.ESM_C.specials[SpecialKind.EOS]
+  assert known.ESM_C.specials[SpecialKind.MASK] == C.ESM_MASK_ID
+  assert known.ESM_C.specials[SpecialKind.BOS] == C.ESM_BOS_ID
+  assert known.ESM_C.specials[SpecialKind.EOS] == C.ESM_EOS_ID
 
 
 def test_nucleotide_alphabet_matches_the_declaration() -> None:
