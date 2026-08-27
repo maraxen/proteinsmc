@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import collections
-from venv import logger
 
 import jax.numpy as jnp
+from alphex import Alphabet, Policy, known, perm
 
 restypes = [
   "A",
@@ -298,29 +298,30 @@ _ESM_MAP_LEN = PROTEINMPNN_X_INT + 1
 """Covers indices 0..21 inclusive, so no legal sequence value can clamp."""
 
 
-def _build_esm_token_map(source_alphabet: str, alphabet_name: str) -> jnp.ndarray:
-  """Build a source-alphabet-index -> ESM-token lookup table.
+def _build_esm_token_map(source: Alphabet) -> jnp.ndarray:
+  """Build a source-alphabet-index -> ESM-token lookup table via alphex.
 
-  Every index outside `source_alphabet` — notably the gap/X index 20 and the stop
-  sentinel 21 — resolves to `<unk>` explicitly rather than by out-of-bounds clamping.
+  `alphex.perm` covers only the unambiguous 20-residue core (`source.size == 20`, no
+  specials declared on either `known.MPNN_20` or `known.AF_20`) -- it is NOT used for the
+  full 22-wide space. A full `perm(known.MPNN_GAP_X_STOP_22, known.ESM_C, ...)` delegation
+  was tried and verified to unconditionally raise `UnmappableSymbolError`: this repo's
+  index 21 conflates `SpecialKind.UNKNOWN` and `SpecialKind.STOP` at one position, while
+  `known.ESM_C` declares them at different indices (24 vs 29), and alphex's
+  destination-coincidence resolution runs before any `Policy` is consulted -- no policy
+  avoids this. See `.praxia/docs/research/260813_alphabet-provenance-trace.md`.
+
+  Indices 20 (gap/X) and 21 (stop/unknown, conflated) are therefore still hand-filled here,
+  explicitly to `<unk>`, exactly as the pre-alphex per-character implementation did.
   """
+  core = perm(source, known.ESM_C, policy=Policy.RAISE)  # shape (20,); source.size == 20
   table = jnp.full(_ESM_MAP_LEN, ESM_UNK_ID, dtype=jnp.int32)
-  for idx, char in enumerate(source_alphabet):
-    if char in ESM_AA_CHAR_TO_INT_MAP:
-      table = table.at[idx].set(ESM_AA_CHAR_TO_INT_MAP[char])
-    else:
-      msg = (
-        f"{alphabet_name} character '{char}' (int {idx}) not found in "
-        f"ESM vocabulary. Mapping to UNK."
-      )
-      logger.warning(msg)
-  return table
+  return table.at[: source.n_symbols].set(jnp.asarray(core))
 
 
-PROTEINMPNN_TO_ESM_AA_MAP_JAX = _build_esm_token_map(PROTEINMPNN_RESTYPES, "ProteinMPNN")
+PROTEINMPNN_TO_ESM_AA_MAP_JAX = _build_esm_token_map(known.MPNN_20)
 """ProteinMPNN-ordered integer -> ESM token. Matches this constant's name and the
 documented contract of `utils.esm.remap_sequences`."""
 
-ALPHAFOLD_TO_ESM_AA_MAP_JAX = _build_esm_token_map("".join(restypes), "AlphaFold")
+ALPHAFOLD_TO_ESM_AA_MAP_JAX = _build_esm_token_map(known.AF_20)
 """AlphaFold-ordered integer -> ESM token. This is what `scoring/esm.py` needs, because
 this package's own encoders emit AlphaFold-ordered integers."""
