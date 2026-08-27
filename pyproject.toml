@@ -27,6 +27,7 @@ dependencies = [
   "huggingface-hub>=0.35.3",
   "array-record>=0.8.1",
   "msgpack-numpy>=0.4.8",
+  "alphex>=0.1.0a1",
 ]
 classifiers = [
   "Programming Language :: Python :: 3",
